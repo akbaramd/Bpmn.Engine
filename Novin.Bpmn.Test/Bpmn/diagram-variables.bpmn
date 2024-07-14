@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_158m3qy" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.4.2">
+  <bpmn:process id="Process_19olqce" isExecutable="true">
+    <bpmn:dataObject id="DataObject_exampleVar" name="exampleVar" />
+    <bpmn:startEvent id="StartEvent_1af21aa">
+      <bpmn:outgoing>Flow_1ap31ab</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:scriptTask id="ScriptTask_SetVariable" scriptFormat="c#">
+      <bpmn:incoming>Flow_1ap31ab</bpmn:incoming>
+      <bpmn:outgoing>Flow_2a1b2c</bpmn:outgoing>
+      <bpmn:dataInputAssociation>
+        <bpmn:sourceRef>DataObject_exampleVar</bpmn:sourceRef>
+      </bpmn:dataInputAssociation>
+      <bpmn:dataOutputAssociation>
+        <bpmn:targetRef>DataObject_exampleVar</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+      <bpmn:script>
+        Instance.Variables.exampleVar = "Test";
+        </bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:exclusiveGateway id="ExclusiveGateway_1">
+      <bpmn:incoming>Flow_2a1b2c</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToPrint</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToParallel</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:scriptTask id="ScriptTask_PrintVariable" scriptFormat="c#">
+      <bpmn:incoming>Flow_ToPrint</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToEndFromPrint</bpmn:outgoing>
+      <bpmn:dataInputAssociation>
+        <bpmn:sourceRef>DataObject_exampleVar</bpmn:sourceRef>
+      </bpmn:dataInputAssociation>
+      <bpmn:script>
+        var exampleVar = Instance.Variables.exampleVar;
+        Console.WriteLine("Value of exampleVar: " + exampleVar);
+        </bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:parallelGateway id="ParallelGateway_1">
+      <bpmn:incoming>Flow_ToParallel</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToInclusive</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToUserTaskFromParallel</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:inclusiveGateway id="InclusiveGateway_1">
+      <bpmn:incoming>Flow_ToInclusive</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToEndFromInclusive</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToUserTaskFromInclusive</bpmn:outgoing>
+    </bpmn:inclusiveGateway>
+    <bpmn:userTask id="UserTask_1" name="Input Form" camunda:formKey="CreateUserForm" camunda:candidateGroups="Authors">
+      <bpmn:incoming>Flow_ToUserTaskFromParallel</bpmn:incoming>
+      <bpmn:incoming>Flow_ToUserTaskFromInclusive</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToEndFromUserTask</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="EndEvent_1">
+      <bpmn:incoming>Flow_ToEndFromPrint</bpmn:incoming>
+      <bpmn:incoming>Flow_ToEndFromInclusive</bpmn:incoming>
+      <bpmn:incoming>Flow_ToEndFromUserTask</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1ap31ab" sourceRef="StartEvent_1af21aa" targetRef="ScriptTask_SetVariable" />
+    <bpmn:sequenceFlow id="Flow_2a1b2c" sourceRef="ScriptTask_SetVariable" targetRef="ExclusiveGateway_1" />
+    <bpmn:sequenceFlow id="Flow_ToPrint" sourceRef="ExclusiveGateway_1" targetRef="ScriptTask_PrintVariable">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.exampleVar == "Test"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ToParallel" sourceRef="ExclusiveGateway_1" targetRef="ParallelGateway_1">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.exampleVar != "Test"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ToInclusive" sourceRef="ParallelGateway_1" targetRef="InclusiveGateway_1" />
+    <bpmn:sequenceFlow id="Flow_ToUserTaskFromParallel" sourceRef="ParallelGateway_1" targetRef="UserTask_1" />
+    <bpmn:sequenceFlow id="Flow_ToUserTaskFromInclusive" sourceRef="InclusiveGateway_1" targetRef="UserTask_1" />
+    <bpmn:sequenceFlow id="Flow_ToEndFromInclusive" sourceRef="InclusiveGateway_1" targetRef="EndEvent_1" />
+    <bpmn:sequenceFlow id="Flow_ToEndFromPrint" sourceRef="ScriptTask_PrintVariable" targetRef="EndEvent_1" />
+    <bpmn:sequenceFlow id="Flow_ToEndFromUserTask" sourceRef="UserTask_1" targetRef="EndEvent_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_19olqce">
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_1af21aa">
+        <dc:Bounds x="156" y="82" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ScriptTask_SetVariable_di" bpmnElement="ScriptTask_SetVariable">
+        <dc:Bounds x="124" y="140" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ExclusiveGateway_1_di" bpmnElement="ExclusiveGateway_1" isMarkerVisible="true">
+        <dc:Bounds x="149" y="295" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ScriptTask_PrintVariable_di" bpmnElement="ScriptTask_PrintVariable">
+        <dc:Bounds x="350" y="390" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ParallelGateway_1_di" bpmnElement="ParallelGateway_1" isMarkerVisible="true">
+        <dc:Bounds x="350" y="295" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="UserTask_1_di" bpmnElement="UserTask_1">
+        <dc:Bounds x="600" y="390" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="InclusiveGateway_1_di" bpmnElement="InclusiveGateway_1" isMarkerVisible="true">
+        <dc:Bounds x="635" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
+        <dc:Bounds x="812" y="552" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1ap31ab_di" bpmnElement="Flow_1ap31ab">
+        <di:waypoint x="174" y="118" />
+        <di:waypoint x="174" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2a1b2c_di" bpmnElement="Flow_2a1b2c">
+        <di:waypoint x="174" y="220" />
+        <di:waypoint x="174" y="295" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToPrint_di" bpmnElement="Flow_ToPrint">
+        <di:waypoint x="174" y="345" />
+        <di:waypoint x="174" y="430" />
+        <di:waypoint x="350" y="430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToParallel_di" bpmnElement="Flow_ToParallel">
+        <di:waypoint x="199" y="320" />
+        <di:waypoint x="350" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToInclusive_di" bpmnElement="Flow_ToInclusive">
+        <di:waypoint x="375" y="295" />
+        <di:waypoint x="375" y="140" />
+        <di:waypoint x="635" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToUserTaskFromParallel_di" bpmnElement="Flow_ToUserTaskFromParallel">
+        <di:waypoint x="410" y="320" />
+        <di:waypoint x="630" y="320" />
+        <di:waypoint x="630" y="390" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToUserTaskFromInclusive_di" bpmnElement="Flow_ToUserTaskFromInclusive">
+        <di:waypoint x="660" y="165" />
+        <di:waypoint x="660" y="390" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToEndFromInclusive_di" bpmnElement="Flow_ToEndFromInclusive">
+        <di:waypoint x="685" y="140" />
+        <di:waypoint x="812" y="140" />
+        <di:waypoint x="812" y="570" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToEndFromPrint_di" bpmnElement="Flow_ToEndFromPrint">
+        <di:waypoint x="400" y="470" />
+        <di:waypoint x="400" y="562" />
+        <di:waypoint x="814" y="562" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToEndFromUserTask_di" bpmnElement="Flow_ToEndFromUserTask">
+        <di:waypoint x="700" y="430" />
+        <di:waypoint x="756" y="430" />
+        <di:waypoint x="756" y="562" />
+        <di:waypoint x="814" y="562" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
