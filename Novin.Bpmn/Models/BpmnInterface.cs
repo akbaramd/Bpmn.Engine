@@ -5,46 +5,38 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("interface", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnInterface : BpmnRootElement {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("interface", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public partial class BpmnInterface : BpmnRootElement
+{
     private BpmnOperation[] operationField;
-    
+
     private string nameField;
-    
+
     private System.Xml.XmlQualifiedName implementationRefField;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("operation")]
-    public BpmnOperation[] operation {
-        get {
-            return operationField;
-        }
-        set {
-            operationField = value;
-        }
+    public BpmnOperation[] operation
+    {
+        get { return operationField; }
+        set { operationField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
-    public string name {
-        get {
-            return nameField;
-        }
-        set {
-            nameField = value;
-        }
+    public string name
+    {
+        get { return nameField; }
+        set { nameField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName implementationRef {
-        get {
-            return implementationRefField;
-        }
-        set {
-            implementationRefField = value;
-        }
+    public System.Xml.XmlQualifiedName implementationRef
+    {
+        get { return implementationRefField; }
+        set { implementationRefField = value; }
     }
 }

@@ -5,14 +5,15 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("subChoreography", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnSubChoreography : BpmnChoreographyActivity {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("subChoreography", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public partial class BpmnSubChoreography : BpmnChoreographyActivity
+{
     private BpmnFlowElement[] itemsField;
-    
+
     private BpmnArtifact[] items1Field;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("adHocSubProcess", typeof(BpmnAdHocSubProcess))]
     [System.Xml.Serialization.XmlElementAttribute("boundaryEvent", typeof(BpmnBoundaryEvent))]
@@ -46,26 +47,20 @@ public partial class BpmnSubChoreography : BpmnChoreographyActivity {
     [System.Xml.Serialization.XmlElementAttribute("task", typeof(BpmnTask))]
     [System.Xml.Serialization.XmlElementAttribute("transaction", typeof(BpmnTransaction))]
     [System.Xml.Serialization.XmlElementAttribute("userTask", typeof(BpmnUserTask))]
-    public BpmnFlowElement[] Items {
-        get {
-            return itemsField;
-        }
-        set {
-            itemsField = value;
-        }
+    public BpmnFlowElement[] Items
+    {
+        get { return itemsField; }
+        set { itemsField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("artifact", typeof(BpmnArtifact))]
     [System.Xml.Serialization.XmlElementAttribute("association", typeof(BpmnAssociation))]
     [System.Xml.Serialization.XmlElementAttribute("group", typeof(BpmnGroup))]
     [System.Xml.Serialization.XmlElementAttribute("textAnnotation", typeof(BpmnTextAnnotation))]
-    public BpmnArtifact[] Items1 {
-        get {
-            return items1Field;
-        }
-        set {
-            items1Field = value;
-        }
+    public BpmnArtifact[] Items1
+    {
+        get { return items1Field; }
+        set { items1Field = value; }
     }
 }

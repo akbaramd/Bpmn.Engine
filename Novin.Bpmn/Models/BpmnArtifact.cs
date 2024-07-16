@@ -8,7 +8,9 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("artifact", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public abstract partial class BpmnArtifact : BpmnBaseElement {
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("artifact", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public abstract partial class BpmnArtifact : BpmnBaseElement
+{
 }

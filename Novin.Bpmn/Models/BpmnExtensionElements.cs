@@ -5,20 +5,18 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("extensionElements", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnExtensionElements {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("extensionElements",
+    Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
+public partial class BpmnExtensionElements
+{
     private System.Xml.XmlElement[] anyField;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAnyElementAttribute()]
-    public System.Xml.XmlElement[] Any {
-        get {
-            return anyField;
-        }
-        set {
-            anyField = value;
-        }
+    public System.Xml.XmlElement[] Any
+    {
+        get { return anyField; }
+        set { anyField = value; }
     }
 }

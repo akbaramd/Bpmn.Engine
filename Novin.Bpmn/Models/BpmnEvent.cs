@@ -13,20 +13,18 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("event", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public abstract partial class BpmnEvent : BpmnFlowNode {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("event", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public abstract partial class BpmnEvent : BpmnFlowNode
+{
     private BpmnProperty[] propertyField;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("property")]
-    public BpmnProperty[] property {
-        get {
-            return propertyField;
-        }
-        set {
-            propertyField = value;
-        }
+    public BpmnProperty[] property
+    {
+        get { return propertyField; }
+        set { propertyField = value; }
     }
 }

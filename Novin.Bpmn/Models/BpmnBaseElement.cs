@@ -130,58 +130,47 @@ namespace Novin.Bpmn.Test.Models;
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("baseElement", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public abstract partial class BpmnBaseElement {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("baseElement", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public abstract partial class BpmnBaseElement
+{
     private BpmnDocumentation[] documentationField;
-    
+
     private BpmnExtensionElements extensionElementsField;
-    
+
     private string idField;
-    
+
     private System.Xml.XmlAttribute[] anyAttrField;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("documentation")]
-    public BpmnDocumentation[] documentation {
-        get {
-            return documentationField;
-        }
-        set {
-            documentationField = value;
-        }
+    public BpmnDocumentation[] documentation
+    {
+        get { return documentationField; }
+        set { documentationField = value; }
     }
-    
+
     /// <remarks/>
-    public BpmnExtensionElements extensionElements {
-        get {
-            return extensionElementsField;
-        }
-        set {
-            extensionElementsField = value;
-        }
+    public BpmnExtensionElements extensionElements
+    {
+        get { return extensionElementsField; }
+        set { extensionElementsField = value; }
     }
-    
+
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType="ID")]
-    public string id {
-        get {
-            return idField;
-        }
-        set {
-            idField = value;
-        }
+    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "ID")]
+    public string id
+    {
+        get { return idField; }
+        set { idField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAnyAttributeAttribute()]
-    public System.Xml.XmlAttribute[] AnyAttr {
-        get {
-            return anyAttrField;
-        }
-        set {
-            anyAttrField = value;
-        }
+    public System.Xml.XmlAttribute[] AnyAttr
+    {
+        get { return anyAttrField; }
+        set { anyAttrField = value; }
     }
 }

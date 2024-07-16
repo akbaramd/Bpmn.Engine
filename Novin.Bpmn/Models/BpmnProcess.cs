@@ -5,85 +5,75 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("process", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnProcess : BpmnCallableElement {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("process", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public partial class BpmnProcess : BpmnCallableElement
+{
     private BpmnAuditing auditingField;
-    
+
     private BpmnMonitoring monitoringField;
-    
+
     private BpmnProperty[] propertyField;
-    
+
     private BpmnLaneSet[] laneSetField;
-    
+
     private BpmnFlowElement?[] itemsField;
-    
+
     private BpmnArtifact[] items1Field;
-    
+
     private BpmnResourceRole[] items2Field;
-    
+
     private BpmnCorrelationSubscription[] correlationSubscriptionField;
-    
+
     private System.Xml.XmlQualifiedName[] supportsField;
-    
+
     private BpmnProcessType processTypeField;
-    
+
     private bool isClosedField;
-    
+
     private bool isExecutableField;
-    
+
     private bool isExecutableFieldSpecified;
-    
+
     private System.Xml.XmlQualifiedName definitionalCollaborationRefField;
-    
-    public BpmnProcess() {
+
+    public BpmnProcess()
+    {
         processTypeField = BpmnProcessType.None;
         isClosedField = false;
     }
-    
+
     /// <remarks/>
-    public BpmnAuditing auditing {
-        get {
-            return auditingField;
-        }
-        set {
-            auditingField = value;
-        }
+    public BpmnAuditing auditing
+    {
+        get { return auditingField; }
+        set { auditingField = value; }
     }
-    
+
     /// <remarks/>
-    public BpmnMonitoring monitoring {
-        get {
-            return monitoringField;
-        }
-        set {
-            monitoringField = value;
-        }
+    public BpmnMonitoring monitoring
+    {
+        get { return monitoringField; }
+        set { monitoringField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("property")]
-    public BpmnProperty[] property {
-        get {
-            return propertyField;
-        }
-        set {
-            propertyField = value;
-        }
+    public BpmnProperty[] property
+    {
+        get { return propertyField; }
+        set { propertyField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("laneSet")]
-    public BpmnLaneSet[] laneSet {
-        get {
-            return laneSetField;
-        }
-        set {
-            laneSetField = value;
-        }
+    public BpmnLaneSet[] laneSet
+    {
+        get { return laneSetField; }
+        set { laneSetField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("adHocSubProcess", typeof(BpmnAdHocSubProcess))]
     [System.Xml.Serialization.XmlElementAttribute("boundaryEvent", typeof(BpmnBoundaryEvent))]
@@ -117,117 +107,87 @@ public partial class BpmnProcess : BpmnCallableElement {
     [System.Xml.Serialization.XmlElementAttribute("task", typeof(BpmnTask))]
     [System.Xml.Serialization.XmlElementAttribute("transaction", typeof(BpmnTransaction))]
     [System.Xml.Serialization.XmlElementAttribute("userTask", typeof(BpmnUserTask))]
-    public BpmnFlowElement?[] Items {
-        get {
-            return itemsField;
-        }
-        set {
-            itemsField = value;
-        }
+    public BpmnFlowElement?[] Items
+    {
+        get { return itemsField; }
+        set { itemsField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("artifact", typeof(BpmnArtifact))]
     [System.Xml.Serialization.XmlElementAttribute("association", typeof(BpmnAssociation))]
     [System.Xml.Serialization.XmlElementAttribute("group", typeof(BpmnGroup))]
     [System.Xml.Serialization.XmlElementAttribute("textAnnotation", typeof(BpmnTextAnnotation))]
-    public BpmnArtifact[] Items1 {
-        get {
-            return items1Field;
-        }
-        set {
-            items1Field = value;
-        }
+    public BpmnArtifact[] Items1
+    {
+        get { return items1Field; }
+        set { items1Field = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("performer", typeof(BpmnPerformer))]
     [System.Xml.Serialization.XmlElementAttribute("resourceRole", typeof(BpmnResourceRole))]
-    public BpmnResourceRole[] Items2 {
-        get {
-            return items2Field;
-        }
-        set {
-            items2Field = value;
-        }
+    public BpmnResourceRole[] Items2
+    {
+        get { return items2Field; }
+        set { items2Field = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("correlationSubscription")]
-    public BpmnCorrelationSubscription[] correlationSubscription {
-        get {
-            return correlationSubscriptionField;
-        }
-        set {
-            correlationSubscriptionField = value;
-        }
+    public BpmnCorrelationSubscription[] correlationSubscription
+    {
+        get { return correlationSubscriptionField; }
+        set { correlationSubscriptionField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("supports")]
-    public System.Xml.XmlQualifiedName[] supports {
-        get {
-            return supportsField;
-        }
-        set {
-            supportsField = value;
-        }
+    public System.Xml.XmlQualifiedName[] supports
+    {
+        get { return supportsField; }
+        set { supportsField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
     [System.ComponentModel.DefaultValueAttribute(BpmnProcessType.None)]
-    public BpmnProcessType processType {
-        get {
-            return processTypeField;
-        }
-        set {
-            processTypeField = value;
-        }
+    public BpmnProcessType processType
+    {
+        get { return processTypeField; }
+        set { processTypeField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
     [System.ComponentModel.DefaultValueAttribute(false)]
-    public bool isClosed {
-        get {
-            return isClosedField;
-        }
-        set {
-            isClosedField = value;
-        }
+    public bool isClosed
+    {
+        get { return isClosedField; }
+        set { isClosedField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
-    public bool isExecutable {
-        get {
-            return isExecutableField;
-        }
-        set {
-            isExecutableField = value;
-        }
+    public bool isExecutable
+    {
+        get { return isExecutableField; }
+        set { isExecutableField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlIgnoreAttribute()]
-    public bool isExecutableSpecified {
-        get {
-            return isExecutableFieldSpecified;
-        }
-        set {
-            isExecutableFieldSpecified = value;
-        }
+    public bool isExecutableSpecified
+    {
+        get { return isExecutableFieldSpecified; }
+        set { isExecutableFieldSpecified = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName definitionalCollaborationRef {
-        get {
-            return definitionalCollaborationRefField;
-        }
-        set {
-            definitionalCollaborationRefField = value;
-        }
+    public System.Xml.XmlQualifiedName definitionalCollaborationRef
+    {
+        get { return definitionalCollaborationRefField; }
+        set { definitionalCollaborationRefField = value; }
     }
 }

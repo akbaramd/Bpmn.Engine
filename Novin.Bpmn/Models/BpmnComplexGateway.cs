@@ -5,32 +5,27 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("complexGateway", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnComplexGateway : BpmnGateway {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("complexGateway", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public partial class BpmnComplexGateway : BpmnGateway
+{
     private BpmnExpression activationConditionField;
-    
+
     private string defaultField;
-    
+
     /// <remarks/>
-    public BpmnExpression activationCondition {
-        get {
-            return activationConditionField;
-        }
-        set {
-            activationConditionField = value;
-        }
+    public BpmnExpression activationCondition
+    {
+        get { return activationConditionField; }
+        set { activationConditionField = value; }
     }
-    
+
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType="IDREF")]
-    public string @default {
-        get {
-            return defaultField;
-        }
-        set {
-            defaultField = value;
-        }
+    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "IDREF")]
+    public string @default
+    {
+        get { return defaultField; }
+        set { defaultField = value; }
     }
 }

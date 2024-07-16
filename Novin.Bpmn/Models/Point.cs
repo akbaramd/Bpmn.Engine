@@ -5,33 +5,27 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/DD/20100524/DC")]
-[System.Xml.Serialization.XmlRootAttribute(Namespace="http://www.omg.org/spec/DD/20100524/DC", IsNullable=false)]
-public partial class Point {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DC")]
+[System.Xml.Serialization.XmlRootAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DC", IsNullable = false)]
+public partial class Point
+{
     private double xField;
-    
+
     private double yField;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
-    public double x {
-        get {
-            return xField;
-        }
-        set {
-            xField = value;
-        }
+    public double x
+    {
+        get { return xField; }
+        set { xField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
-    public double y {
-        get {
-            return yField;
-        }
-        set {
-            yField = value;
-        }
+    public double y
+    {
+        get { return yField; }
+        set { yField = value; }
     }
 }

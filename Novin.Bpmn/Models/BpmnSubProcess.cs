@@ -7,33 +7,32 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("subProcess", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnSubProcess : BpmnActivity {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("subProcess", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public partial class BpmnSubProcess : BpmnActivity
+{
     private BpmnLaneSet[] laneSetField;
-    
+
     private BpmnFlowElement[] items1Field;
-    
+
     private BpmnArtifact[] items2Field;
-    
+
     private bool triggeredByEventField;
-    
-    public BpmnSubProcess() {
+
+    public BpmnSubProcess()
+    {
         triggeredByEventField = false;
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("laneSet")]
-    public BpmnLaneSet[] laneSet {
-        get {
-            return laneSetField;
-        }
-        set {
-            laneSetField = value;
-        }
+    public BpmnLaneSet[] laneSet
+    {
+        get { return laneSetField; }
+        set { laneSetField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("adHocSubProcess", typeof(BpmnAdHocSubProcess))]
     [System.Xml.Serialization.XmlElementAttribute("boundaryEvent", typeof(BpmnBoundaryEvent))]
@@ -67,38 +66,29 @@ public partial class BpmnSubProcess : BpmnActivity {
     [System.Xml.Serialization.XmlElementAttribute("task", typeof(BpmnTask))]
     [System.Xml.Serialization.XmlElementAttribute("transaction", typeof(BpmnTransaction))]
     [System.Xml.Serialization.XmlElementAttribute("userTask", typeof(BpmnUserTask))]
-    public BpmnFlowElement[] Items1 {
-        get {
-            return items1Field;
-        }
-        set {
-            items1Field = value;
-        }
+    public BpmnFlowElement[] Items1
+    {
+        get { return items1Field; }
+        set { items1Field = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("artifact", typeof(BpmnArtifact))]
     [System.Xml.Serialization.XmlElementAttribute("association", typeof(BpmnAssociation))]
     [System.Xml.Serialization.XmlElementAttribute("group", typeof(BpmnGroup))]
     [System.Xml.Serialization.XmlElementAttribute("textAnnotation", typeof(BpmnTextAnnotation))]
-    public BpmnArtifact[] Items2 {
-        get {
-            return items2Field;
-        }
-        set {
-            items2Field = value;
-        }
+    public BpmnArtifact[] Items2
+    {
+        get { return items2Field; }
+        set { items2Field = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
     [System.ComponentModel.DefaultValueAttribute(false)]
-    public bool triggeredByEvent {
-        get {
-            return triggeredByEventField;
-        }
-        set {
-            triggeredByEventField = value;
-        }
+    public bool triggeredByEvent
+    {
+        get { return triggeredByEventField; }
+        set { triggeredByEventField = value; }
     }
 }

@@ -1,89 +1,41 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
+using System.Threading.Tasks;
 using Xunit;
+using Novin.Bpmn.Test;
+using Novin.Bpmn.Test.Models;
 
-namespace Novin.Bpmn.Test
+public class BpmnEngineTests
 {
-    public class BpmnEngineGatewayTests
+    private readonly string _bpmnFilePath;
+
+    public BpmnEngineTests()
     {
-        private const string SampleBpmnFilePath = "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\diagram-variables.bpmn";
+        // Set the path to your BPMN XML file
+        _bpmnFilePath = "D:\\Projects\\Github\\Bpmn.Engine\\Novin.Bpmn.Test\\Bpmn\\diagram-variables-2.bpmn";
+    }
 
-        private BpmnEngine CreateEngine(string filePath)
+    [Fact]
+    public async Task TestBpmnEngineExecution()
+    {
+        // Arrange
+        var engine = new BpmnEngine(_bpmnFilePath);
+
+        // Capture console output
+        using (var consoleOutput = new ConsoleOutput())
         {
-            return new BpmnEngine(filePath);
-        }
+            // Act
+            var instance = await engine.ExecuteProcessAsync();
 
-       
-        [Fact]
-        public void TestExclusiveGateway_ConditionTrue()
-        {
-            var engine = CreateEngine(SampleBpmnFilePath);
-            engine.Instance.Variables.exampleVar = "Test"; // Set condition for exclusive gateway
-
-      
-            Assert.Equal("StartEvent_1af21aa", engine.Instance.CurrentNodeId);
-
-            // Execute the script task to set variable
-            engine.ExecuteNext();
-            Assert.Equal("ScriptTask_SetVariable", engine.Instance.CurrentNodeId);
-
-            // Execute the next node
-            engine.ExecuteNext();
-            Assert.Equal("ExclusiveGateway_1", engine.Instance.CurrentNodeId);
-            
-// Execute the next node
-            engine.ExecuteNext();
-            Assert.Equal("ScriptTask_PrintVariable", engine.Instance.CurrentNodeId);
-            // Rollback and check previous node
-            engine.ExecuteNext();
-            engine.Rollback();
-            Assert.Equal("ExclusiveGateway_1", engine.Instance.CurrentNodeId);
-
-            // Rollback to initial state
-            engine.Rollback();
-            Assert.Equal("ScriptTask_SetVariable", engine.Instance.CurrentNodeId);
-
-            engine.Rollback();
-            Assert.Equal("StartEvent_1af21aa", engine.Instance.CurrentNodeId);
-        }
-
-        [Fact]
-        public void TestExclusiveGateway_ConditionFalse()
-        {
-            var engine = CreateEngine(SampleBpmnFilePath);
-            engine.Instance.Variables.exampleVar = "NotTest"; // Set condition for exclusive gateway
-
-            // Check the start node
-            var startNode = engine.FindStartNode();
-            Assert.NotNull(startNode);
-            Assert.Equal(startNode.id, "StartEvent_1af21aa");
-
-            // Execute the start node
-            engine.ExecuteNext();
-            Assert.Equal("ScriptTask_SetVariable", engine.Instance.CurrentNodeId);
-
-            // Execute the script task to set variable
-            engine.ExecuteNext();
-            Assert.Equal("ExclusiveGateway_1", engine.Instance.CurrentNodeId);
-
-            // Check the next node
-            var nextNode = engine.FindNextNode("ExclusiveGateway_1");
-            Assert.NotNull(nextNode);
-            Assert.Equal("ParallelGateway_1", nextNode?.id);
-
-            // Execute the next node
-            engine.ExecuteNext();
-            Assert.Equal("ParallelGateway_1", engine.Instance.CurrentNodeId);
-
-            // Rollback and check previous node
-            engine.Rollback();
-            Assert.Equal("ExclusiveGateway_1", engine.Instance.CurrentNodeId);
-
-            // Rollback to initial state
-            engine.Rollback();
-            Assert.Equal("ScriptTask_SetVariable", engine.Instance.CurrentNodeId);
-
-            engine.Rollback();
-            Assert.Equal("StartEvent_1af21aa", engine.Instance.CurrentNodeId);
+            // Assert
+            var output = consoleOutput.GetOutput();
+            Assert.Contains("Way 1", output);
+            Assert.Contains("Way 2", output);
+            Assert.Contains("Way 1-2", output);
+            Assert.Contains("Way 1-1", output);
+            Assert.Contains("After Parallel", output);
+            Assert.Contains("Process completed.", output);
         }
     }
 }
+

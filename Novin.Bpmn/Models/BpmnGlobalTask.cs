@@ -9,21 +9,19 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("globalTask", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnGlobalTask : BpmnCallableElement {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("globalTask", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public partial class BpmnGlobalTask : BpmnCallableElement
+{
     private BpmnResourceRole[] itemsField;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("performer", typeof(BpmnPerformer))]
     [System.Xml.Serialization.XmlElementAttribute("resourceRole", typeof(BpmnResourceRole))]
-    public BpmnResourceRole[] Items {
-        get {
-            return itemsField;
-        }
-        set {
-            itemsField = value;
-        }
+    public BpmnResourceRole[] Items
+    {
+        get { return itemsField; }
+        set { itemsField = value; }
     }
 }

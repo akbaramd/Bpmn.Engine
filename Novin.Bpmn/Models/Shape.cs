@@ -7,20 +7,17 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/DD/20100524/DI")]
-[System.Xml.Serialization.XmlRootAttribute(Namespace="http://www.omg.org/spec/DD/20100524/DI", IsNullable=false)]
-public abstract partial class Shape : Node {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DI")]
+[System.Xml.Serialization.XmlRootAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DI", IsNullable = false)]
+public abstract partial class Shape : Node
+{
     private Bounds boundsField;
-    
+
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute(Namespace="http://www.omg.org/spec/DD/20100524/DC")]
-    public Bounds Bounds {
-        get {
-            return boundsField;
-        }
-        set {
-            boundsField = value;
-        }
+    [System.Xml.Serialization.XmlElementAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DC")]
+    public Bounds Bounds
+    {
+        get { return boundsField; }
+        set { boundsField = value; }
     }
 }

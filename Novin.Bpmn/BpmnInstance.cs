@@ -5,19 +5,19 @@ namespace Novin.Bpmn.Test;
 
 public class BpmnInstance
 {
+    public List<BpmnRoute> ActiveRoutes = new List<BpmnRoute>();
+
     public BpmnInstance()
     {
         Id = Guid.NewGuid();
-        History = new Stack<string>();
+        History = new Stack<BpmnRoute>();
     }
 
     public Guid Id { get; }
     public dynamic Variables { get; } = new ExpandoObject();
-    public string? CurrentNodeId { get; set; }
     public bool IsPaused { get; set; }
-    public BpmnDefinitions BpmnDefinitions { get; set; } = new();
     public BpmnUserTask? PendingUserTask { get; set; }
-    public Stack<string> History { get; }
+    public Stack<BpmnRoute> History { get; }
 
     // Method to clear history if needed
     public void ClearHistory()

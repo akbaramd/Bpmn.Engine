@@ -6,12 +6,13 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("choreography", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnChoreography : BpmnCollaboration {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("choreography", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public partial class BpmnChoreography : BpmnCollaboration
+{
     private BpmnFlowElement[] items2Field;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("adHocSubProcess", typeof(BpmnAdHocSubProcess))]
     [System.Xml.Serialization.XmlElementAttribute("boundaryEvent", typeof(BpmnBoundaryEvent))]
@@ -45,12 +46,9 @@ public partial class BpmnChoreography : BpmnCollaboration {
     [System.Xml.Serialization.XmlElementAttribute("task", typeof(BpmnTask))]
     [System.Xml.Serialization.XmlElementAttribute("transaction", typeof(BpmnTransaction))]
     [System.Xml.Serialization.XmlElementAttribute("userTask", typeof(BpmnUserTask))]
-    public BpmnFlowElement[] Items2 {
-        get {
-            return items2Field;
-        }
-        set {
-            items2Field = value;
-        }
+    public BpmnFlowElement[] Items2
+    {
+        get { return items2Field; }
+        set { items2Field = value; }
     }
 }

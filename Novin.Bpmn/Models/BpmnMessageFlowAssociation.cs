@@ -5,33 +5,28 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("messageFlowAssociation", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnMessageFlowAssociation : BpmnBaseElement {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("messageFlowAssociation",
+    Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
+public partial class BpmnMessageFlowAssociation : BpmnBaseElement
+{
     private System.Xml.XmlQualifiedName innerMessageFlowRefField;
-    
+
     private System.Xml.XmlQualifiedName outerMessageFlowRefField;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName innerMessageFlowRef {
-        get {
-            return innerMessageFlowRefField;
-        }
-        set {
-            innerMessageFlowRefField = value;
-        }
+    public System.Xml.XmlQualifiedName innerMessageFlowRef
+    {
+        get { return innerMessageFlowRefField; }
+        set { innerMessageFlowRefField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName outerMessageFlowRef {
-        get {
-            return outerMessageFlowRefField;
-        }
-        set {
-            outerMessageFlowRefField = value;
-        }
+    public System.Xml.XmlQualifiedName outerMessageFlowRef
+    {
+        get { return outerMessageFlowRefField; }
+        set { outerMessageFlowRefField = value; }
     }
 }

@@ -5,7 +5,9 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("globalManualTask", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnGlobalManualTask : BpmnGlobalTask {
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("globalManualTask",
+    Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
+public partial class BpmnGlobalManualTask : BpmnGlobalTask
+{
 }

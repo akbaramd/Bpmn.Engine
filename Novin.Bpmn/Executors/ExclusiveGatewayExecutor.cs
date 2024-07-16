@@ -1,65 +1,53 @@
-﻿using Novin.Bpmn.Test.Core;
-using Novin.Bpmn.Test.Executors.Abstracts;
+﻿using Novin.Bpmn.Test.Executors.Abstracts;
 using Novin.Bpmn.Test.Models;
+using Novin.Bpmn.Test.Core;
+using System.Threading.Tasks;
+using System.Linq;
+using System.Collections.Generic;
 
-namespace Novin.Bpmn.Test.Executors;
-
-public class ExclusiveGatewayExecutor : IGatewayExecutor
+namespace Novin.Bpmn.Test.Executors
 {
-    private readonly ScriptHandler _scriptHandler;
-
-    public ExclusiveGatewayExecutor()
+    public class ExclusiveGatewayExecutor : IGatewayExecutor
     {
-        _scriptHandler = new ScriptHandler();
-    }
+        private readonly ScriptHandler _scriptHandler = new();
 
-    public BpmnFlowElement? Execute(BpmnFlowElement element, BpmnInstance? context)
-    {
-        if (element is BpmnExclusiveGateway gateway)
+        public async Task<List<string>?> ExecuteAsync(BpmnFlowElement element, BpmnEngine engine)
         {
-            Console.WriteLine($"Executing Exclusive Gateway: {gateway.name}");
-
-            var outgoingFlows = FindOutgoingFlows(gateway.id, context.BpmnDefinitions);
-            foreach (var flow in outgoingFlows)
+            if (element is BpmnExclusiveGateway gateway)
             {
-                if (flow.conditionExpression != null && EvaluateCondition(flow.conditionExpression, context).Result)
+                var flows = engine.Instance.BpmnDefinitions.Items.OfType<BpmnProcess>()
+                    .SelectMany(process => process.Items.OfType<BpmnSequenceFlow>())
+                    .Where(flow => flow.sourceRef == gateway.id);
+
+                foreach (var flow in flows)
                 {
-                    return flow;
+                    if (await EvaluateCondition(flow.conditionExpression, engine))
+                    {
+                        return new List<string> { flow.targetRef };
+                    }
                 }
             }
 
-            var defaultFlow = outgoingFlows.FirstOrDefault(f => f.conditionExpression == null);
-            if (defaultFlow != null)
+            return null;
+        }
+
+        private async Task<bool> EvaluateCondition(BpmnExpression conditionExpression, BpmnEngine engine)
+        {
+            try
             {
-                return defaultFlow;
+                if (conditionExpression != null)
+                {
+                    var expression = string.Join(" ", conditionExpression.Text);
+                    var globals = new ScriptGlobals { Instance = engine.Instance };
+                    return await _scriptHandler.EvaluateConditionAsync(expression, globals);
+                }
             }
-        }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error evaluating condition: {ex.Message}");
+                return false;
+            }
 
-        return null;
-    }
-
-    private List<BpmnSequenceFlow> FindOutgoingFlows(string sourceRef, BpmnDefinitions? definitions)
-    {
-        var flows = new List<BpmnSequenceFlow>();
-        foreach (var item in definitions.Items)
-            if (item is BpmnProcess process)
-                foreach (var element in process.Items)
-                    if (element is BpmnSequenceFlow flow && flow.sourceRef == sourceRef)
-                        flows.Add(flow);
-        return flows;
-    }
-
-    private async Task<bool> EvaluateCondition(BpmnExpression conditionExpression, BpmnInstance context)
-    {
-        try
-        {
-            var expression = string.Join(" ", conditionExpression.Text);
-            var globals = new ScriptGlobals { Instance = context };
-            return await _scriptHandler.EvaluateConditionAsync(expression, globals);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error evaluating condition: {ex.Message}");
             return false;
         }
     }

@@ -2,30 +2,31 @@
 using Novin.Bpmn.Test.Executors.Abstracts;
 using Novin.Bpmn.Test.Models;
 
-namespace Novin.Bpmn.Test.Executors;
-
-public class ScriptTaskExecutor : ITaskExecutor
+namespace Novin.Bpmn.Test.Executors
 {
-    private readonly ScriptHandler _scriptHandler = new();
-
-    public async Task ExecuteAsync(BpmnFlowElement element, BpmnInstance? context)
+    public class ScriptTaskExecutor : ITaskExecutor
     {
-        if (element is BpmnScriptTask scriptTask)
+        private readonly ScriptHandler _scriptHandler = new();
+
+        public async Task<List<string>?> ExecuteAsync(BpmnFlowElement element, BpmnEngine engine)
         {
-            var scriptContent = scriptTask.script.InnerText;
-            Console.WriteLine("Executing script:");
-            Console.WriteLine(scriptContent);
+            if (element is BpmnScriptTask scriptTask)
+            {
+                var scriptContent = scriptTask.script.InnerText;
+                try
+                {
+                    var globals = new ScriptGlobals { Instance = engine.Instance };
+                    await _scriptHandler.ExecuteScriptAsync(scriptContent, globals);
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error executing script: {ex.Message}");
+                }
+            }
 
-            try
-            {
-                var globals = new ScriptGlobals { Instance = context };
-                await _scriptHandler.ExecuteScriptAsync(scriptContent, globals);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error executing script: {ex.Message}");
-            }
+            return null;
         }
-    }
 
+    }
 }

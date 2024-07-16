@@ -10,24 +10,22 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-public partial class BpmnGateway : BpmnFlowNode {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+public partial class BpmnGateway : BpmnFlowNode
+{
     private BpmnGatewayDirection gatewayDirectionField;
-    
-    public BpmnGateway() {
+
+    public BpmnGateway()
+    {
         gatewayDirectionField = BpmnGatewayDirection.Unspecified;
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
     [System.ComponentModel.DefaultValueAttribute(BpmnGatewayDirection.Unspecified)]
-    public BpmnGatewayDirection gatewayDirection {
-        get {
-            return gatewayDirectionField;
-        }
-        set {
-            gatewayDirectionField = value;
-        }
+    public BpmnGatewayDirection gatewayDirection
+    {
+        get { return gatewayDirectionField; }
+        set { gatewayDirectionField = value; }
     }
 }

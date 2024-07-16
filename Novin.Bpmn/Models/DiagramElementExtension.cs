@@ -5,19 +5,16 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(AnonymousType=true, Namespace="http://www.omg.org/spec/DD/20100524/DI")]
-public partial class DiagramElementExtension {
-    
+[System.Xml.Serialization.XmlTypeAttribute(AnonymousType = true, Namespace = "http://www.omg.org/spec/DD/20100524/DI")]
+public partial class DiagramElementExtension
+{
     private System.Xml.XmlElement[] anyField;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAnyElementAttribute()]
-    public System.Xml.XmlElement[] Any {
-        get {
-            return anyField;
-        }
-        set {
-            anyField = value;
-        }
+    public System.Xml.XmlElement[] Any
+    {
+        get { return anyField; }
+        set { anyField = value; }
     }
 }

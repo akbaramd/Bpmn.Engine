@@ -42,57 +42,46 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("flowElement", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public abstract partial class BpmnFlowElement : BpmnBaseElement {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("flowElement", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public abstract partial class BpmnFlowElement : BpmnBaseElement
+{
     private BpmnAuditing auditingField;
-    
+
     private BpmnMonitoring monitoringField;
-    
+
     private System.Xml.XmlQualifiedName[] categoryValueRefField;
-    
+
     private string nameField;
-    
+
     /// <remarks/>
-    public BpmnAuditing auditing {
-        get {
-            return auditingField;
-        }
-        set {
-            auditingField = value;
-        }
+    public BpmnAuditing auditing
+    {
+        get { return auditingField; }
+        set { auditingField = value; }
     }
-    
+
     /// <remarks/>
-    public BpmnMonitoring monitoring {
-        get {
-            return monitoringField;
-        }
-        set {
-            monitoringField = value;
-        }
+    public BpmnMonitoring monitoring
+    {
+        get { return monitoringField; }
+        set { monitoringField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("categoryValueRef")]
-    public System.Xml.XmlQualifiedName[] categoryValueRef {
-        get {
-            return categoryValueRefField;
-        }
-        set {
-            categoryValueRefField = value;
-        }
+    public System.Xml.XmlQualifiedName[] categoryValueRef
+    {
+        get { return categoryValueRefField; }
+        set { categoryValueRefField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
-    public string name {
-        get {
-            return nameField;
-        }
-        set {
-            nameField = value;
-        }
+    public string name
+    {
+        get { return nameField; }
+        set { nameField = value; }
     }
 }

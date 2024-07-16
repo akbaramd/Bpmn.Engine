@@ -5,7 +5,9 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("dataOutputAssociation", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnDataOutputAssociation : BpmnDataAssociation {
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("dataOutputAssociation",
+    Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
+public partial class BpmnDataOutputAssociation : BpmnDataAssociation
+{
 }

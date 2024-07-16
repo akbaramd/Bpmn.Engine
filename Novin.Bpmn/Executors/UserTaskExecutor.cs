@@ -1,14 +1,19 @@
 ﻿using Novin.Bpmn.Test.Executors.Abstracts;
 using Novin.Bpmn.Test.Models;
 
-namespace Novin.Bpmn.Test.Executors;
-
-public class UserTaskExecutor : IUserTaskExecutor
+namespace Novin.Bpmn.Test.Executors
 {
-    public void Execute(BpmnUserTask userTask, BpmnInstance instance)
+    public class UserTaskExecutor : IUserTaskExecutor
     {
-        Console.WriteLine($"User Task '{userTask.id}' requires user interaction. Waiting for user action.");
-        instance.PendingUserTask = userTask; // Store the pending user task
-    }
+        public async Task<List<string>?> ExecuteAsync(BpmnFlowElement element, BpmnEngine engine)
+        {
+            if (element is BpmnUserTask userTask)
+            {
+                engine.Instance.PendingUserTask = userTask;
+                return null; // Wait for user interaction
+            }
 
+            return null;
+        }
+    }
 }

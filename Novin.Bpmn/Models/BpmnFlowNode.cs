@@ -37,33 +37,28 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("flowNode", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public abstract partial class BpmnFlowNode : BpmnFlowElement {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("flowNode", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public abstract partial class BpmnFlowNode : BpmnFlowElement
+{
     private System.Xml.XmlQualifiedName[] incomingField;
-    
+
     private System.Xml.XmlQualifiedName[] outgoingField;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("incoming")]
-    public System.Xml.XmlQualifiedName[] incoming {
-        get {
-            return incomingField;
-        }
-        set {
-            incomingField = value;
-        }
+    public System.Xml.XmlQualifiedName[] incoming
+    {
+        get { return incomingField; }
+        set { incomingField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("outgoing")]
-    public System.Xml.XmlQualifiedName[] outgoing {
-        get {
-            return outgoingField;
-        }
-        set {
-            outgoingField = value;
-        }
+    public System.Xml.XmlQualifiedName[] outgoing
+    {
+        get { return outgoingField; }
+        set { outgoingField = value; }
     }
 }

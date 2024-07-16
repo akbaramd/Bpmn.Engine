@@ -5,20 +5,18 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("exclusiveGateway", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnExclusiveGateway : BpmnGateway {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("exclusiveGateway",
+    Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
+public partial class BpmnExclusiveGateway : BpmnGateway
+{
     private string defaultField;
-    
+
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType="IDREF")]
-    public string @default {
-        get {
-            return defaultField;
-        }
-        set {
-            defaultField = value;
-        }
+    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "IDREF")]
+    public string @default
+    {
+        get { return defaultField; }
+        set { defaultField = value; }
     }
 }

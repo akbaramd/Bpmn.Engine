@@ -11,58 +11,47 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("callableElement", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnCallableElement : BpmnRootElement {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("callableElement", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public partial class BpmnCallableElement : BpmnRootElement
+{
     private System.Xml.XmlQualifiedName[] supportedInterfaceRefField;
-    
+
     private BpmnInputOutputSpecification ioSpecificationField;
-    
+
     private BpmnInputOutputBinding[] ioBindingField;
-    
+
     private string nameField;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("supportedInterfaceRef")]
-    public System.Xml.XmlQualifiedName[] supportedInterfaceRef {
-        get {
-            return supportedInterfaceRefField;
-        }
-        set {
-            supportedInterfaceRefField = value;
-        }
+    public System.Xml.XmlQualifiedName[] supportedInterfaceRef
+    {
+        get { return supportedInterfaceRefField; }
+        set { supportedInterfaceRefField = value; }
     }
-    
+
     /// <remarks/>
-    public BpmnInputOutputSpecification ioSpecification {
-        get {
-            return ioSpecificationField;
-        }
-        set {
-            ioSpecificationField = value;
-        }
+    public BpmnInputOutputSpecification ioSpecification
+    {
+        get { return ioSpecificationField; }
+        set { ioSpecificationField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlElementAttribute("ioBinding")]
-    public BpmnInputOutputBinding[] ioBinding {
-        get {
-            return ioBindingField;
-        }
-        set {
-            ioBindingField = value;
-        }
+    public BpmnInputOutputBinding[] ioBinding
+    {
+        get { return ioBindingField; }
+        set { ioBindingField = value; }
     }
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
-    public string name {
-        get {
-            return nameField;
-        }
-        set {
-            nameField = value;
-        }
+    public string name
+    {
+        get { return nameField; }
+        set { nameField = value; }
     }
 }

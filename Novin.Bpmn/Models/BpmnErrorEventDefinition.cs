@@ -5,20 +5,18 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("errorEventDefinition", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnErrorEventDefinition : BpmnEventDefinition {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("errorEventDefinition",
+    Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
+public partial class BpmnErrorEventDefinition : BpmnEventDefinition
+{
     private System.Xml.XmlQualifiedName errorRefField;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName errorRef {
-        get {
-            return errorRefField;
-        }
-        set {
-            errorRefField = value;
-        }
+    public System.Xml.XmlQualifiedName errorRef
+    {
+        get { return errorRefField; }
+        set { errorRefField = value; }
     }
 }

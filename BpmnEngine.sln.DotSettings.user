@@ -1,7 +1,27 @@
 ﻿<wpf:ResourceDictionary xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:s="clr-namespace:System;assembly=mscorlib" xmlns:ss="urn:shemas-jetbrains-com:settings-storage-xaml" xmlns:wpf="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
-	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=624675ec_002D73cd_002D4805_002Da556_002D5f7bef329f76/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="BpmnEngineTests" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
-  &lt;TestAncestor&gt;&#xD;
-    &lt;TestId&gt;xUnit::4E8F268D-47EE-4D45-86E6-3E73F1E37701::net9.0::Novin.Bpmn.Test.BpmnEngineTests&lt;/TestId&gt;&#xD;
-    &lt;TestId&gt;xUnit::4E8F268D-47EE-4D45-86E6-3E73F1E37701::net9.0::Novin.Bpmn.Test.BpmnEngineGatewayTests&lt;/TestId&gt;&#xD;
-  &lt;/TestAncestor&gt;&#xD;
-&lt;/SessionState&gt;</s:String></wpf:ResourceDictionary>
+	<s:String x:Key="/Default/Environment/Highlighting/HighlightingSourceSnapshotLocation/@EntryValue">C:\Users\akbar\AppData\Local\JetBrains\Rider2024.1\resharper-host\temp\Rider\vAny\CoverageData\_BpmnEngine.1869513885\Snapshot\snapshot.utdcvr</s:String>
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=9b5c0470_002D8c99_002D40ed_002D827a_002D36f9da1c555c/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="TestExclusiveGateway_ConditionTrue #13" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;Or&gt;&#xD;
+    &lt;TestAncestor&gt;&#xD;
+      &lt;TestId&gt;xUnit::4E8F268D-47EE-4D45-86E6-3E73F1E37701::net8.0::BpmnEngineTests&lt;/TestId&gt;&#xD;
+      &lt;TestId&gt;xUnit::4E8F268D-47EE-4D45-86E6-3E73F1E37701::net8.0::BpmnEngineTests2&lt;/TestId&gt;&#xD;
+    &lt;/TestAncestor&gt;&#xD;
+    &lt;ProjectFile&gt;4E8F268D-47EE-4D45-86E6-3E73F1E37701/f:BpmnEngineGateway2Tests.cs&lt;/ProjectFile&gt;&#xD;
+  &lt;/Or&gt;&#xD;
+&lt;/SessionState&gt;</s:String>
+	
+	
+	
+	
+	
+	
+	</wpf:ResourceDictionary>

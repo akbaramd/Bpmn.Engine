@@ -5,20 +5,18 @@
 [Serializable()]
 [System.Diagnostics.DebuggerStepThroughAttribute()]
 [System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("group", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
-public partial class BpmnGroup : BpmnArtifact {
-    
+[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[System.Xml.Serialization.XmlRootAttribute("group", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    IsNullable = false)]
+public partial class BpmnGroup : BpmnArtifact
+{
     private System.Xml.XmlQualifiedName categoryValueRefField;
-    
+
     /// <remarks/>
     [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName categoryValueRef {
-        get {
-            return categoryValueRefField;
-        }
-        set {
-            categoryValueRefField = value;
-        }
+    public System.Xml.XmlQualifiedName categoryValueRef
+    {
+        get { return categoryValueRefField; }
+        set { categoryValueRefField = value; }
     }
 }
