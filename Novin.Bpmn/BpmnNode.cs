@@ -2,6 +2,7 @@
 {
     public class BpmnNode
     {
+        public string ProcessId { get; set; }
         public string Id { get; set; }
         public BpmnFlowElement Element { get; set; }
         public bool Executed { get; set; }

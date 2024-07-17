@@ -3,39 +3,52 @@ using System.IO;
 using System.Threading.Tasks;
 using Xunit;
 using Novin.Bpmn.Test;
+using Novin.Bpmn.Test.Executors;
+using Novin.Bpmn.Test.Executors.Abstracts;
 using Novin.Bpmn.Test.Models;
 
 public class BpmnEngineTests
 {
-    private readonly string _bpmnFilePath;
-
-    public BpmnEngineTests()
-    {
-        // Set the path to your BPMN XML file
-        _bpmnFilePath = "D:\\Projects\\Github\\Bpmn.Engine\\Novin.Bpmn.Test\\Bpmn\\diagram_1.bpmn";
-    }
-
     [Fact]
     public async Task TestBpmnEngineExecution()
     {
         // Arrange
-        var engine = new BpmnEngine(_bpmnFilePath);
+        string bpmnFilePath = "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\parallel-merge.bpmn";
 
-        // Capture console output
-        using (var consoleOutput = new ConsoleOutput())
-        {
-            // Act
-            var instance = await engine.ExecuteProcessAsync();
+        ITaskExecutor scriptTaskExecutor = new ScriptTaskExecutor();
+        IUserTaskExecutor userTaskExecutor = new UserTaskExecutor();
+        IStartEventExecutor startEventExecutor = new StartEventExecutor();
+        IEndEventExecutor endEventExecutor = new EndEventExecutor();
+        IBpmnFileDeserializer fileDeserializer = new BpmnFileDeserializer();
 
-            // Assert
-            var output = consoleOutput.GetOutput();
-            Assert.Contains("Way 1", output);
-            Assert.Contains("Way 2", output);
-            Assert.Contains("Way 1-2", output);
-            Assert.Contains("Way 1-1", output);
-            Assert.Contains("After parallel_2", output);
-            Assert.Contains("Process completed.", output);
-        }
+        var engine = new BpmnEngine(
+            bpmnFilePath,
+            scriptTaskExecutor,
+            userTaskExecutor,
+            startEventExecutor,
+            endEventExecutor,
+            fileDeserializer
+        );
+
+        // Act & Assert
+
+        // First execution: check if it reaches the start event
+        var instance = await engine.ExecuteProcessAsync();
+        var activeRoutes = instance.GetActiveRoutes();
+
+        Assert.Contains(activeRoutes.Select(x=>x.Id).ToArray(), ["Activity_Start"]);
+
+        // Second execution: check if it reaches the inclusive gateway
+        instance = await engine.ExecuteProcessAsync();
+        activeRoutes = instance.GetActiveRoutes();
+
+        Assert.Contains(activeRoutes.Select(x=>x.Id).ToArray(), ["Gateway_inclusive"]);
+
+        // Third execution: check if it reaches a specific activity
+        instance = await engine.ExecuteProcessAsync();
+        activeRoutes = instance.GetActiveRoutes();
+
+        Assert.Contains(activeRoutes.Select(x=>x.Id).ToArray(), ["Activity_2_1","Activity_2_21"]);
+
     }
 }
-

@@ -1,41 +1,47 @@
-﻿namespace Novin.Bpmn.Test.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
 
-/// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("dataStoreReference",
+namespace Novin.Bpmn.Test.Models;
+
+/// <remarks />
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("dataStoreReference",
     Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public partial class BpmnDataStoreReference : BpmnFlowElement
+public class BpmnDataStoreReference : BpmnFlowElement
 {
     private BpmnDataState dataStateField;
 
-    private System.Xml.XmlQualifiedName itemSubjectRefField;
+    private XmlQualifiedName dataStoreRefField;
 
-    private System.Xml.XmlQualifiedName dataStoreRefField;
+    private XmlQualifiedName itemSubjectRefField;
 
-    /// <remarks/>
+    /// <remarks />
     public BpmnDataState dataState
     {
-        get { return dataStateField; }
-        set { dataStateField = value; }
+        get => dataStateField;
+        set => dataStateField = value;
     }
 
-    /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName itemSubjectRef
+    /// <remarks />
+    [XmlAttribute]
+    public XmlQualifiedName itemSubjectRef
     {
-        get { return itemSubjectRefField; }
-        set { itemSubjectRefField = value; }
+        get => itemSubjectRefField;
+        set => itemSubjectRefField = value;
     }
 
-    /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName dataStoreRef
+    /// <remarks />
+    [XmlAttribute]
+    public XmlQualifiedName dataStoreRef
     {
-        get { return dataStoreRefField; }
-        set { dataStoreRefField = value; }
+        get => dataStoreRefField;
+        set => dataStoreRefField = value;
     }
 }

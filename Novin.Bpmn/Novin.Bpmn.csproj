@@ -10,17 +10,16 @@
         <None Remove="simple_process.bpmn"/>
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="BPMN.Sharp" Version="1.0.7"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.10.0"/>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.10.0"/>
         <PackageReference Include="Microsoft.CodeAnalysis.Scripting" Version="4.10.0"/>
-        <PackageReference Include="System.Drawing.Common" Version="8.0.7"/>
     </ItemGroup>
     <ItemGroup>
         <Compile Remove="Executors\InclusiveGatewayExecutor.cs"/>
         <Compile Remove="Executors\ParallelGatewayExecutor.cs"/>
-        <Compile Remove="Executors\ExclusiveGatewayExecutor.cs" />
-        <Compile Remove="BpmnConverter.cs" />
-        <Compile Remove="BpmnRouteFactory.cs" />
+        <Compile Remove="Executors\ExclusiveGatewayExecutor.cs"/>
+        <Compile Remove="BpmnConverter.cs"/>
+        <Compile Remove="BpmnRouteFactory.cs"/>
     </ItemGroup>
 
 

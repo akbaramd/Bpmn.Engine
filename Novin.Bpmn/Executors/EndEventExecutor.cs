@@ -10,7 +10,7 @@ namespace Novin.Bpmn.Test.Executors
             if (element is BpmnEndEvent)
             {
                 Console.WriteLine("Process completed.");
-                engine.Instance.ActiveRoutes.Clear(); // Clear active nodes as the process is complete
+            
             }
 
             return null;

@@ -1,18 +1,22 @@
-﻿namespace Novin.Bpmn.Test.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
 
-/// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("eventBasedGateway",
+namespace Novin.Bpmn.Test.Models;
+
+/// <remarks />
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("eventBasedGateway",
     Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public partial class BpmnEventBasedGateway : BpmnGateway
+public class BpmnEventBasedGateway : BpmnGateway
 {
-    private bool instantiateField;
-
     private BpmnEventBasedGatewayType eventGatewayTypeField;
+    private bool instantiateField;
 
     public BpmnEventBasedGateway()
     {
@@ -20,21 +24,21 @@ public partial class BpmnEventBasedGateway : BpmnGateway
         eventGatewayTypeField = BpmnEventBasedGatewayType.Exclusive;
     }
 
-    /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute(false)]
+    /// <remarks />
+    [XmlAttribute]
+    [DefaultValue(false)]
     public bool instantiate
     {
-        get { return instantiateField; }
-        set { instantiateField = value; }
+        get => instantiateField;
+        set => instantiateField = value;
     }
 
-    /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute(BpmnEventBasedGatewayType.Exclusive)]
+    /// <remarks />
+    [XmlAttribute]
+    [DefaultValue(BpmnEventBasedGatewayType.Exclusive)]
     public BpmnEventBasedGatewayType eventGatewayType
     {
-        get { return eventGatewayTypeField; }
-        set { eventGatewayTypeField = value; }
+        get => eventGatewayTypeField;
+        set => eventGatewayTypeField = value;
     }
 }
