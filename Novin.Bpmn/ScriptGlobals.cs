@@ -1,4 +1,4 @@
 ﻿public class ScriptGlobals
 {
-    public BpmnInstance Instance { get; set; }
+    public ProcessInstance Instance { get; set; }
 }

@@ -6,25 +6,11 @@ using Novin.Bpmn.Test.Models;
 using System.Threading.Tasks;
 
 // Define the BPMN file path
-string bpmnFilePath = "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\parallel-merge.bpmn";
-
-// Create the necessary executors and deserializer
-ITaskExecutor scriptTaskExecutor = new ScriptTaskExecutor();
-IUserTaskExecutor userTaskExecutor = new UserTaskExecutor();
-IStartEventExecutor startEventExecutor = new StartEventExecutor();
-IEndEventExecutor endEventExecutor = new EndEventExecutor();
-IBpmnFileDeserializer fileDeserializer = new BpmnFileDeserializer();
+string bpmnFilePath = "D:\\Projects\\Github\\Bpmn.Engine\\Novin.Bpmn.Test\\Bpmn\\parallel-merge.bpmn";
 
 
 // Create an instance of the BPMN engine with the given file path and dependencies
-var engine = new BpmnEngine(
-    bpmnFilePath,
-    scriptTaskExecutor,
-    userTaskExecutor,
-    startEventExecutor,
-    endEventExecutor,
-    fileDeserializer
-);
+var engine = new ProcessEngine(bpmnFilePath);
 
 // Execute the process asynchronously
-await engine.ExecuteProcessAsync();
+await engine.StartProcess();

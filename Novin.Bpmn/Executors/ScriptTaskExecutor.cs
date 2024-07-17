@@ -8,7 +8,7 @@ namespace Novin.Bpmn.Test.Executors
     {
         private readonly ScriptHandler _scriptHandler = new();
 
-        public async Task<List<string>?> ExecuteAsync(BpmnFlowElement element, BpmnEngine engine)
+        public async Task<List<string>?> ExecuteAsync(BpmnFlowElement element, ProcessEngine engine)
         {
             if (element is BpmnScriptTask scriptTask)
             {
@@ -27,6 +27,5 @@ namespace Novin.Bpmn.Test.Executors
 
             return null;
         }
-
     }
 }

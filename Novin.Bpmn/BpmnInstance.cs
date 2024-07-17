@@ -8,7 +8,7 @@ using Novin.Bpmn.Test.Models;
 public class BpmnInstance
 {
     public BpmnDefinitions Definitions { get; }
-    public  Stack<BpmnBranch> _activeBranch;
+    public Stack<BpmnBranch> _activeBranch;
     private readonly List<BpmnUserTask> _pendingUserTasks;
     public dynamic Variables { get; set; }
 
@@ -19,9 +19,6 @@ public class BpmnInstance
         _pendingUserTasks = new List<BpmnUserTask>();
         Variables = new ExpandoObject();
     }
-
-  
-  
 
 
     public bool HasPendingUserTasks()
@@ -38,6 +35,4 @@ public class BpmnInstance
     {
         _pendingUserTasks.Remove(userTask);
     }
-
- 
 }

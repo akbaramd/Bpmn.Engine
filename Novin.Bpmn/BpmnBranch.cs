@@ -18,6 +18,7 @@ public class BpmnBranch
         {
             return Items.SequenceEqual(branch.Items);
         }
+
         return false;
     }
 

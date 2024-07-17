@@ -13,7 +13,8 @@ public class BpmnEngineTests
     public async Task TestBpmnEngineExecution()
     {
         // Arrange
-        string bpmnFilePath = "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\parallel-merge.bpmn";
+        string bpmnFilePath =
+            "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\parallel-merge.bpmn";
 
         ITaskExecutor scriptTaskExecutor = new ScriptTaskExecutor();
         IUserTaskExecutor userTaskExecutor = new UserTaskExecutor();
@@ -36,19 +37,18 @@ public class BpmnEngineTests
         var instance = await engine.ExecuteProcessAsync();
         var activeRoutes = instance.GetActiveRoutes();
 
-        Assert.Contains(activeRoutes.Select(x=>x.Id).ToArray(), ["Activity_Start"]);
+        Assert.Contains(activeRoutes.Select(x => x.Id).ToArray(), ["Activity_Start"]);
 
         // Second execution: check if it reaches the inclusive gateway
         instance = await engine.ExecuteProcessAsync();
         activeRoutes = instance.GetActiveRoutes();
 
-        Assert.Contains(activeRoutes.Select(x=>x.Id).ToArray(), ["Gateway_inclusive"]);
+        Assert.Contains(activeRoutes.Select(x => x.Id).ToArray(), ["Gateway_inclusive"]);
 
         // Third execution: check if it reaches a specific activity
         instance = await engine.ExecuteProcessAsync();
         activeRoutes = instance.GetActiveRoutes();
 
-        Assert.Contains(activeRoutes.Select(x=>x.Id).ToArray(), ["Activity_2_1","Activity_2_21"]);
-
+        Assert.Contains(activeRoutes.Select(x => x.Id).ToArray(), ["Activity_2_1", "Activity_2_21"]);
     }
 }

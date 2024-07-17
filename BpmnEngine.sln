@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Novin.Bpmn", "Novin.Bpmn\No
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Novin.Bpmn.Test", "Novin.Bpmn.Test\Novin.Bpmn.Test.csproj", "{4E8F268D-47EE-4D45-86E6-3E73F1E37701}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Process", "Process", "{5C570EA8-93AF-49D1-AEB5-FAAF8C3AF127}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

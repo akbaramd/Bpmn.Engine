@@ -46,10 +46,12 @@ namespace Novin.Bpmn.Test
                     return process;
                 }
             }
+
             throw new KeyNotFoundException("No start event found in the BPMN processes.");
         }
 
-        private void TraverseElement(BpmnProcess process, BpmnFlowElement element, List<BpmnBranch> branches, HashSet<string> visitedElements)
+        private void TraverseElement(BpmnProcess process, BpmnFlowElement element, List<BpmnBranch> branches,
+            HashSet<string> visitedElements)
         {
             var gateway = element is BpmnGateway;
             if (!gateway && visitedElements.Contains(element.id))
@@ -69,6 +71,7 @@ namespace Novin.Bpmn.Test
                 {
                     return;
                 }
+
                 visitedElements.Add(currentElement.id);
                 currentBranch.Items.Push(currentElement.id);
 
@@ -79,6 +82,7 @@ namespace Novin.Bpmn.Test
                     {
                         TraverseElement(process, nextElement, branches, visitedElements);
                     }
+
                     return;
                 }
 
