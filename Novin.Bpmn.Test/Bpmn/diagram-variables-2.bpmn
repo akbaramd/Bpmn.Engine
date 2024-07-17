@@ -30,7 +30,7 @@
       <bpmn:dataInputAssociation>
         <bpmn:sourceRef>DataObject_exampleVar</bpmn:sourceRef>
       </bpmn:dataInputAssociation>
-      <bpmn:script>Console.WriteLine("Other");</bpmn:script>
+      <bpmn:script>Console.WriteLine(Instance.Variables.exampleVar);</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:endEvent id="EndEvent_1">
       <bpmn:incoming>Flow_ToEndFromPrint</bpmn:incoming>
@@ -170,6 +170,12 @@
         <di:waypoint x="340" y="650" />
         <di:waypoint x="415" y="650" />
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_14hwggu_di" bpmnElement="Flow_14hwggu">
+        <di:waypoint x="1250" y="900" />
+        <di:waypoint x="480" y="900" />
+        <di:waypoint x="480" y="630" />
+        <di:waypoint x="445" y="630" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToPrint_di" bpmnElement="Flow_ToPrint">
         <di:waypoint x="440" y="675" />
         <di:waypoint x="440" y="950" />
@@ -187,6 +193,11 @@
         <di:waypoint x="560" y="760" />
         <di:waypoint x="820" y="760" />
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0vg5zg8_di" bpmnElement="Flow_0vg5zg8">
+        <di:waypoint x="920" y="760" />
+        <di:waypoint x="1190" y="760" />
+        <di:waypoint x="1190" y="675" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_048dcor_di" bpmnElement="Flow_048dcor">
         <di:waypoint x="560" y="625" />
         <di:waypoint x="560" y="410" />
@@ -197,25 +208,14 @@
         <di:waypoint x="890" y="410" />
         <di:waypoint x="890" y="265" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_0vg5zg8_di" bpmnElement="Flow_0vg5zg8">
-        <di:waypoint x="920" y="760" />
-        <di:waypoint x="1190" y="760" />
-        <di:waypoint x="1190" y="675" />
+      <bpmndi:BPMNEdge id="Flow_1d5aqp2_di" bpmnElement="Flow_1d5aqp2">
+        <di:waypoint x="1190" y="540" />
+        <di:waypoint x="1190" y="625" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_04rv3ht_di" bpmnElement="Flow_04rv3ht">
         <di:waypoint x="1190" y="675" />
         <di:waypoint x="1190" y="900" />
         <di:waypoint x="1250" y="900" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_14hwggu_di" bpmnElement="Flow_14hwggu">
-        <di:waypoint x="1250" y="900" />
-        <di:waypoint x="480" y="900" />
-        <di:waypoint x="480" y="630" />
-        <di:waypoint x="445" y="630" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_0nw05e2_di" bpmnElement="Flow_0nw05e2">
-        <di:waypoint x="1190" y="365" />
-        <di:waypoint x="1190" y="460" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_04rdydd_di" bpmnElement="Flow_04rdydd">
         <di:waypoint x="1090" y="120" />
@@ -226,6 +226,10 @@
         <di:waypoint x="1090" y="340" />
         <di:waypoint x="1165" y="340" />
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0nw05e2_di" bpmnElement="Flow_0nw05e2">
+        <di:waypoint x="1190" y="365" />
+        <di:waypoint x="1190" y="460" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_039dd1u_di" bpmnElement="Flow_039dd1u">
         <di:waypoint x="915" y="240" />
         <di:waypoint x="1040" y="240" />
@@ -235,10 +239,6 @@
         <di:waypoint x="890" y="215" />
         <di:waypoint x="890" y="120" />
         <di:waypoint x="990" y="120" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_1d5aqp2_di" bpmnElement="Flow_1d5aqp2">
-        <di:waypoint x="1190" y="540" />
-        <di:waypoint x="1190" y="625" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

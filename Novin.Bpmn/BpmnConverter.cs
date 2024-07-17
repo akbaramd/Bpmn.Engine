@@ -10,12 +10,12 @@
         // Note : First Step is StartEvent   
         // Note : Index number is number of index in branch when you find a branch maybe have 4 nodes . index position of node in this branch
         
-        public BpmnRoute Convert(BpmnDefinitions definitions)
+        public BpmnNode Convert(BpmnDefinitions definitions)
         {
             var branchFinder = new BpmnBranchFinder();
             var branches = branchFinder.GetAllBranches(definitions).ToList();
 
-            var stepsDictionary = new Dictionary<string, BpmnRoute>();
+            var stepsDictionary = new Dictionary<string, BpmnNode>();
             var startProcess = FindStartProcess(GetProcesses(definitions));
             var startEvent = startProcess.Items.OfType<BpmnStartEvent>().FirstOrDefault();
             if (startEvent == null)
@@ -50,18 +50,18 @@
             throw new KeyNotFoundException("No start event found in the BPMN processes.");
         }
 
-        private BpmnRoute ConvertElementToStep(BpmnProcess process, BpmnFlowElement element, List<BpmnBranch> branches, Dictionary<string, BpmnRoute> stepsDictionary)
+        private BpmnNode ConvertElementToStep(BpmnProcess process, BpmnFlowElement element, List<BpmnBranch> branches, Dictionary<string, BpmnNode> stepsDictionary)
         {
             if (stepsDictionary.ContainsKey(element.id))
                 return stepsDictionary[element.id];
 
             var branch = FindBranchForElement(element, branches);
-            var step = new BpmnRoute
+            var step = new BpmnNode
             {
                 Id = element.id,
                 Element = element,
                 Branch = branch,
-                NextSteps = new List<BpmnRoute>(),
+                NextSteps = new List<BpmnNode>(),
                 Incoming = process.Items.OfType<BpmnSequenceFlow>()
                     .Where(flow => flow.targetRef == element.id).ToList(),
                 Outgoing = process.Items.OfType<BpmnSequenceFlow>()

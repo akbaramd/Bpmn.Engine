@@ -1,16 +1,35 @@
-﻿using Novin.Bpmn.Test.Models;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using Novin.Bpmn.Test.Models;
 
 namespace Novin.Bpmn.Test
 {
     public class BpmnBranch
     {
         public Stack<string> Items { get; set; }
+        public Stack<string> History { get; set; }
         public List<BpmnBranch> NextBranches { get; set; }
 
         public BpmnBranch()
         {
             Items = new Stack<string>();
+            History = new Stack<string>();
             NextBranches = new List<BpmnBranch>();
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is BpmnBranch branch)
+            {
+                return Items.SequenceEqual(branch.Items);
+            }
+            return false;
+        }
+
+        public override int GetHashCode()
+        {
+            return string.Join(",", Items).GetHashCode();
         }
     }
 
@@ -32,7 +51,7 @@ namespace Novin.Bpmn.Test
             }
             return branches;
         }
-        
+
         public IEnumerable<BpmnBranch> GetAllBranches(BpmnBranch branch)
         {
             yield return branch;
@@ -41,20 +60,11 @@ namespace Novin.Bpmn.Test
                 yield return nextBranch;
             }
         }
-        
-        public IEnumerable<BpmnBranch> GetAllBranches(BpmnDefinitions definitions)
+
+        public List<BpmnBranch> GetAllDistinctBranches(BpmnDefinitions definitions)
         {
             var branches = GetBranch(definitions);
-
-            foreach (var branch in branches)
-            {
-                var all = GetAllBranches(branch);
-                foreach (var branch1 in all)
-                {
-                    yield return branch;    
-                }
-                
-            }
+            return branches.SelectMany(GetAllBranches).Distinct().ToList();
         }
 
         private static IEnumerable<BpmnProcess> GetProcesses(BpmnDefinitions definitions)
@@ -89,16 +99,14 @@ namespace Novin.Bpmn.Test
 
             if (element is BpmnEndEvent || element is BpmnGateway)
             {
-                
                 foreach (var nextElement in GetNextElements(process, element))
                 {
                     var newBranch = new BpmnBranch();
                     TraverseElement(process, nextElement, newBranch, branches);
                     if (newBranch.Items.Any())
                     {
-                        currentBranch.NextBranches.Add(newBranch);    
+                        currentBranch.NextBranches.Add(newBranch);
                     }
-                    
                 }
             }
             else
@@ -117,7 +125,7 @@ namespace Novin.Bpmn.Test
             {
                 if (item is BpmnSequenceFlow sequenceFlow && sequenceFlow.sourceRef == element.id)
                 {
-                    yield return process.Items.First(x=>x.id.Equals(sequenceFlow.targetRef));
+                    yield return process.Items.First(x => x.id.Equals(sequenceFlow.targetRef));
                 }
             }
         }

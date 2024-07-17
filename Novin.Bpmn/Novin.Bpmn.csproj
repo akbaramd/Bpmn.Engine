@@ -19,6 +19,8 @@
         <Compile Remove="Executors\InclusiveGatewayExecutor.cs"/>
         <Compile Remove="Executors\ParallelGatewayExecutor.cs"/>
         <Compile Remove="Executors\ExclusiveGatewayExecutor.cs" />
+        <Compile Remove="BpmnConverter.cs" />
+        <Compile Remove="BpmnRouteFactory.cs" />
     </ItemGroup>
 
 

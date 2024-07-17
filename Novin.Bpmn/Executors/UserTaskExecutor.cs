@@ -9,7 +9,7 @@ namespace Novin.Bpmn.Test.Executors
         {
             if (element is BpmnUserTask userTask)
             {
-                engine.Instance.PendingUserTask = userTask;
+                engine.Instance.PendingUserTasks.Add(userTask);
                 return null; // Wait for user interaction
             }
 

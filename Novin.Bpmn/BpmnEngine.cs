@@ -2,206 +2,313 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Novin.Bpmn.Test;
 using Novin.Bpmn.Test.Core;
 using Novin.Bpmn.Test.Executors;
 using Novin.Bpmn.Test.Executors.Abstracts;
 using Novin.Bpmn.Test.Models;
 
-namespace Novin.Bpmn.Test
+public class BpmnEngine
 {
-    public class BpmnEngine
+    private readonly ITaskExecutor _scriptTaskExecutor;
+    public readonly IUserTaskExecutor _userTaskExecutor;
+    private readonly IStartEventExecutor _startEventExecutor;
+    private readonly IEndEventExecutor _endEventExecutor;
+
+    public BpmnInstance Instance { get; }
+    public List<BpmnBranch> Branches { get; }
+
+    public List<BpmnBranch> ActiveBranches { get; }
+
+    private readonly BpmnExecutionModel _executionModel;
+
+    public BpmnEngine(string filePath)
     {
-        private readonly ITaskExecutor _scriptTaskExecutor;
-        public readonly IUserTaskExecutor _userTaskExecutor;
-        private readonly IStartEventExecutor _startEventExecutor;
-        private readonly IEndEventExecutor _endEventExecutor;
-
-        public BpmnInstance Instance { get; }
-        public BpmnRoute Route { get; }
-
-        public BpmnEngine(string filePath)
+        try
         {
-            try
-            {
-                Instance = new BpmnInstance();
-                var converter = new BpmnConverter();
-                var definitions = DeserializeBpmnFile(filePath);
-                Route = converter.Convert(definitions);
+            var definitions = DeserializeBpmnFile(filePath);
+            Branches = new BpmnBranchFinder().GetAllDistinctBranches(definitions).ToList();
+            Instance = new BpmnInstance(definitions);
+            ActiveBranches = new List<BpmnBranch>();
+            _executionModel = new BpmnExecutionModel();
 
-                _scriptTaskExecutor = new ScriptTaskExecutor();
-                _userTaskExecutor = new UserTaskExecutor();
-                _startEventExecutor = new StartEventExecutor();
-                _endEventExecutor = new EndEventExecutor();
+            _scriptTaskExecutor = new ScriptTaskExecutor();
+            _userTaskExecutor = new UserTaskExecutor();
+            _startEventExecutor = new StartEventExecutor();
+            _endEventExecutor = new EndEventExecutor();
 
-                Instance.ActiveRoutes.Add(Route);
-            }
-            catch (Exception e)
+            InitializeExecutionModel();
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            throw;
+        }
+    }
+
+    private BpmnDefinitions DeserializeBpmnFile(string filePath)
+    {
+        var xmlContent = System.IO.File.ReadAllText(filePath);
+        var serializer = new System.Xml.Serialization.XmlSerializer(typeof(BpmnDefinitions),
+            "http://www.omg.org/spec/BPMN/20100524/MODEL");
+        using var stringReader = new System.IO.StringReader(xmlContent);
+        return (BpmnDefinitions)serializer.Deserialize(stringReader)!;
+    }
+
+    private void InitializeExecutionModel()
+    {
+        var startEvent = FindStartEvent();
+        var startNode = ConvertElementToNode(startEvent);
+        _executionModel.AddActiveRoute(startNode);
+        ActiveBranches.Add(Branches.First(x => x.Items.Last() == startEvent.id));
+    }
+
+    public BpmnNode ConvertElementToNode(BpmnFlowElement flowElement)
+    {
+        return new BpmnNode()
+        {
+            Element = flowElement,
+            Id = flowElement.id,
+            Executed = false,
+            Outgoing = FindOutgoingSequenceFlows(flowElement),
+            Incoming = FindIncomingSequenceFlows(flowElement),
+            ForkedBranchCount = flowElement is BpmnParallelGateway || flowElement is BpmnInclusiveGateway
+                ? FindOutgoingSequenceFlows(flowElement).Count
+                : 0
+        };
+    }
+
+    public BpmnFlowElement FindElementWithId(string id)
+    {
+        return FindFirstProcess().Items.First(x => x.id.Equals(id));
+    }
+
+    private List<BpmnSequenceFlow> FindOutgoingSequenceFlows(BpmnFlowElement flowElement)
+    {
+        return FindFirstProcess().Items.OfType<BpmnSequenceFlow>().Where(x => x.sourceRef.Equals(flowElement.id))
+            .ToList();
+    }
+
+    private List<BpmnSequenceFlow> FindIncomingSequenceFlows(BpmnFlowElement flowElement)
+    {
+        return FindFirstProcess().Items.OfType<BpmnSequenceFlow>().Where(x => x.targetRef.Equals(flowElement.id))
+            .ToList();
+    }
+
+    private BpmnStartEvent FindStartEvent()
+    {
+        return FindFirstProcess().Items.OfType<BpmnStartEvent>().First();
+    }
+
+    private BpmnProcess FindFirstProcess()
+    {
+        return Instance.Definitions.Items.OfType<BpmnProcess>().First();
+    }
+
+    public async Task<BpmnInstance> ExecuteProcessAsync()
+    {
+        while (_executionModel.HasActiveRoutes())
+        {
+            var tasks = _executionModel.GetActiveRoutes().Select(ExecuteAsync).ToList();
+            await Task.WhenAll(tasks);
+
+            if (_executionModel.HasPendingUserTasks())
             {
-                Console.WriteLine(e);
-                throw;
+                // Stop execution until user tasks are handled
+                break;
             }
         }
 
-        private BpmnDefinitions DeserializeBpmnFile(string filePath)
+        return Instance;
+    }
+
+    private async Task ExecuteAsync(BpmnNode currentNode)
+    {
+        if (currentNode.Executed)
         {
-            var xmlContent = System.IO.File.ReadAllText(filePath);
-            var serializer = new System.Xml.Serialization.XmlSerializer(typeof(BpmnDefinitions), "http://www.omg.org/spec/BPMN/20100524/MODEL");
-            using var stringReader = new System.IO.StringReader(xmlContent);
-            return (BpmnDefinitions)serializer.Deserialize(stringReader)!;
+            return;
         }
 
-        public async Task<BpmnInstance> ExecuteProcessAsync()
+        if (currentNode.Element != null)
         {
-            while (Instance.ActiveRoutes.Any(route => !route.Executed))
+            switch (currentNode.Element)
             {
-                var tasks = Instance.ActiveRoutes.Where(route => !route.Executed).Select(ExecuteAsync).ToList();
-                await Task.WhenAll(tasks);
-            }
-            return Instance;
-        }
-
-        private async Task ExecuteAsync(BpmnRoute currentRoute)
-        {
-            if (currentRoute == null || currentRoute.Executed)
-            {
-                return;
-            }
-
-            if (currentRoute.Element != null)
-            {
-                switch (currentRoute.Element)
-                {
-                    case BpmnStartEvent startEvent:
-                        await _startEventExecutor.ExecuteAsync(startEvent, this);
-                        break;
-                    case BpmnScriptTask scriptTask:
-                        await _scriptTaskExecutor.ExecuteAsync(scriptTask, this);
-                        break;
-                    case BpmnUserTask userTask:
-                        await _userTaskExecutor.ExecuteAsync(userTask, this);
-                        break;
-                    case BpmnEndEvent endEvent:
-                        await _endEventExecutor.ExecuteAsync(endEvent, this);
-                        break;
-                    case BpmnParallelGateway parallelGateway:
-                        // Check if all incoming branches are executed
-                        if (!AreAllIncomingBranchesExecuted(currentRoute))
-                        {
-                            return; // Wait until all incoming branches are executed
-                        }
-                        break;
-                }
-                
-                currentRoute.Executed = true;
-                Instance.History.Push(currentRoute);
-            }
-
-            Instance.ActiveRoutes.Remove(currentRoute);
-
-            var nextRoutes = await FindNextRoutes(currentRoute);
-            Instance.ActiveRoutes.AddRange(nextRoutes);
-        }
-
-        private async Task<List<BpmnRoute>> FindNextRoutes(BpmnRoute currentRoute)
-        {
-            var nextRoutes = new List<BpmnRoute>();
-
-            if (currentRoute.Element is BpmnGateway gateway)
-            {
-                var gatewayNextRoutes = await FindNextRoute(currentRoute);
-                nextRoutes.AddRange(gatewayNextRoutes);
-            }
-            else
-            {
-                nextRoutes.AddRange(currentRoute.NextSteps);
-            }
-
-            return nextRoutes;
-        }
-
-        private async Task<List<BpmnRoute>> FindNextRoute(BpmnRoute route)
-        {
-            var nextRoutes = new List<BpmnRoute>();
-
-            switch (route.Element)
-            {
-                case BpmnExclusiveGateway exclusiveGateway:
-                    nextRoutes = await EvaluateExclusiveGateway(route);
+                case BpmnStartEvent startEvent:
+                    await _startEventExecutor.ExecuteAsync(startEvent, this);
                     break;
-                case BpmnInclusiveGateway inclusiveGateway:
-                    nextRoutes = await EvaluateInclusiveGateway(route);
+                case BpmnScriptTask scriptTask:
+                    await _scriptTaskExecutor.ExecuteAsync(scriptTask, this);
+                    break;
+                case BpmnUserTask userTask:
+                    await _userTaskExecutor.ExecuteAsync(userTask, this);
+                    break;
+                case BpmnEndEvent endEvent:
+                    await _endEventExecutor.ExecuteAsync(endEvent, this);
                     break;
                 case BpmnParallelGateway parallelGateway:
-                    nextRoutes = await EvaluateParallelGateway(route);
+                case BpmnInclusiveGateway inclusiveGateway:
+                    // Check if all incoming branches are executed
+                    if (!await AreAllIncomingBranchesExecuted(currentNode))
+                    {
+                        return; // Wait until all incoming branches are executed
+                    }
+
                     break;
             }
 
-            return nextRoutes;
+            currentNode.Executed = true;
+            _executionModel.AddToHistory(currentNode);
+
+            // Update the history of the active branch
+            var activeBranch = ActiveBranches.FirstOrDefault(branch => branch.Items.Contains(currentNode.Id));
+            if (activeBranch != null)
+            {
+                activeBranch.History.Push(currentNode.Id);
+            }
         }
 
-        private async Task<List<BpmnRoute>> EvaluateExclusiveGateway(BpmnRoute route)
+        _executionModel.RemoveActiveRoute(currentNode);
+        var nextRoutes = await FindNextRoutes(currentNode);
+        _executionModel.AddActiveRoutes(nextRoutes);
+    }
+
+    private async Task<List<BpmnNode>> FindNextRoutes(BpmnNode currentNode)
+    {
+        var nextRoutes = new List<BpmnNode>();
+
+        if (currentNode.Element is BpmnGateway gateway)
         {
-            foreach (var nextRoute in route.Outgoing)
+            ActiveBranches.Remove(Branches.First(x => x.Items.First() == gateway.id));
+
+            var gatewayNextRoutes = await FindNextRoute(currentNode);
+            foreach (var nextNode in gatewayNextRoutes)
             {
-                if (await EvaluateCondition(nextRoute.conditionExpression))
-                {
-                    return route.NextSteps.Where(x => x.Id.Equals(nextRoute.targetRef)).ToList();
-                }
+                ActiveBranches.Add(Branches.First(x => x.Items.Last() == nextNode.Id));
             }
 
-            return new List<BpmnRoute>();
+            nextRoutes.AddRange(gatewayNextRoutes);
         }
-
-        private async Task<List<BpmnRoute>> EvaluateInclusiveGateway(BpmnRoute route)
+        else
         {
-            var nextRoutes = new List<BpmnRoute>();
-            foreach (var nextRoute in route.Outgoing)
+            foreach (var outgoing in currentNode.Outgoing)
             {
-                if (await EvaluateCondition(nextRoute.conditionExpression))
-                {
-                    nextRoutes.AddRange(route.NextSteps.Where(x => x.Id.Equals(nextRoute.targetRef)).ToList());
-                }
+                var nextElement = FindElementWithId(outgoing.targetRef);
+                var nextNode = ConvertElementToNode(nextElement);
+                nextRoutes.Add(nextNode);
             }
-
-            return nextRoutes;
         }
 
-        private async Task<List<BpmnRoute>> EvaluateParallelGateway(BpmnRoute route)
+        return nextRoutes;
+    }
+
+    private async Task<List<BpmnNode>> FindNextRoute(BpmnNode node)
+    {
+        var nextRoutes = new List<BpmnNode>();
+
+        switch (node.Element)
         {
-            // Proceed with the outgoing branches of the parallel gateway
-            return route.NextSteps.ToList();
+            case BpmnExclusiveGateway exclusiveGateway:
+                nextRoutes = await EvaluateExclusiveGateway(node);
+                break;
+            case BpmnInclusiveGateway inclusiveGateway:
+                nextRoutes = await EvaluateInclusiveGateway(node);
+                break;
+            case BpmnParallelGateway parallelGateway:
+                nextRoutes = await EvaluateParallelGateway(node);
+                break;
         }
 
-        private bool AreAllIncomingBranchesExecuted(BpmnRoute route)
+        return nextRoutes;
+    }
+
+    private async Task<List<BpmnNode>> EvaluateExclusiveGateway(BpmnNode node)
+    {
+        var nextRoutes = new List<BpmnNode>();
+
+        foreach (var nextRoute in node.Outgoing)
         {
-            return route.Incoming.All(incoming =>
-                Instance.History.Any(historyRoute => historyRoute.Id == incoming.sourceRef));
+            if (!await EvaluateCondition(nextRoute.conditionExpression)) continue;
+
+            nextRoutes.Add(ConvertElementToNode(FindElementWithId(nextRoute.targetRef)));
+            break;
         }
 
-        private async Task<bool> EvaluateCondition(BpmnExpression? conditionExpression)
+        return nextRoutes;
+    }
+
+    private async Task<List<BpmnNode>> EvaluateInclusiveGateway(BpmnNode node)
+    {
+        var nextRoutes = new List<BpmnNode>();
+
+        foreach (var nextRoute in node.Outgoing)
         {
-            try
+            if (!await EvaluateCondition(nextRoute.conditionExpression)) continue;
+
+            var nextNode = ConvertElementToNode(FindElementWithId(nextRoute.targetRef));
+            nextRoutes.Add(nextNode);
+        }
+
+        return nextRoutes;
+    }
+
+    private async Task<List<BpmnNode>> EvaluateParallelGateway(BpmnNode node)
+    {
+        var nextRoutes = new List<BpmnNode>();
+
+        foreach (var nextRoute in node.Outgoing)
+        {
+            var nextNode = ConvertElementToNode(FindElementWithId(nextRoute.targetRef));
+            nextRoutes.Add(nextNode);
+        }
+
+        return nextRoutes;
+    }
+
+    private async Task<bool> AreAllIncomingBranchesExecuted(BpmnNode node)
+    {
+        // Check if all active branches for the given gateway node have been executed
+        var possibleFlows  = node.Incoming.Select(flow=>flow.sourceRef).Count(x => ActiveBranches.SelectMany(c=>c.Items).Contains(x));
+        var executedFlows  = node.Incoming.Select(flow=>flow.sourceRef).Count(x => ActiveBranches.SelectMany(c=>c.History).Contains(x));
+
+        return (possibleFlows == executedFlows && possibleFlows > 0);
+    }
+
+    private async Task<bool> EvaluateInclusiveGatewayCondition(BpmnNode node)
+    {
+        foreach (var outgoing in node.Outgoing)
+        {
+            if (await EvaluateCondition(outgoing.conditionExpression))
             {
-                if (conditionExpression != null)
-                {
-                    var expression = string.Join(" ", conditionExpression.Text);
-                    var globals = new ScriptGlobals { Instance = Instance };
-                    var scriptHandler = new ScriptHandler();
-                    return await scriptHandler.EvaluateConditionAsync(expression, globals);
-                }
+                return true;
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error evaluating condition: {ex.Message}");
-                return false;
-            }
+        }
 
+        return false;
+    }
+
+    private async Task<bool> EvaluateCondition(BpmnExpression? conditionExpression)
+    {
+        try
+        {
+            if (conditionExpression != null)
+            {
+                var expression = string.Join(" ", conditionExpression.Text);
+                var globals = new ScriptGlobals { Instance = Instance };
+                var scriptHandler = new ScriptHandler();
+                return await scriptHandler.EvaluateConditionAsync(expression, globals);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error evaluating condition: {ex.Message}");
             return false;
         }
-    }
 
-    public class ScriptGlobals
-    {
-        public BpmnInstance Instance { get; set; } = new BpmnInstance();
+        return false;
     }
+}
+
+public class ScriptGlobals
+{
+    public BpmnInstance Instance { get; set; }
 }

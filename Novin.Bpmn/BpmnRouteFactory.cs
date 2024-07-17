@@ -10,12 +10,12 @@ namespace Novin.Bpmn.Test
 {
     public class BpmnRouteFactory
     {
-        private readonly BpmnRoute Route;
+        private readonly BpmnNode node;
 
         public BpmnRouteFactory(string filePath)
         {
             var d = DeserializeBpmnFile(filePath);
-            Route = new BpmnConverter().Convert(d);
+            node = new BpmnConverter().Convert(d);
         }
 
         private BpmnDefinitions DeserializeBpmnFile(string filePath)

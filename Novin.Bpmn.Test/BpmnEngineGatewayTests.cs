@@ -12,7 +12,7 @@ public class BpmnEngineTests
     public BpmnEngineTests()
     {
         // Set the path to your BPMN XML file
-        _bpmnFilePath = "D:\\Projects\\Github\\Bpmn.Engine\\Novin.Bpmn.Test\\Bpmn\\diagram-variables-2.bpmn";
+        _bpmnFilePath = "D:\\Projects\\Github\\Bpmn.Engine\\Novin.Bpmn.Test\\Bpmn\\diagram_1.bpmn";
     }
 
     [Fact]
@@ -33,7 +33,7 @@ public class BpmnEngineTests
             Assert.Contains("Way 2", output);
             Assert.Contains("Way 1-2", output);
             Assert.Contains("Way 1-1", output);
-            Assert.Contains("After Parallel", output);
+            Assert.Contains("After parallel_2", output);
             Assert.Contains("Process completed.", output);
         }
     }

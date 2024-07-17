@@ -1,27 +1,24 @@
-﻿using System.Dynamic;
-using Novin.Bpmn.Test.Models;
+﻿using System.Collections.Generic;
+using System.Dynamic;
 
-namespace Novin.Bpmn.Test;
-
-public class BpmnInstance
+namespace Novin.Bpmn.Test.Models
 {
-    public List<BpmnRoute> ActiveRoutes = new List<BpmnRoute>();
-
-    public BpmnInstance()
+    public class BpmnInstance
     {
-        Id = Guid.NewGuid();
-        History = new Stack<BpmnRoute>();
-    }
-
-    public Guid Id { get; }
-    public dynamic Variables { get; } = new ExpandoObject();
-    public bool IsPaused { get; set; }
-    public BpmnUserTask? PendingUserTask { get; set; }
-    public Stack<BpmnRoute> History { get; }
-
-    // Method to clear history if needed
-    public void ClearHistory()
-    {
-        History.Clear();
+        public BpmnDefinitions Definitions { get; }
+        public Stack<BpmnNode> History { get; }
+        public List<BpmnNode> ActiveRoutes { get; }
+        public List<BpmnUserTask> PendingUserTasks { get; }
+        public Dictionary<string, List<string>> ParallelGatewayBranches { get; }
+        public dynamic Variables { get; } = new ExpandoObject();
+        public bool IsPaused { get; set; }
+        public BpmnInstance(BpmnDefinitions definitions)
+        {
+            Definitions = definitions;
+            History = new Stack<BpmnNode>();
+            ActiveRoutes = new List<BpmnNode>();
+            PendingUserTasks = new List<BpmnUserTask>();
+            ParallelGatewayBranches = new Dictionary<string, List<string>>();
+        }
     }
 }
