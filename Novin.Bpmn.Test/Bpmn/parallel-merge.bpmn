@@ -31,9 +31,6 @@
     <bpmn:sequenceFlow id="Flow_1826wpr" sourceRef="Gateway_inclusive" targetRef="Activity_2_2">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.Index == 1</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="Flow_0k098ug" sourceRef="Gateway_inclusive" targetRef="Activity_2_3">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.Index == 2</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
     <bpmn:inclusiveGateway id="Gateway_inclusive">
       <bpmn:incoming>Flow_00smqt7</bpmn:incoming>
       <bpmn:outgoing>Flow_1d4ee9r</bpmn:outgoing>
@@ -69,15 +66,12 @@ if(Instance.Variables.Index == 1){
       <bpmn:outgoing>Flow_0lqeugx</bpmn:outgoing>
     </bpmn:inclusiveGateway>
     <bpmn:scriptTask id="Activity_1nktle1">
-      <bpmn:incoming>Flow_156oc6t</bpmn:incoming>
       <bpmn:incoming>Flow_0xbnbfk</bpmn:incoming>
+      <bpmn:incoming>Flow_156oc6t</bpmn:incoming>
       <bpmn:outgoing>Flow_00smqt7</bpmn:outgoing>
       <bpmn:script>Console.WriteLine($"Excute Activity_Start");</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:sequenceFlow id="Flow_00smqt7" sourceRef="Activity_1nktle1" targetRef="Gateway_inclusive" />
-    <bpmn:sequenceFlow id="Flow_156oc6t" sourceRef="Gateway_exclusive" targetRef="Activity_1nktle1">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.Index ==2</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
     <bpmn:scriptTask id="Activity_Start">
       <bpmn:incoming>Flow_0ce4b6b</bpmn:incoming>
       <bpmn:outgoing>Flow_0xbnbfk</bpmn:outgoing>
@@ -118,6 +112,12 @@ if(Instance.Variables.Index == 1){
       <bpmn:incoming>Flow_17uh7oj</bpmn:incoming>
       <bpmn:outgoing>Flow_1ugnad6</bpmn:outgoing>
     </bpmn:parallelGateway>
+    <bpmn:sequenceFlow id="Flow_156oc6t" sourceRef="Gateway_exclusive" targetRef="Activity_1nktle1">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.Index ==2</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_0k098ug" sourceRef="Gateway_inclusive" targetRef="Activity_2_3">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.Index == 2</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_181zetq">

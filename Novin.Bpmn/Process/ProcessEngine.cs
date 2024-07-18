@@ -11,7 +11,7 @@ public class ProcessEngine
     private readonly BpmnDefinitionsHandler definitionsHandler;
     private readonly IExecutor scriptExecuter;
     private readonly ScriptHandler scriptHandler;
-
+    private readonly Dictionary<string, HashSet<string>> gatewaysMap = new Dictionary<string, HashSet<string>>();
     public ProcessEngine(string path)
     {
         scriptHandler = new ScriptHandler();
@@ -95,13 +95,13 @@ public class ProcessEngine
             switch (node.Element)
             {
                 case BpmnExclusiveGateway exclusiveGateway:
-                    routes.AddRange(await FindNextExclusiveRoutes(exclusiveGateway));
+                    routes.AddRange(await FindNextExclusiveRoutes(node));
                     break;
                 case BpmnInclusiveGateway inclusiveGateway:
-                    routes.AddRange(await FindNextInclusiveRoutes(inclusiveGateway));
+                    routes.AddRange(await FindNextInclusiveRoutes(node));
                     break;
                 case BpmnParallelGateway parallelGateway:
-                    routes.AddRange(await FindNextParallelRoutes(parallelGateway));
+                    routes.AddRange(await FindNextParallelRoutes(node));
                     break;
             }
         }
@@ -115,28 +115,51 @@ public class ProcessEngine
         return routes;
     }
 
-    private async Task<List<ProcessNode>> FindNextParallelRoutes(BpmnParallelGateway node)
+    private async Task<List<ProcessNode>> FindNextParallelRoutes(ProcessNode node)
     {
+        
+        if (!Instance.GatewayForkState.ContainsKey(node.Id))
+            Instance.GatewayForkState[node.Id] = new HashSet<string>();
+        
+        Instance.GatewayForkState[node.Id].Clear();
+
+        
         var routes = new List<ProcessNode>();
-        var outgoing = definitionsHandler.GetOutgoingSequenceFlows(node);
+        var outgoing = definitionsHandler.GetOutgoingSequenceFlows(node.Element);
         foreach (var flow in outgoing)
         {
             var token = Guid.NewGuid().ToString();
             routes.Add(ConvertElementToNode(definitionsHandler.GetElementById(flow.targetRef), token));
-            if (!Instance.GatewayForkState.ContainsKey(node.id))
-                Instance.GatewayMergeState[node.id] = new HashSet<string>();
-
-            Instance.GatewayMergeState[node.id].Add(token);
+            Instance.GatewayForkState[node.Id].Add(token);
         }
 
+        var gateways = new HashSet<BpmnGateway>();
+        TraverseBackToPreviousGateways(node.Element, gateways);
+
+        foreach (var gateway in gateways)
+        {
+            if (!gatewaysMap.ContainsKey(gateway.id))
+                gatewaysMap[gateway.id] = new HashSet<string>();
+            
+            gatewaysMap[gateway.id].Add(node.Id);
+            
+            Instance.GatewayForkState[gateway.id].Remove(node.Token);
+        }
         return routes;
     }
 
-    private async Task<List<ProcessNode>> FindNextExclusiveRoutes(BpmnExclusiveGateway node)
+    private async Task<List<ProcessNode>> FindNextExclusiveRoutes(ProcessNode node)
     {
-        var routes = new List<ProcessNode>();
-        var outgoing = definitionsHandler.GetOutgoingSequenceFlows(node);
+        
+        if (!Instance.GatewayForkState.ContainsKey(node.Id))
+            Instance.GatewayForkState[node.Id] = new HashSet<string>();
+        
+        Instance.GatewayForkState[node.Id].Clear();
 
+        var routes = new List<ProcessNode>();
+        var outgoing = definitionsHandler.GetOutgoingSequenceFlows(node.Element);
+
+        
         foreach (var flow in outgoing)
         {
             var globals = new ScriptGlobals { Instance = Instance };
@@ -149,21 +172,32 @@ public class ProcessEngine
             var token = Guid.NewGuid().ToString();
             routes.Add(ConvertElementToNode(definitionsHandler.GetElementById(flow.targetRef), token));
 
-            if (!Instance.GatewayForkState.ContainsKey(node.id))
-                Instance.GatewayMergeState[node.id] = new HashSet<string>();
+        
 
-            Instance.GatewayMergeState[node.id].Add(token);
+            Instance.GatewayForkState[node.Id].Add(token);
             break;
         }
+        var gateways = new HashSet<BpmnGateway>();
+        TraverseBackToPreviousGateways(node.Element, gateways);
 
+        foreach (var gateway in gateways)
+        {
+            Instance.GatewayForkState[gateway.id].Remove(node.Token);
+        }
         return routes;
     }
 
-    private async Task<List<ProcessNode>> FindNextInclusiveRoutes(BpmnInclusiveGateway node)
+    private async Task<List<ProcessNode>> FindNextInclusiveRoutes(ProcessNode node)
     {
         var routes = new List<ProcessNode>();
-        var outgoing = definitionsHandler.GetOutgoingSequenceFlows(node);
+        
+        var outgoing = definitionsHandler.GetOutgoingSequenceFlows(node.Element);
 
+        if (!Instance.GatewayForkState.ContainsKey(node.Id))
+            Instance.GatewayForkState[node.Id] = new HashSet<string>();
+        
+        Instance.GatewayForkState[node.Id].Clear();
+        
         foreach (var flow in outgoing)
         {
             var globals = new ScriptGlobals { Instance = Instance };
@@ -177,12 +211,17 @@ public class ProcessEngine
             var token = Guid.NewGuid().ToString();
             routes.Add(ConvertElementToNode(element, token));
 
-            if (!Instance.GatewayForkState.ContainsKey(node.id))
-                Instance.GatewayForkState[node.id] = new HashSet<string>();
+            
 
-            Instance.GatewayForkState[node.id].Add(token);
+            Instance.GatewayForkState[node.Id].Add(token);
         }
+        var gateways = new HashSet<BpmnGateway>();
+        TraverseBackToPreviousGateways(node.Element, gateways);
 
+        foreach (var gateway in gateways)
+        {
+            Instance.GatewayForkState[gateway.id].Remove(node.Token);
+        }
         return routes;
     }
 
@@ -193,8 +232,32 @@ public class ProcessEngine
 
         Instance.GatewayMergeState[parallelGateway.id].Add(node.Token);
 
-        if (Instance.GatewayMergeState[parallelGateway.id].Count >= parallelGateway.incoming.Length) return true;
+        var incomingFlows = definitionsHandler.GetIncomingSequenceFlows(parallelGateway);
+        var previousGateway = new HashSet<BpmnGateway>();
 
+        foreach (var flow in incomingFlows)
+            TraverseBackToPreviousGateways(definitionsHandler.GetElementById(flow.sourceRef), previousGateway);
+
+        if (previousGateway.Any())
+        {
+            var tokens = previousGateway.SelectMany(x => Instance.GatewayForkState[x.id]).ToList();
+            var neededTokens = Instance.GatewayMergeState[parallelGateway.id];
+            if (neededTokens.All(tokens.Contains) && neededTokens.Count == incomingFlows.Count)
+            {
+                Instance.GatewayMergeState.Remove(parallelGateway.id);
+                foreach (var gateway in previousGateway)
+                {
+                    Instance.GatewayMergeState.Remove(gateway.id);
+                }      
+                return true;
+            };
+        }
+        else
+        {
+            return true;
+        }
+
+        
         return false;
     }
 
@@ -211,11 +274,20 @@ public class ProcessEngine
         foreach (var flow in incomingFlows)
             TraverseBackToPreviousGateways(definitionsHandler.GetElementById(flow.sourceRef), previousGateway);
 
+        
         if (previousGateway.Any())
         {
-            var tokens = previousGateway.SelectMany(x => Instance.GatewayForkState[x.id]);
-
-            if (Instance.GatewayMergeState[inclusiveGateway.id].Count >= tokens.Count()) return true;
+            var tokens = previousGateway.SelectMany(x => Instance.GatewayForkState[x.id]).ToList();
+            var currentTokens = Instance.GatewayMergeState[inclusiveGateway.id];
+            if (currentTokens.All(tokens.Contains) && currentTokens.Count == tokens.Count)
+            {
+                Instance.GatewayMergeState.Remove(inclusiveGateway.id);
+                foreach (var gateway in previousGateway)
+                {
+                    Instance.GatewayMergeState.Remove(gateway.id);
+                }        
+                return true;
+            };
         }
         else
         {
@@ -238,6 +310,8 @@ public class ProcessEngine
                 {
                     tokens.Add(bpmnGateway);
                 }
+                    
+                
                
             }
             else
