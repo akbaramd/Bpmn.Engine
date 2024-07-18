@@ -6,7 +6,7 @@ using Novin.Bpmn.Test.Models;
 using System.Threading.Tasks;
 
 // Define the BPMN file path
-string bpmnFilePath = "D:\\Projects\\Github\\Bpmn.Engine\\Novin.Bpmn.Test\\Bpmn\\parallel-merge.bpmn";
+string bpmnFilePath = "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\parallel-merge.bpmn";
 
 
 // Create an instance of the BPMN engine with the given file path and dependencies

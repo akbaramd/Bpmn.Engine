@@ -1,11 +1,6 @@
-﻿using System;
-using System.IO;
-using System.Threading.Tasks;
-using Xunit;
-using Novin.Bpmn.Test;
+﻿using Novin.Bpmn.Test;
 using Novin.Bpmn.Test.Executors;
 using Novin.Bpmn.Test.Executors.Abstracts;
-using Novin.Bpmn.Test.Models;
 
 public class BpmnEngineTests
 {
@@ -13,7 +8,7 @@ public class BpmnEngineTests
     public async Task TestBpmnEngineExecution()
     {
         // Arrange
-        string bpmnFilePath =
+        var bpmnFilePath =
             "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\parallel-merge.bpmn";
 
         ITaskExecutor scriptTaskExecutor = new ScriptTaskExecutor();
