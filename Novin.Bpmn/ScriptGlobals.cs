@@ -1,4 +1,4 @@
 ﻿public class ScriptGlobals
 {
-    public ProcessInstance Instance { get; set; }
+    public ProcessState State { get; set; }
 }

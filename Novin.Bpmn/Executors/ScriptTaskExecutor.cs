@@ -15,7 +15,7 @@ namespace Novin.Bpmn.Test.Executors
                 var scriptContent = scriptTask.script.InnerText;
                 try
                 {
-                    var globals = new ScriptGlobals { Instance = engine.Instance };
+                    var globals = new ScriptGlobals { State = engine.State };
                     await _scriptHandler.ExecuteScriptAsync(scriptContent, globals);
                     return null;
                 }
