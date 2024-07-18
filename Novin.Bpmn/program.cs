@@ -13,4 +13,9 @@ string bpmnFilePath = "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\No
 var engine = new ProcessEngine(bpmnFilePath);
 
 // Execute the process asynchronously
-await engine.StartProcess();
+await engine.StartProcess(false);
+await engine.StartProcess(false);
+await engine.StartProcess(false);
+await engine.StartProcess(false);
+await engine.StartProcess(false);
+

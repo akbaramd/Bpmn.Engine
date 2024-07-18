@@ -40,14 +40,14 @@ public class ProcessEngine
         };
     }
 
-    public async Task StartProcess()
+    public async Task StartProcess(bool immediately = true)
     {
         var startEvent = definitionsHandler.GetFirstStartEvent();
         var startNode = ConvertElementToNode(startEvent);
-        await StartProcess(startNode);
+        await StartProcess(startNode,immediately);
     }
 
-    public async Task StartProcess(ProcessNode node)
+    public async Task StartProcess(ProcessNode node,bool immediately = true)
     {
         if (State.IsStopped)
             return;
@@ -62,7 +62,10 @@ public class ProcessEngine
                 break;
         }
 
-        await FindNextNodes(node);
+        if (immediately)
+        {
+            await FindNextNodes(node);
+        }
     }
 
     private async Task FindNextNodes(ProcessNode node)
