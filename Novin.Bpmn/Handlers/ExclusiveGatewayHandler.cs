@@ -1,9 +1,11 @@
-﻿namespace Novin.Bpmn.Test.Process;
+﻿using Novin.Bpmn.Test.Abstractions;
+using Novin.Bpmn.Test.Core;
 
+namespace Novin.Bpmn.Test.Handlers;
 
 public class ExclusiveGatewayHandler : IGatewayHandler
 {
-    public async Task HandleGateway(ProcessNode node, ProcessEngine engine)
+    public async Task HandleGateway(BpmnNode node, BpmnEngine engine)
     {
         if (!engine.CheckForExclusiveMerge(node))
         {
@@ -19,9 +21,11 @@ public class ExclusiveGatewayHandler : IGatewayHandler
             if (flow.conditionExpression != null)
             {
                 var expression = string.Join(" ", flow.conditionExpression.Text);
-                if (await engine.scriptHandler.EvaluateConditionAsync(expression, globals))
+                if (await engine.ScriptHandler.EvaluateConditionAsync(expression, globals))
                 {
-                    var newNode = engine.ConvertElementToNode(engine.definitionsHandler.GetElementById(flow.targetRef), node.Token);
+                    var newNode = engine.ConvertElementToNode(engine.definitionsHandler.GetElementById(flow.targetRef),
+                        node.Token);
+                    engine.State.ActiveNodes.Add(newNode);
                     await engine.StartProcess(newNode);
                     break;
                 }

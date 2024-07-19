@@ -1,6 +1,6 @@
 ﻿using Novin.Bpmn.Test.Models;
 
-namespace Novin.Bpmn.Test;
+namespace Novin.Bpmn.Test.Core;
 
 public class BpmnDefinitionsHandler
 {

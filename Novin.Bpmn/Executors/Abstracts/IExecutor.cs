@@ -4,7 +4,7 @@ namespace Novin.Bpmn.Test.Executors.Abstracts
 {
     public interface IExecutor
     {
-        Task<List<string>?> ExecuteAsync(BpmnFlowElement element, ProcessEngine engine);
+        Task<List<string>?> ExecuteAsync(BpmnFlowElement element, BpmnEngine engine);
     }
 
     public interface ITaskExecutor : IExecutor

@@ -1,4 +1,6 @@
-﻿public class ConsoleOutput : IDisposable
+﻿namespace Novin.Bpmn.Test;
+
+public class ConsoleOutput : IDisposable
 {
     private StringWriter _stringWriter;
     private TextWriter _originalOutput;
