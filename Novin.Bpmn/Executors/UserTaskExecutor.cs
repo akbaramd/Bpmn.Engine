@@ -6,14 +6,15 @@ namespace Novin.Bpmn.Test.Executors;
 
 public class UserTaskExecutor : IExecutor
 {
-    public Task ExecuteAsync(BpmnFlowElement element, BpmnEngine engine)
+    public Task ExecuteAsync(BpmnNode node, BpmnEngine engine)
     {
+        var element = engine.DefinitionsHandler.GetElementById(node.Id);
         if (element is BpmnUserTask userTask)
         {
-            var userTaskNode = engine.ConvertElementToNode(userTask);
-            engine.State.WaitingUserTasks[userTaskNode.Id] = userTaskNode;
+            engine.State.WaitingUserTasks[node.Id] = node;
             Console.WriteLine($"User task {userTask.id} is waiting for completion.");
         }
+
         return Task.CompletedTask;
     }
 }

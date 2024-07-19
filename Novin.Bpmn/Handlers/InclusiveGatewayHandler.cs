@@ -1,57 +1,60 @@
-﻿using System.Collections;
+﻿using System;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Collections.Generic;
 using Novin.Bpmn.Test.Abstractions;
 using Novin.Bpmn.Test.Core;
+using Novin.Bpmn.Test.Models;
 
-namespace Novin.Bpmn.Test.Handlers;
-
-public class InclusiveGatewayHandler : IGatewayHandler
+namespace Novin.Bpmn.Test.Handlers
 {
-    public async Task HandleGateway(BpmnNode node, BpmnEngine engine)
+    public class InclusiveGatewayHandler : IGatewayHandler
     {
-        if (!CheckForInclusiveMerge(engine,node))
+        public async Task HandleGateway(BpmnNode node, BpmnEngine engine)
         {
-            return;
-        }
-
-        var useFakeToken = engine.State.GatewayMergeState[node.Id].All(x => x.Equals(BpmnFakeNode.FakeToken));
-        engine.State.GatewayMergeState.Remove(node.Element.id);
-        var outgoing = engine.definitionsHandler.GetOutgoingSequenceFlows(node.Element);
-        var tasks = outgoing.Select(async flow =>
-        {
-            var globals = new ScriptGlobals { State = engine.State };
-            if (flow.conditionExpression != null)
-            {   
-                var expression = string.Join(" ", flow.conditionExpression.Text);
-                if (!await engine.ScriptHandler.EvaluateConditionAsync(expression, globals))
-                {
-                    var element = engine.definitionsHandler.GetElementById(flow.targetRef);
-                    var node2 = new BpmnFakeNode(element);
-                    engine.State.ActiveNodes.Add(node2);
-                    await engine.StartProcess(node2);
-                    return;
-                }
+            if (!CheckForInclusiveMerge(node))
+            {
+                return;
             }
 
-            
-                            
-            
-            var token = Guid.NewGuid().ToString();
-            var nextNode = engine.ConvertElementToNode(engine.definitionsHandler.GetElementById(flow.targetRef), token);
-            var fakeNode = new BpmnFakeNode(engine.definitionsHandler.GetElementById(flow.targetRef));
-            engine.State.ActiveNodes.Add(useFakeToken ? fakeNode : nextNode);
-            await engine.StartProcess(useFakeToken ? fakeNode : nextNode);
-        });
-        await Task.WhenAll(tasks);
-        
-    }
-    public bool CheckForInclusiveMerge(BpmnEngine engine,BpmnNode node)
-    {
-        if (!engine.State.GatewayMergeState.ContainsKey(node.Element.id))
-            engine.State.GatewayMergeState[node.Element.id] = new Stack<string>();
+            var currentInstance = node.Instances.Peek();
+            var isExecutable = currentInstance.Merges.Any(x => x == currentInstance.Tokens.FirstOrDefault());
+            currentInstance.Merges.Clear();
+            var outgoingTasks = node.OutgoingFlows.Select(async flow =>
+            {
+                var globals = new ScriptGlobals { State = engine.State };
+                if (!string.IsNullOrWhiteSpace(flow.conditionExpression?.Text.ToString()))
+                {
+                    var expression = string.Join(" ", flow.conditionExpression.Text);
+                    if (!await engine.ScriptHandler.EvaluateConditionAsync(expression, globals))
+                    {
+                        await CreateAndStartNode(engine, flow, Guid.NewGuid().ToString(), false);
+                        return;
+                    }
+                }
+                await CreateAndStartNode(engine, flow, Guid.NewGuid().ToString(), isExecutable);
+            });
+            await Task.WhenAll(outgoingTasks);
 
-        engine.State.GatewayMergeState[node.Element.id].Push(node.Token);
+            currentInstance.IsExpired = true;
+        }
 
-        var incomingFlows = engine.definitionsHandler.GetIncomingSequenceFlows(node.Element);
-        return engine.State.GatewayMergeState[node.Element.id].Count == incomingFlows.Count;
+        public bool CheckForInclusiveMerge(BpmnNode node)
+        {
+            var currentInstance = node.Instances.Peek();
+            if (!currentInstance.Merges.Any())
+                currentInstance.Merges = new Stack<string>();
+
+            currentInstance.Merges.Push(currentInstance.Tokens.FirstOrDefault());
+            return currentInstance.Merges.Count == node.IncomingFlows.Count;
+        }
+
+        private async Task CreateAndStartNode(BpmnEngine engine, BpmnSequenceFlow flow, string token, bool isExecutable)
+        {
+            var element = engine.DefinitionsHandler.GetElementById(flow.targetRef);
+            var newNode = engine.CreateNewNode(element, token, isExecutable);
+            engine.State.ActiveNodes.Add(newNode);
+            await engine.StartProcess(newNode);
+        }
     }
 }

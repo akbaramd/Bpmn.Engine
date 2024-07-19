@@ -1,26 +1,42 @@
-﻿using Novin.Bpmn.Test.Abstractions;
+﻿// ParallelGatewayHandler.cs
+using System.Linq;
+using System.Threading.Tasks;
+using Novin.Bpmn.Test.Abstractions;
+using Novin.Bpmn.Test.Core;
 
-namespace Novin.Bpmn.Test.Handlers;
-
-public class ParallelGatewayHandler : IGatewayHandler
+namespace Novin.Bpmn.Test.Handlers
 {
-    public async Task HandleGateway(BpmnNode node, BpmnEngine engine)
+    public class ParallelGatewayHandler : IGatewayHandler
     {
-        if (!engine.CheckForParallelMerge(node))
+        public async Task HandleGateway(BpmnNode node, BpmnEngine engine)
         {
-            return;
+            if (!CheckForParallelMerge(node))
+            {
+                return;
+            }
+
+            var currentInstance = node.Instances.Peek();
+            currentInstance.Merges.Clear();
+
+            var outgoingTasks = node.OutgoingFlows.Select(flow =>
+            {
+                var newNode = engine.CreateNewNode(engine.DefinitionsHandler.GetElementById(flow.targetRef),
+                    currentInstance.Tokens.First(), currentInstance.IsExecutable);
+                engine.State.ActiveNodes.Add(newNode);
+                return engine.StartProcess(newNode);
+            });
+            await Task.WhenAll(outgoingTasks);
+
+            currentInstance.IsExpired = true;
+        }
+          public bool CheckForParallelMerge(BpmnNode node)
+        {
+            var currentInstance = node.Instances.Peek();
+            currentInstance.Merges.Push(currentInstance.Tokens.FirstOrDefault());
+
+            return currentInstance.Merges.Count == node.IncomingFlows.Count;
         }
 
-        engine.State.GatewayMergeState.Remove(node.Element.id);
-
-        var outgoing = engine.definitionsHandler.GetOutgoingSequenceFlows(node.Element);
-        var tasks = outgoing.Select(flow =>
-        {
-            var newNode =
-                engine.ConvertElementToNode(engine.definitionsHandler.GetElementById(flow.targetRef), node.Token);
-            engine.State.ActiveNodes.Add(newNode);
-            return engine.StartProcess(newNode);
-        });
-        await Task.WhenAll(tasks);
     }
+    
 }

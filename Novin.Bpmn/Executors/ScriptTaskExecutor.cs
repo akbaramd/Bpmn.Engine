@@ -8,8 +8,9 @@ namespace Novin.Bpmn.Test.Executors
     {
         private readonly ScriptHandler _scriptHandler = new();
 
-        public async Task ExecuteAsync(BpmnFlowElement element, BpmnEngine engine)
+        public async Task ExecuteAsync(BpmnNode node, BpmnEngine engine)
         {
+            var element = engine.DefinitionsHandler.GetElementById(node.Id);
             if (element is BpmnScriptTask scriptTask)
             {
                 var scriptContent = scriptTask.script.InnerText;
@@ -23,7 +24,6 @@ namespace Novin.Bpmn.Test.Executors
                     Console.WriteLine($"Error executing script: {ex.Message}");
                 }
             }
-
         }
     }
 }
