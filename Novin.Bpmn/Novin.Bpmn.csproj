@@ -22,7 +22,6 @@
         <Compile Remove="BpmnRouteFactory.cs"/>
         <Compile Remove="Executors\EndEventExecutor.cs"/>
         <Compile Remove="Executors\StartEventExecutor.cs"/>
-        <Compile Remove="Executors\UserTaskExecutor.cs"/>
     </ItemGroup>
 
 

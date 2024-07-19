@@ -4,6 +4,8 @@ using Novin.Bpmn.Test.Executors;
 using Novin.Bpmn.Test.Executors.Abstracts;
 using Novin.Bpmn.Test.Handlers;
 using Novin.Bpmn.Test.Models;
+using System.Collections.Concurrent;
+using System.Text.Json;
 
 namespace Novin.Bpmn.Test;
 
@@ -11,20 +13,30 @@ public class BpmnEngine
 {
     public BpmnDefinitionsHandler definitionsHandler { get; private set; }
 
-    public readonly ProcessState State;
+    public ProcessState State { get; private set; }
     public readonly IExecutor ScriptExecuter;
+    public readonly IExecutor UserTaskExecuter;
     public readonly ScriptHandler ScriptHandler;
 
     private readonly object pauseLock = new object();
 
-    public BpmnEngine(string path)
+    public BpmnEngine(string path, string? savedState = null)
     {
         var bpmnFileHandler = new BpmnFileDeserializer();
         ScriptHandler = new ScriptHandler();
         ScriptExecuter = new ScriptTaskExecutor();
+        UserTaskExecuter = new UserTaskExecutor();
         var definition = bpmnFileHandler.Deserialize(path);
         definitionsHandler = new BpmnDefinitionsHandler(definition);
-        State = new ProcessState(definition);
+
+        if (savedState != null)
+        {
+            State = ProcessState.RestoreState(savedState, definition);
+        }
+        else
+        {
+            State = new ProcessState(definition);
+        }
     }
 
     public BpmnNode ConvertElementToNode(BpmnFlowElement element, string? token = null)
@@ -40,21 +52,26 @@ public class BpmnEngine
 
     public async Task StartProcess(bool immediately = true)
     {
-        
-        
-
         if (!State.ActiveNodes.Any())
         {
             var startEvent = definitionsHandler.GetFirstStartEvent();
             var startNode = ConvertElementToNode(startEvent);
             State.ActiveNodes.Add(startNode);
         }
-        
-        foreach (var activeNode in State.ActiveNodes.ToList())
+
+        BpmnNode? nodeToProcess = null;
+        lock (State.ActiveNodes)
         {
-            await StartProcess(activeNode, immediately);    
+            if (State.ActiveNodes.Any())
+            {
+                nodeToProcess = State.ActiveNodes.First();
+            }
         }
-        
+
+        if (nodeToProcess != null)
+        {
+            await StartProcess(nodeToProcess, immediately);
+        }
     }
 
     public async Task StartProcess(BpmnNode node, bool immediately = true)
@@ -63,25 +80,48 @@ public class BpmnEngine
             return;
 
         await WaitIfPaused();
-        
-        
 
-        if (node is not BpmnFakeNode)
+        try
         {
-            switch (node.Element)
+            if (node is not BpmnFakeNode)
             {
-                case BpmnScriptTask scriptTask:
+                switch (node.Element)
+                {
+                    case BpmnScriptTask scriptTask:
+                        await ScriptExecuter.ExecuteAsync(scriptTask, this);
+                        break;
+                    case BpmnUserTask userTask:
+                        await UserTaskExecuter.ExecuteAsync(userTask, this);
+                        return; // Wait for user task completion
+                    // Handle other task types here...
+                }
+            }
 
-                    await ScriptExecuter.ExecuteAsync(scriptTask, this);
-                    break;
+            lock (State.ActiveNodes)
+            {
+                State.ActiveNodes = new ConcurrentBag<BpmnNode>(State.ActiveNodes.Except(new[] { node }));
+            }
+
+            if (immediately)
+            {
+                await FindNextNodes(node);
+            }
+            else
+            {
+                var nextNodes = FindNextNodesSync(node);
+                lock (State.ActiveNodes)
+                {
+                    foreach (var nextNode in nextNodes)
+                    {
+                        State.ActiveNodes.Add(nextNode);
+                    }
+                }
             }
         }
-
-        State.ActiveNodes.Remove(node);
-        
-        if (immediately)
+        catch (Exception ex)
         {
-            await FindNextNodes(node);
+            // Handle exception...
+            Console.WriteLine($"Error processing node {node.Id}: {ex.Message}");
         }
     }
 
@@ -110,12 +150,43 @@ public class BpmnEngine
                 var newNode = ConvertElementToNode(definitionsHandler.GetElementById(flow.targetRef), node.Token);
                 State.ActiveNodes.Add(newNode);
                 return StartProcess(newNode); // Create a task for each outgoing flow
-            });
-            await Task.WhenAll(tasks); // Wait for all tasks to complete
+            }).ToList();
+
+            await Task.WhenAll(tasks); // Wait for all tasks to start in parallel
         }
     }
 
+    private List<BpmnNode> FindNextNodesSync(BpmnNode node)
+    {
+        var nextNodes = new List<BpmnNode>();
 
+        if (node.Element is BpmnGateway gateway)
+        {
+            IGatewayHandler? handler = gateway switch
+            {
+                BpmnInclusiveGateway _ => new InclusiveGatewayHandler(),
+                BpmnExclusiveGateway _ => new ExclusiveGatewayHandler(),
+                BpmnParallelGateway _ => new ParallelGatewayHandler(),
+                _ => null
+            };
+
+            if (handler != null)
+            {
+                handler.HandleGateway(node, this);
+            }
+        }
+        else
+        {
+            var outgoing = definitionsHandler.GetOutgoingSequenceFlows(node.Element);
+            foreach (var flow in outgoing)
+            {
+                var newNode = ConvertElementToNode(definitionsHandler.GetElementById(flow.targetRef), node.Token);
+                nextNodes.Add(newNode);
+            }
+        }
+
+        return nextNodes;
+    }
 
     public bool CheckForExclusiveMerge(BpmnNode node)
     {
@@ -163,16 +234,44 @@ public class BpmnEngine
         State.IsStopped = true;
     }
 
-    private Task WaitIfPaused()
+    private async Task WaitIfPaused()
     {
-        lock (pauseLock)
+        await Task.Run(() =>
         {
-            while (State.IsPaused)
+            lock (pauseLock)
             {
-                Monitor.Wait(pauseLock);
+                while (State.IsPaused)
+                {
+                    Monitor.Wait(pauseLock);
+                }
             }
-        }
+        });
+    }
 
-        return Task.CompletedTask;
+    public string SaveState()
+    {
+        return State.SaveState();
+    }
+
+    public async Task CompleteUserTask(string taskId)
+    {
+        if (State.WaitingUserTasks.TryRemove(taskId, out var node))
+        {
+            Console.WriteLine($"User task {node.Id} is completed.");
+            await MoveToNextNodes(node); // Move to next nodes directly
+        }
+    }
+
+    private async Task MoveToNextNodes(BpmnNode node)
+    {
+        var outgoing = definitionsHandler.GetOutgoingSequenceFlows(node.Element);
+        var tasks = outgoing.Select(flow =>
+        {
+            var newNode = ConvertElementToNode(definitionsHandler.GetElementById(flow.targetRef), node.Token);
+            State.ActiveNodes.Add(newNode);
+            return StartProcess(newNode); // Create a task for each outgoing flow
+        }).ToList();
+
+        await Task.WhenAll(tasks); // Wait for all tasks to start in parallel
     }
 }

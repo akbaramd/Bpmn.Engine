@@ -1,19 +1,19 @@
-﻿using Novin.Bpmn.Test.Executors.Abstracts;
-using Novin.Bpmn.Test.Models;
+﻿using Novin.Bpmn.Test.Models;
+using System.Threading.Tasks;
+using Novin.Bpmn.Test.Executors.Abstracts;
 
-namespace Novin.Bpmn.Test.Executors
+namespace Novin.Bpmn.Test.Executors;
+
+public class UserTaskExecutor : IExecutor
 {
-    public class UserTaskExecutor : IUserTaskExecutor
+    public Task ExecuteAsync(BpmnFlowElement element, BpmnEngine engine)
     {
-        public async Task<List<string>?> ExecuteAsync(BpmnFlowElement element, BpmnEngine engine)
+        if (element is BpmnUserTask userTask)
         {
-            if (element is BpmnUserTask userTask)
-            {
-                engine.Instance.AddPendingUserTask(userTask);
-                return null; // Wait for user interaction
-            }
-
-            return null;
+            var userTaskNode = engine.ConvertElementToNode(userTask);
+            engine.State.WaitingUserTasks[userTaskNode.Id] = userTaskNode;
+            Console.WriteLine($"User task {userTask.id} is waiting for completion.");
         }
+        return Task.CompletedTask;
     }
 }

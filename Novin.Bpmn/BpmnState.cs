@@ -1,4 +1,6 @@
-﻿using System.Dynamic;
+﻿using System.Collections.Concurrent;
+using System.Dynamic;
+using System.Text.Json;
 using Novin.Bpmn.Test.Models;
 
 namespace Novin.Bpmn.Test;
@@ -12,13 +14,32 @@ public class ProcessState
     public Dictionary<string, Stack<string>> GatewayMergeState { get; set; } =
         new Dictionary<string, Stack<string>>();
 
-    public List<BpmnNode> ActiveNodes { get; set; } = new List<BpmnNode>();
+    public ConcurrentBag<BpmnNode> ActiveNodes { get; set; } = new ConcurrentBag<BpmnNode>();
     public bool IsPaused { get; set; } = false;
     public bool IsStopped { get; set; } = false;
 
-    public ProcessState(BpmnDefinitions definition)
+    public ConcurrentDictionary<string, BpmnNode> WaitingUserTasks { get; private set; }
+    public ProcessState(BpmnDefinitions definitions)
     {
-        Id = Guid.NewGuid().ToString();
-        Definition = definition;
+        Definition = definitions;
+        WaitingUserTasks = new ConcurrentDictionary<string, BpmnNode>();
+    }
+
+    // Method to serialize the state
+    public static ProcessState RestoreState(string savedState, BpmnDefinitions definitions)
+    {
+        // Restore existing state...
+
+        var state = JsonSerializer.Deserialize<ProcessState>(savedState);
+        state.WaitingUserTasks = new ConcurrentDictionary<string, BpmnNode>(state.WaitingUserTasks);
+        return state;
+        return state;
+    }
+
+    public string SaveState()
+    {
+        // Save existing state...
+
+        return JsonSerializer.Serialize(this);
     }
 }
