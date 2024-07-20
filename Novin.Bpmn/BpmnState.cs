@@ -7,21 +7,22 @@ using Novin.Bpmn.Test.Models;
 public class ProcessState
 {
     public string Id { get; set; }
+    public string ProcessId { get;  }
     public BpmnDefinitions Definition { get; set; }
     public dynamic Variables { get; set; } = new ExpandoObject();
-
+    public Queue<BpmnNode> NodeQueue { get; set; } = new();
     public Dictionary<string, BpmnNode> Nodes { get; set; } = new();
-    public ConcurrentBag<BpmnNode> ActiveNodes { get; set; } = new();
     public bool IsPaused { get; set; } = false;
     public bool IsStopped { get; set; } = false;
 
     public ConcurrentDictionary<string, BpmnNode> WaitingUserTasks { get; private set; }
 
-    public ProcessState(BpmnDefinitions definitions)
+    public ProcessState(BpmnDefinitions definitions , string processId)
     {
         Id = Guid.NewGuid().ToString();
         Definition = definitions;
         WaitingUserTasks = new ConcurrentDictionary<string, BpmnNode>();
+        ProcessId = processId;
     }
 
     // Method to serialize the state

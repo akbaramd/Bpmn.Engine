@@ -15,11 +15,15 @@ public class BpmnDefinitionsHandler
     {
         return Definitions.Items.OfType<BpmnProcess>().First();
     }
-
-    public BpmnStartEvent GetFirstStartEvent()
+    public BpmnProcess GetProcess(string id)
     {
-        return GetFirstProcess().Items.OfType<BpmnStartEvent>().First();
+        return Definitions.Items.OfType<BpmnProcess>().First(x=>x.id.Equals(id));
     }
+    public BpmnStartEvent GetStartEventForProcess(string processId)
+    {
+        return GetProcess(processId).Items.OfType<BpmnStartEvent>().First();
+    }
+
 
     public BpmnFlowElement GetElementById(string id)
     {

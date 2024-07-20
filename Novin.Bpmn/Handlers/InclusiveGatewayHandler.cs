@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using Novin.Bpmn.Test.Abstractions;
@@ -18,8 +17,7 @@ namespace Novin.Bpmn.Test.Handlers
             }
 
             var currentInstance = node.Instances.Peek();
-            var isExecutable = currentInstance.Merges.Any(x => x == currentInstance.Tokens.FirstOrDefault());
-            currentInstance.Merges.Clear();
+            var isExecutable = currentInstance.Merges.Any(x => x.Item2);
             var outgoingTasks = node.OutgoingFlows.Select(async flow =>
             {
                 var globals = new ScriptGlobals { State = engine.State };
@@ -28,11 +26,11 @@ namespace Novin.Bpmn.Test.Handlers
                     var expression = string.Join(" ", flow.conditionExpression.Text);
                     if (!await engine.ScriptHandler.EvaluateConditionAsync(expression, globals))
                     {
-                        await CreateAndStartNode(engine, node, flow, Guid.NewGuid().ToString(), false);
+                        CreateAndEnqueueNode(engine, node, flow, Guid.NewGuid().ToString(), false);
                         return;
                     }
                 }
-                await CreateAndStartNode(engine, node, flow, Guid.NewGuid().ToString(), isExecutable);
+                CreateAndEnqueueNode(engine, node, flow, Guid.NewGuid().ToString(), isExecutable);
             });
             await Task.WhenAll(outgoingTasks);
 
@@ -43,22 +41,20 @@ namespace Novin.Bpmn.Test.Handlers
         {
             var currentInstance = node.Instances.Peek();
             if (!currentInstance.Merges.Any())
-                currentInstance.Merges = new Stack<string>();
+                currentInstance.Merges = new Stack<Tuple<string,bool>>();
 
-            currentInstance.Merges.Push(currentInstance.Tokens.FirstOrDefault());
+            currentInstance.Merges.Push(new Tuple<string, bool>(currentInstance.Tokens.FirstOrDefault(),currentInstance.IsExecutable));
             return currentInstance.Merges.Count == node.IncomingFlows.Count;
         }
 
-        private async Task CreateAndStartNode(BpmnEngine engine, BpmnNode node, BpmnSequenceFlow flow, string token, bool isExecutable)
+        private void CreateAndEnqueueNode(BpmnEngine engine, BpmnNode node, BpmnSequenceFlow flow, string token, bool isExecutable)
         {
             var element = engine.DefinitionsHandler.GetElementById(flow.targetRef);
             var newNode = engine.CreateNewNode(element, token, isExecutable, node.Instances.Peek().Tokens.First());
-            engine.State.ActiveNodes.Add(newNode);
+            engine.EnqueueNode(newNode);
 
             // Add outgoing transition
             node.Instances.Peek().AddTransition(node.Instances.Peek().Tokens.First(), token, DateTime.Now, false);
-
-            await engine.StartProcess(newNode);
         }
     }
 }

@@ -12,7 +12,8 @@ public class UserTaskExecutor : IExecutor
         if (element is BpmnUserTask userTask)
         {
             engine.State.WaitingUserTasks[node.Id] = node;
-            Console.WriteLine($"User task {userTask.id} is waiting for completion.");
+            node.Instances.Peek().CanBeContinue =
+                false; // Console.WriteLine($"User task {userTask.id} is waiting for completion.");
         }
 
         return Task.CompletedTask;

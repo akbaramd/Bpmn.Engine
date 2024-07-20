@@ -18,7 +18,7 @@ public class Program
         string bpmnFilePath = "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\simple_inclusive.bpmn";
 
         // Create an instance of the BPMN engine with the given file path and dependencies
-        var engine = new BpmnEngine(bpmnFilePath);
+        var engine = new BpmnEngine(bpmnFilePath , processId:"process");
 
         // Start the timer
         Stopwatch stopwatch = Stopwatch.StartNew();
@@ -26,18 +26,24 @@ public class Program
         // Execute the process asynchronously
         await engine.StartProcess();
 
+      
+
         // Complete user tasks if any
         while (engine.State.WaitingUserTasks.Any())
         {
             foreach (var userTask in engine.State.WaitingUserTasks)
             {
                 await engine.CompleteUserTask(userTask.Value.Id);
+                await engine.StartProcess();
             }
         }
 
         // Stop the timer
         stopwatch.Stop();
 
+        return;
+        Console.WriteLine(new string('=', 50)); // Line divider
+        
         // Print BPMN node history schematic
         PrintBpmnNodeHistory(engine.State);
 
@@ -67,7 +73,7 @@ public class Program
     {
         foreach (var instance in node.Instances)
         {
-            Console.WriteLine($"  Instance Timestamp: {instance.Timestamp}, IsExecutable: {instance.IsExecutable}, IsExpired: {instance.IsExpired}");
+            Console.WriteLine($"  Instance Timestamp: {instance.Timestamp}, IsExpired: {instance.IsExpired}");
             if (instance.Tokens.Any())
             {
                 Console.WriteLine("    Tokens: " + string.Join(", ", instance.Tokens));
@@ -108,16 +114,16 @@ public class Program
     private static void GenerateExecutionReport(ProcessState state, TimeSpan elapsedTime)
     {
         int totalNodes = state.Nodes.Count;
-        int executedNodes = state.Nodes.Values.SelectMany(x => x.Instances).Count();
+        int totalInstances = state.Nodes.Values.SelectMany(x => x.Instances).Count();
+        int expiredNodes = state.Nodes.Values.SelectMany(x => x.Instances).Where(x=>x.IsExpired).Count();
 
         Console.WriteLine(new string('=', 50));
         Console.WriteLine("Execution Report:");
         Console.WriteLine(new string('=', 50));
 
         Console.WriteLine($"Total Nodes: {totalNodes}");
-        Console.WriteLine($"Executed Nodes: {executedNodes}");
-        Console.WriteLine("Gateways by Type:");
-        // You can add more detailed reporting here if needed
+        Console.WriteLine($"Total Instance: {totalInstances}");
+        Console.WriteLine($"Expired Instance: {expiredNodes}");
         Console.WriteLine($"Total Time Elapsed: {elapsedTime}");
     }
 }

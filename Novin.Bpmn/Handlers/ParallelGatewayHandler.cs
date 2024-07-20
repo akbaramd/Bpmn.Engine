@@ -2,6 +2,7 @@
 using System.Threading.Tasks;
 using Novin.Bpmn.Test.Abstractions;
 using Novin.Bpmn.Test.Core;
+using Novin.Bpmn.Test.Models;
 
 namespace Novin.Bpmn.Test.Handlers
 {
@@ -17,17 +18,7 @@ namespace Novin.Bpmn.Test.Handlers
             var currentInstance = node.Instances.Peek();
             currentInstance.Merges.Clear();
 
-            var outgoingTasks = node.OutgoingFlows.Select(flow =>
-            {
-                var newNode = engine.CreateNewNode(engine.DefinitionsHandler.GetElementById(flow.targetRef),
-                    currentInstance.Tokens.First(), currentInstance.IsExecutable, currentInstance.Tokens.First());
-
-                // Add outgoing transition
-                currentInstance.AddTransition(currentInstance.Tokens.First(), newNode.Instances.Peek().Tokens.First(), DateTime.Now, false);
-
-                engine.State.ActiveNodes.Add(newNode);
-                return engine.StartProcess(newNode);
-            });
+            var outgoingTasks = node.OutgoingFlows.Select(flow => CreateAndEnqueueNode(engine, node, flow, currentInstance.Tokens.First(), currentInstance.IsExecutable));
             await Task.WhenAll(outgoingTasks);
 
             currentInstance.IsExpired = true;
@@ -36,9 +27,21 @@ namespace Novin.Bpmn.Test.Handlers
         public bool CheckForParallelMerge(BpmnNode node)
         {
             var currentInstance = node.Instances.Peek();
-            currentInstance.Merges.Push(currentInstance.Tokens.FirstOrDefault());
+            currentInstance.Merges.Push(new Tuple<string, bool>(currentInstance.Tokens.FirstOrDefault(),currentInstance.IsExecutable));
 
             return currentInstance.Merges.Count == node.IncomingFlows.Count;
+        }
+
+        private Task CreateAndEnqueueNode(BpmnEngine engine, BpmnNode node, BpmnSequenceFlow flow, string token, bool isExecutable)
+        {
+            var newNode = engine.CreateNewNode(engine.DefinitionsHandler.GetElementById(flow.targetRef), token, isExecutable, node.Instances.Peek().Tokens.First());
+
+            // Add outgoing transition
+            node.Instances.Peek().AddTransition(node.Instances.Peek().Tokens.First(), newNode.Instances.Peek().Tokens.First(), DateTime.Now, false);
+
+            engine.EnqueueNode(newNode);
+
+            return Task.CompletedTask;
         }
     }
 }

@@ -14,15 +14,17 @@ public class BpmnNode
     public class BpmnNodeInstance
     {
         public HashSet<string> Tokens { get; set; } = new HashSet<string>();
-        public bool IsExecutable { get; set; } = true;
         public bool IsExpired { get; set; } = false;
         public DateTime Timestamp { get; set; }
+        public bool IsExecutable => Forks.Any(x => x.Item2);
+        public bool CanBeContinue { get; set; } = true;
         public string? Details { get; set; } // Additional execution details if needed
 
         // History and tracking properties
         public List<InstanceTransition> IncomingTransitions { get; set; } = new List<InstanceTransition>();
         public List<InstanceTransition> OutgoingTransitions { get; set; } = new List<InstanceTransition>();
-        public Stack<string> Merges { get; set; } = new Stack<string>(); // Merges state
+        public Stack<Tuple<string,bool>> Merges { get; set; } = new Stack<Tuple<string,bool>>(); // Merges state
+        public Stack<Tuple<string,bool>> Forks { get; set; } = new Stack<Tuple<string,bool>>(); // Merges state
 
         // Method to add a transition
         public void AddTransition(string sourceToken, string targetToken, DateTime transitionTime, bool isIncoming)

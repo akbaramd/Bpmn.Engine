@@ -25,14 +25,12 @@ namespace Novin.Bpmn.Test.Handlers
                     var expression = string.Join(" ", flow.conditionExpression.Text);
                     if (await engine.ScriptHandler.EvaluateConditionAsync(expression, globals))
                     {
-                        var newNode = engine.CreateNewNode(engine.DefinitionsHandler.GetElementById(flow.targetRef),
-                            currentInstance.Tokens.First(), currentInstance.IsExecutable, currentInstance.Tokens.First());
+                        var newNode = engine.CreateNewNode(engine.DefinitionsHandler.GetElementById(flow.targetRef), currentInstance.Tokens.First(), currentInstance.IsExecutable, currentInstance.Tokens.First());
 
                         // Add outgoing transition
                         currentInstance.AddTransition(currentInstance.Tokens.First(), newNode.Instances.Peek().Tokens.First(), DateTime.Now, false);
 
-                        engine.State.ActiveNodes.Add(newNode);
-                        await engine.StartProcess(newNode);
+                        engine.EnqueueNode(newNode);
                         break;
                     }
                 }
@@ -47,7 +45,7 @@ namespace Novin.Bpmn.Test.Handlers
             if (currentInstance.Merges.Count > 0)
                 return true;
 
-            currentInstance.Merges.Push(currentInstance.Tokens.FirstOrDefault());
+            currentInstance.Merges.Push(new Tuple<string, bool>(currentInstance.Tokens.FirstOrDefault(),currentInstance.IsExecutable));
             return false;
         }
     }
