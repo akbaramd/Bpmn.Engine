@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Novin.Bpmn.Web</title>
+    <base href="/" />
+    <link rel="stylesheet" href="css/bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link href="Novin.Bpmn.Web.styles.css" rel="stylesheet" />
+
+    <!-- required modeler styles -->
+    <link rel="stylesheet" href="_content/Novin.Bpmn/bpmn-js/assets/bpmn-js.css">
+    <link rel="stylesheet" href="_content/Novin.Bpmn/bpmn-js/assets/diagram-js.css">
+    <link rel="stylesheet" href="_content/Novin.Bpmn/bpmn-js/assets/bpmn-font/css/bpmn.css">
+    <link rel="stylesheet" href="_content/Novin.Bpmn/properties-panel/assets/properties-panel.css">
+</head>
+
+<body>
+<div id="app">
+    <svg class="loading-progress">
+        <circle r="40%" cx="50%" cy="50%" />
+        <circle r="40%" cx="50%" cy="50%" />
+    </svg>
+    <div class="loading-progress-text"></div>
+</div>
+
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+<script src="_framework/blazor.webassembly.js"></script>
+
+<!-- modeler distro -->
+
+
+<!-- modeler distro -->
+<script type="module">
+    import BpmnJS from './bpmn-js/bpmn-modeler.development.js';
+    import { BpmnPropertiesPanelModule } from './properties-panel/index.js';
+
+    window.bpmnInterop = {
+        initializeBpmn: async function (diagram) {
+            var diagramUrl = '/' + diagram + ".bpmn";
+
+            var bpmnModeler = new BpmnJS({
+                container: '#canvas',
+                propertiesPanel: {
+                    parent: '#js-properties-panel'
+                },
+                additionalModules: [
+                    BpmnPropertiesPanelModule
+                ],
+                keyboard: {
+                    bindTo: window
+                }
+            });
+
+            async function exportDiagram() {
+                try {
+                    var result = await bpmnModeler.saveXML({ format: true });
+                    console.log('Diagram exported. Check the developer tools!');
+                    console.log('DIAGRAM', result.xml);
+                } catch (err) {
+                    console.error('Could not save BPMN 2.0 diagram', err);
+                }
+            }
+
+            async function openDiagram(bpmnXML) {
+                try {
+                    await bpmnModeler.importXML(bpmnXML);
+
+                    var canvas = bpmnModeler.get('canvas');
+                    var overlays = bpmnModeler.get('overlays');
+
+                    canvas.zoom('fit-viewport');
+                    console.log(overlays);
+
+                    overlays.add('StartEvent_1', 'note', {
+                        position: {
+                            bottom: 0,
+                            right: 0
+                        },
+                        html: '<div class="diagram-note">Mixed up the labels?</div>'
+                    });
+
+                    canvas.addMarker('StartEvent_1', 'needs-discussion');
+
+                } catch (err) {
+                    console.error('Could not import BPMN 2.0 diagram', err);
+                }
+            }
+
+            $.get(diagramUrl, openDiagram, 'text');
+            $('#save-button').click(exportDiagram);
+        }
+    };
+</script>
+
+<!-- needed for this example only -->
+<script src="https://unpkg.com/jquery@3.3.1/dist/jquery.js"></script>
+</body>
+
+</html>
