@@ -28,11 +28,11 @@ namespace Novin.Bpmn.Test.Handlers
                     var expression = string.Join(" ", flow.conditionExpression.Text);
                     if (!await engine.ScriptHandler.EvaluateConditionAsync(expression, globals))
                     {
-                        await CreateAndStartNode(engine, flow, Guid.NewGuid().ToString(), false);
+                        await CreateAndStartNode(engine, node, flow, Guid.NewGuid().ToString(), false);
                         return;
                     }
                 }
-                await CreateAndStartNode(engine, flow, Guid.NewGuid().ToString(), isExecutable);
+                await CreateAndStartNode(engine, node, flow, Guid.NewGuid().ToString(), isExecutable);
             });
             await Task.WhenAll(outgoingTasks);
 
@@ -49,11 +49,15 @@ namespace Novin.Bpmn.Test.Handlers
             return currentInstance.Merges.Count == node.IncomingFlows.Count;
         }
 
-        private async Task CreateAndStartNode(BpmnEngine engine, BpmnSequenceFlow flow, string token, bool isExecutable)
+        private async Task CreateAndStartNode(BpmnEngine engine, BpmnNode node, BpmnSequenceFlow flow, string token, bool isExecutable)
         {
             var element = engine.DefinitionsHandler.GetElementById(flow.targetRef);
-            var newNode = engine.CreateNewNode(element, token, isExecutable);
+            var newNode = engine.CreateNewNode(element, token, isExecutable, node.Instances.Peek().Tokens.First());
             engine.State.ActiveNodes.Add(newNode);
+
+            // Add outgoing transition
+            node.Instances.Peek().AddTransition(node.Instances.Peek().Tokens.First(), token, DateTime.Now, false);
+
             await engine.StartProcess(newNode);
         }
     }

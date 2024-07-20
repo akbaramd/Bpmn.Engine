@@ -1,5 +1,4 @@
-﻿// ParallelGatewayHandler.cs
-using System.Linq;
+﻿using System.Linq;
 using System.Threading.Tasks;
 using Novin.Bpmn.Test.Abstractions;
 using Novin.Bpmn.Test.Core;
@@ -21,7 +20,11 @@ namespace Novin.Bpmn.Test.Handlers
             var outgoingTasks = node.OutgoingFlows.Select(flow =>
             {
                 var newNode = engine.CreateNewNode(engine.DefinitionsHandler.GetElementById(flow.targetRef),
-                    currentInstance.Tokens.First(), currentInstance.IsExecutable);
+                    currentInstance.Tokens.First(), currentInstance.IsExecutable, currentInstance.Tokens.First());
+
+                // Add outgoing transition
+                currentInstance.AddTransition(currentInstance.Tokens.First(), newNode.Instances.Peek().Tokens.First(), DateTime.Now, false);
+
                 engine.State.ActiveNodes.Add(newNode);
                 return engine.StartProcess(newNode);
             });
@@ -29,14 +32,13 @@ namespace Novin.Bpmn.Test.Handlers
 
             currentInstance.IsExpired = true;
         }
-          public bool CheckForParallelMerge(BpmnNode node)
+
+        public bool CheckForParallelMerge(BpmnNode node)
         {
             var currentInstance = node.Instances.Peek();
             currentInstance.Merges.Push(currentInstance.Tokens.FirstOrDefault());
 
             return currentInstance.Merges.Count == node.IncomingFlows.Count;
         }
-
     }
-    
 }

@@ -56,11 +56,6 @@
       <bpmn:outgoing>Flow_0ti3klk</bpmn:outgoing>
       <bpmn:outgoing>Flow_172qrga</bpmn:outgoing>
     </bpmn:inclusiveGateway>
-    <bpmn:scriptTask id="Activity_2_1_2">
-      <bpmn:incoming>Flow_0ti3klk</bpmn:incoming>
-      <bpmn:outgoing>Flow_0t0gyus</bpmn:outgoing>
-      <bpmn:script>Console.WriteLine("Excute Activity_2_1_2");</bpmn:script>
-    </bpmn:scriptTask>
     <bpmn:sequenceFlow id="Flow_0t0gyus" sourceRef="Activity_2_1_2" targetRef="Activity_2_1_22" />
     <bpmn:sequenceFlow id="Flow_0ti3klk" sourceRef="Gateway_0vhctad" targetRef="Activity_2_1_2" />
     <bpmn:sequenceFlow id="Flow_172qrga" sourceRef="Gateway_0vhctad" targetRef="Activity_2_1_1" />
@@ -123,6 +118,10 @@ if(State.Variables.Index == 1){
       <bpmn:incoming>Flow_0lqeugx</bpmn:incoming>
       <bpmn:outgoing>Flow_174fdho</bpmn:outgoing>
     </bpmn:userTask>
+    <bpmn:userTask id="Activity_2_1_2">
+      <bpmn:incoming>Flow_0ti3klk</bpmn:incoming>
+      <bpmn:outgoing>Flow_0t0gyus</bpmn:outgoing>
+    </bpmn:userTask>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="process">
@@ -150,14 +149,14 @@ if(State.Variables.Index == 1){
       <bpmndi:BPMNShape id="BPMNShape_1p2mkub" bpmnElement="Gateway_0vhctad">
         <dc:Bounds x="815" y="205" width="50" height="50" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_00yoyw2" bpmnElement="Activity_2_1_2">
-        <dc:Bounds x="930" y="190" width="100" height="80" />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_11r4x65_di" bpmnElement="Gateway_11r4x65" isMarkerVisible="true">
         <dc:Bounds x="1575" y="325" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_1acr3ju" bpmnElement="Activity_1sqf3ny">
         <dc:Bounds x="430" y="310" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_0n2x3q7" bpmnElement="Gateway_0cdih2j">
+        <dc:Bounds x="1185" y="205" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_0nnbcn6" bpmnElement="Activity_107kvme">
         <dc:Bounds x="1390" y="200" width="100" height="80" />
@@ -168,14 +167,14 @@ if(State.Variables.Index == 1){
       <bpmndi:BPMNShape id="Activity_0dporbg_di" bpmnElement="Activity_2_1_1">
         <dc:Bounds x="930" y="80" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_0n2x3q7" bpmnElement="Gateway_0cdih2j">
-        <dc:Bounds x="1185" y="205" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BPMNShape_1sb2vox" bpmnElement="Activity_2_1_22">
-        <dc:Bounds x="1050" y="190" width="100" height="80" />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1cqn4bq_di" bpmnElement="Activity_3">
         <dc:Bounds x="1400" y="310" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0yqg6pi_di" bpmnElement="Activity_2_1_2">
+        <dc:Bounds x="930" y="190" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_1sb2vox" bpmnElement="Activity_2_1_22">
+        <dc:Bounds x="1060" y="190" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_0ce4b6b_di" bpmnElement="Flow_0ce4b6b">
         <di:waypoint x="215" y="350" />
@@ -222,7 +221,7 @@ if(State.Variables.Index == 1){
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0t0gyus_di" bpmnElement="Flow_0t0gyus">
         <di:waypoint x="1030" y="230" />
-        <di:waypoint x="1050" y="230" />
+        <di:waypoint x="1060" y="230" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_0ti3klk_di" bpmnElement="Flow_0ti3klk">
         <di:waypoint x="865" y="230" />
@@ -269,7 +268,7 @@ if(State.Variables.Index == 1){
         <di:waypoint x="1600" y="325" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_1hdcm9f_di" bpmnElement="Flow_1hdcm9f">
-        <di:waypoint x="1150" y="230" />
+        <di:waypoint x="1160" y="230" />
         <di:waypoint x="1185" y="230" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>

@@ -15,7 +15,7 @@ public class Program
     public static async Task Main(string[] args)
     {
         // Define the BPMN file path
-        string bpmnFilePath = "D:\\Projects\\Company\\AkbarAhmadiSaray\\Bomn\\Bpmn.Engine\\Novin.Bpmn.Test\\Bpmn\\simple_inclusive.bpmn";
+        string bpmnFilePath = "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\simple_inclusive.bpmn";
 
         // Create an instance of the BPMN engine with the given file path and dependencies
         var engine = new BpmnEngine(bpmnFilePath);
@@ -45,8 +45,7 @@ public class Program
         GenerateExecutionReport(engine.State, stopwatch.Elapsed);
 
         // Convert the state to JSON after execution
-        var stateJson = JsonSerializer.Serialize(engine.State, new JsonSerializerOptions { WriteIndented = true });
-        Console.WriteLine(stateJson);
+        // Console.WriteLine(engine.ExportStateAsJson());
     }
 
     private static void PrintBpmnNodeHistory(ProcessState state)
@@ -77,6 +76,20 @@ public class Program
             {
                 Console.WriteLine("    Merges: " + string.Join(", ", instance.Merges));
             }
+            PrintTransitions("    Incoming Transitions", instance.IncomingTransitions);
+            PrintTransitions("    Outgoing Transitions", instance.OutgoingTransitions);
+        }
+    }
+
+    private static void PrintTransitions(string title, List<InstanceTransition> transitions)
+    {
+        if (transitions.Any())
+        {
+            Console.WriteLine(title + ":");
+            foreach (var transition in transitions)
+            {
+                Console.WriteLine($"      {transition.SourceToken ?? "N/A"} -> {transition.TargetToken} at {transition.TransitionTime}");
+            }
         }
     }
 
@@ -87,7 +100,7 @@ public class Program
             Console.WriteLine("  Outgoing Flows:");
             foreach (var flow in node.OutgoingFlows)
             {
-                Console.WriteLine($"    -> Flow to Node ID: {flow}");
+                Console.WriteLine($"    -> Flow to Node ID: {flow.targetRef}");
             }
         }
     }
@@ -95,7 +108,7 @@ public class Program
     private static void GenerateExecutionReport(ProcessState state, TimeSpan elapsedTime)
     {
         int totalNodes = state.Nodes.Count;
-        int executedNodes = state.Nodes.Values.SelectMany(x=>x.Instances).Count();
+        int executedNodes = state.Nodes.Values.SelectMany(x => x.Instances).Count();
 
         Console.WriteLine(new string('=', 50));
         Console.WriteLine("Execution Report:");
@@ -104,6 +117,7 @@ public class Program
         Console.WriteLine($"Total Nodes: {totalNodes}");
         Console.WriteLine($"Executed Nodes: {executedNodes}");
         Console.WriteLine("Gateways by Type:");
+        // You can add more detailed reporting here if needed
         Console.WriteLine($"Total Time Elapsed: {elapsedTime}");
     }
 }

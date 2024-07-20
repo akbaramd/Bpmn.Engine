@@ -15,13 +15,7 @@ namespace Novin.Bpmn.Test
 {
     public class BpmnEngine
     {
-        public BpmnDefinitionsHandler DefinitionsHandler { get; }
-        public ProcessState State { get; }
-        public IExecutor ScriptExecutor { get; }
-        public IExecutor UserTaskExecutor { get; }
-        public ScriptHandler ScriptHandler { get; }
-
-        private readonly object _pauseLock = new object();
+        private readonly object _pauseLock = new();
 
         public BpmnEngine(string path, string? savedState = null)
         {
@@ -32,12 +26,18 @@ namespace Novin.Bpmn.Test
             var definition = bpmnFileHandler.Deserialize(path);
             DefinitionsHandler = new BpmnDefinitionsHandler(definition);
 
-            State = savedState != null 
-                ? ProcessState.RestoreState(savedState, definition) 
+            State = savedState != null
+                ? ProcessState.RestoreState(savedState, definition)
                 : new ProcessState(definition);
         }
 
-        public BpmnNode CreateNewNode(BpmnFlowElement element, string token, bool isExecutable)
+        public BpmnDefinitionsHandler DefinitionsHandler { get; }
+        public ProcessState State { get; }
+        public IExecutor ScriptExecutor { get; }
+        public IExecutor UserTaskExecutor { get; }
+        public ScriptHandler ScriptHandler { get; }
+
+        public BpmnNode CreateNewNode(BpmnFlowElement element, string token, bool isExecutable, string sourceToken = null)
         {
             lock (State.Nodes)
             {
@@ -55,10 +55,7 @@ namespace Novin.Bpmn.Test
                 lock (node.Instances)
                 {
                     var currentInstance = node.Instances.FirstOrDefault(instance => !instance.IsExpired);
-                    if (currentInstance != null && currentInstance.Tokens.Contains(token))
-                    {
-                        return node;
-                    }
+                    if (currentInstance != null && currentInstance.Tokens.Contains(token)) return node;
 
                     if (currentInstance == null || currentInstance.IsExpired)
                     {
@@ -68,11 +65,13 @@ namespace Novin.Bpmn.Test
                             IsExecutable = isExecutable
                         };
                         newInstance.Tokens.Add(token);
+                        newInstance.AddTransition(sourceToken, token, DateTime.Now, true); // Incoming transition
                         node.Instances.Push(newInstance);
                     }
                     else
                     {
                         currentInstance.Tokens.Add(token);
+                        currentInstance.AddTransition(sourceToken, token, DateTime.Now, true); // Incoming transition
                     }
                 }
 
@@ -92,16 +91,10 @@ namespace Novin.Bpmn.Test
             BpmnNode? nodeToProcess = null;
             lock (State.ActiveNodes)
             {
-                if (State.ActiveNodes.Any())
-                {
-                    nodeToProcess = State.ActiveNodes.First();
-                }
+                if (State.ActiveNodes.Any()) nodeToProcess = State.ActiveNodes.First();
             }
 
-            if (nodeToProcess != null)
-            {
-                await StartProcess(nodeToProcess, immediately);
-            }
+            if (nodeToProcess != null) await StartProcess(nodeToProcess, immediately);
         }
 
         public async Task StartProcess(BpmnNode node, bool immediately = true)
@@ -116,10 +109,7 @@ namespace Novin.Bpmn.Test
                 var currentInstance = node.Instances.Peek();
                 currentInstance.Details = $"Executed at {DateTime.Now}";
 
-                if (currentInstance.IsExecutable)
-                {
-                    await ExecuteTask(node);
-                }
+                if (currentInstance.IsExecutable) await ExecuteTask(node);
 
                 lock (State.ActiveNodes)
                 {
@@ -135,10 +125,7 @@ namespace Novin.Bpmn.Test
                     var nextNodes = FindNextNodesSync(node);
                     lock (State.ActiveNodes)
                     {
-                        foreach (var nextNode in nextNodes)
-                        {
-                            State.ActiveNodes.Add(nextNode);
-                        }
+                        foreach (var nextNode in nextNodes) State.ActiveNodes.Add(nextNode);
                     }
                 }
             }
@@ -175,18 +162,20 @@ namespace Novin.Bpmn.Test
                     _ => null
                 };
 
-                if (handler != null)
-                {
-                    await handler.HandleGateway(node, this);
-                }
+                if (handler != null) await handler.HandleGateway(node, this);
             }
             else
             {
                 var tasks = node.OutgoingFlows.Select(flow =>
                 {
+                    var targetToken = Guid.NewGuid().ToString();
                     var newNode = CreateNewNode(DefinitionsHandler.GetElementById(flow.targetRef),
-                        node.Instances.Peek().Tokens.FirstOrDefault() ?? Guid.NewGuid().ToString(), true);
+                        targetToken, true, node.Instances.Peek().Tokens.First());
                     State.ActiveNodes.Add(newNode);
+
+                    // Add outgoing transition
+                    node.Instances.Peek().AddTransition(node.Instances.Peek().Tokens.First(), targetToken, DateTime.Now, false);
+
                     node.Instances.Peek().IsExpired = true;
                     return StartProcess(newNode);
                 }).ToList();
@@ -216,9 +205,13 @@ namespace Novin.Bpmn.Test
             {
                 foreach (var flow in node.OutgoingFlows)
                 {
+                    var targetToken = Guid.NewGuid().ToString();
                     var newNode = CreateNewNode(DefinitionsHandler.GetElementById(flow.targetRef),
-                        node.Instances.Peek().Tokens.FirstOrDefault() ?? Guid.NewGuid().ToString(), true);
+                        targetToken, true);
                     nextNodes.Add(newNode);
+
+                    // Add outgoing transition
+                    node.Instances.Peek().AddTransition(node.Instances.Peek().Tokens.First(), targetToken, DateTime.Now, false);
                 }
             }
 
@@ -253,15 +246,12 @@ namespace Novin.Bpmn.Test
             {
                 lock (_pauseLock)
                 {
-                    while (State.IsPaused)
-                    {
-                        Monitor.Wait(_pauseLock);
-                    }
+                    while (State.IsPaused) Monitor.Wait(_pauseLock);
                 }
             });
         }
 
-        public string SaveState()
+        public string ExportStateAsJson()
         {
             return State.SaveState();
         }
@@ -279,9 +269,14 @@ namespace Novin.Bpmn.Test
         {
             var tasks = node.OutgoingFlows.Select(flow =>
             {
+                var targetToken = Guid.NewGuid().ToString();
                 var newNode = CreateNewNode(DefinitionsHandler.GetElementById(flow.targetRef),
-                    node.Instances.Peek().Tokens.FirstOrDefault() ?? Guid.NewGuid().ToString(), true);
+                    targetToken, true);
                 State.ActiveNodes.Add(newNode);
+
+                // Add outgoing transition
+                node.Instances.Peek().AddTransition(node.Instances.Peek().Tokens.First(), targetToken, DateTime.Now, false);
+
                 return StartProcess(newNode);
             }).ToList();
 
