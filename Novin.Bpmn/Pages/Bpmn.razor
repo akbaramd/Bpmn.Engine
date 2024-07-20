@@ -1,0 +1,32 @@
+﻿@page "/bpmn/{diagram}"
+@using Microsoft.JSInterop
+@layout EmptyLayout
+@inject IJSRuntime JS
+
+<div class="row">
+    <div class="col-md-9">
+        <div style="height: 100vh;width: 100%" id="canvas"></div>
+    </div>
+    <div class="col-md-3">
+        <div id="js-properties-panel"></div>
+        <button @onclick="SaveDiagram">Print to Console</button>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string Diagram { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("bpmnInterop.initializeBpmn", Diagram);
+        }
+    }
+
+    private async Task SaveDiagram()
+    {
+        await JS.InvokeVoidAsync("saveDiagram");
+    }
+}

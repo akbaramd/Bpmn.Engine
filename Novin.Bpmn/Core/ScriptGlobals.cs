@@ -1,6 +1,6 @@
-﻿namespace Novin.Bpmn.Test.Core;
+﻿namespace Novin.Bpmn.Core;
 
 public class ScriptGlobals
 {
-    public ProcessState State { get; set; }
+    public BpmnState State { get; set; }
 }

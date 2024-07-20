@@ -1,10 +1,11 @@
 ﻿using System.Collections.Concurrent;
 using System.Dynamic;
 using System.Text.Json;
-using Novin.Bpmn.Test;
-using Novin.Bpmn.Test.Models;
+using Novin.Bpmn.Models;
 
-public class ProcessState
+namespace Novin.Bpmn;
+
+public class BpmnState
 {
     public string Id { get; set; }
     public string ProcessId { get;  }
@@ -17,7 +18,7 @@ public class ProcessState
 
     public ConcurrentDictionary<string, BpmnNode> WaitingUserTasks { get; private set; }
 
-    public ProcessState(BpmnDefinitions definitions , string processId)
+    public BpmnState(BpmnDefinitions definitions , string processId)
     {
         Id = Guid.NewGuid().ToString();
         Definition = definitions;
@@ -26,9 +27,9 @@ public class ProcessState
     }
 
     // Method to serialize the state
-    public static ProcessState RestoreState(string savedState, BpmnDefinitions definitions)
+    public static BpmnState RestoreState(string savedState, BpmnDefinitions definitions)
     {
-        var state = JsonSerializer.Deserialize<ProcessState>(savedState);
+        var state = JsonSerializer.Deserialize<BpmnState>(savedState);
         state.WaitingUserTasks = new ConcurrentDictionary<string, BpmnNode>(state.WaitingUserTasks);
         return state;
     }

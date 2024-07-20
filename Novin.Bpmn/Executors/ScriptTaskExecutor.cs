@@ -1,8 +1,8 @@
-﻿using Novin.Bpmn.Test.Core;
-using Novin.Bpmn.Test.Executors.Abstracts;
-using Novin.Bpmn.Test.Models;
+﻿using Novin.Bpmn.Core;
+using Novin.Bpmn.Executors.Abstracts;
+using Novin.Bpmn.Models;
 
-namespace Novin.Bpmn.Test.Executors
+namespace Novin.Bpmn.Executors
 {
     public class ScriptTaskExecutor : ITaskExecutor
     {

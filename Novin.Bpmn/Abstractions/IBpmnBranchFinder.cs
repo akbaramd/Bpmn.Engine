@@ -1,6 +1,6 @@
-﻿using Novin.Bpmn.Test.Branch;
+﻿using Novin.Bpmn.Branch;
 
-namespace Novin.Bpmn.Test.Abstractions;
+namespace Novin.Bpmn.Abstractions;
 
 public interface IBpmnBranchFinder
 {

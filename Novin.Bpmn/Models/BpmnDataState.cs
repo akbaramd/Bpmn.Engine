@@ -1,5 +1,5 @@
 ﻿#nullable disable
-namespace Novin.Bpmn.Test.Models;
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
 [System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]

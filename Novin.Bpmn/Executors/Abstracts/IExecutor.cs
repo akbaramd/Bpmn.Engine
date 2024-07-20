@@ -1,6 +1,4 @@
-﻿using Novin.Bpmn.Test.Models;
-
-namespace Novin.Bpmn.Test.Executors.Abstracts
+﻿namespace Novin.Bpmn.Executors.Abstracts
 {
     public interface IExecutor
     {

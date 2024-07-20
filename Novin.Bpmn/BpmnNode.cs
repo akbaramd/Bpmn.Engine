@@ -1,6 +1,6 @@
-﻿using Novin.Bpmn.Test.Models;
+﻿using Novin.Bpmn.Models;
 
-namespace Novin.Bpmn.Test;
+namespace Novin.Bpmn;
 
 public class BpmnNode
 {

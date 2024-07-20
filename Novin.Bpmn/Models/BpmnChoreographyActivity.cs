@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Xml;
 using System.Xml.Serialization;
 
-namespace Novin.Bpmn.Test.Models;
+namespace Novin.Bpmn.Models;
 
 /// <remarks />
 [XmlInclude(typeof(BpmnSubChoreography))]

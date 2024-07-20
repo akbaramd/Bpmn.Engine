@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Novin.Bpmn.Test;
+using Novin.Bpmn.Test.Abstractions;
 using Novin.Bpmn.Test.Core;
 using Novin.Bpmn.Test.Executors;
 using Novin.Bpmn.Test.Executors.Abstracts;
@@ -54,7 +55,7 @@ public class Program
         // Console.WriteLine(engine.ExportStateAsJson());
     }
 
-    private static void PrintBpmnNodeHistory(ProcessState state)
+    private static void PrintBpmnNodeHistory(BpmnState state)
     {
         var visitedNodes = new HashSet<string>();
         foreach (var node in state.Nodes.Values)
@@ -111,7 +112,7 @@ public class Program
         }
     }
 
-    private static void GenerateExecutionReport(ProcessState state, TimeSpan elapsedTime)
+    private static void GenerateExecutionReport(BpmnState state, TimeSpan elapsedTime)
     {
         int totalNodes = state.Nodes.Count;
         int totalInstances = state.Nodes.Values.SelectMany(x => x.Instances).Count();
@@ -125,5 +126,17 @@ public class Program
         Console.WriteLine($"Total Instance: {totalInstances}");
         Console.WriteLine($"Expired Instance: {expiredNodes}");
         Console.WriteLine($"Total Time Elapsed: {elapsedTime}");
+    }
+}
+
+
+
+class TestServiceHandler : IServiceTaskHandler
+{
+    public Task HandleAsync(BpmnState state)
+    {
+        state.Variables.Index = 1;
+        Console.WriteLine(state);
+        return Task.CompletedTask;;
     }
 }

@@ -1,11 +1,8 @@
-﻿using System.Linq;
-using System.Threading.Tasks;
-using System.Collections.Generic;
-using Novin.Bpmn.Test.Abstractions;
-using Novin.Bpmn.Test.Core;
-using Novin.Bpmn.Test.Models;
+﻿using Novin.Bpmn.Abstractions;
+using Novin.Bpmn.Core;
+using Novin.Bpmn.Models;
 
-namespace Novin.Bpmn.Test.Handlers
+namespace Novin.Bpmn.Handlers
 {
     public class InclusiveGatewayHandler : IGatewayHandler
     {

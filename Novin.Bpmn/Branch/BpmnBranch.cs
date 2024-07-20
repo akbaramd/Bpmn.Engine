@@ -1,4 +1,4 @@
-﻿namespace Novin.Bpmn.Test.Branch;
+﻿namespace Novin.Bpmn.Branch;
 
 public class BpmnBranch
 {

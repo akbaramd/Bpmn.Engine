@@ -1,4 +1,4 @@
-﻿namespace Novin.Bpmn.Test.Models;
+﻿namespace Novin.Bpmn.Models;
 
 /// <remarks/>
 [System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnTextAnnotation))]

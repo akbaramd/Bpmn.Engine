@@ -3,7 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Xml.Serialization;
 
-namespace Novin.Bpmn.Test.Models;
+namespace Novin.Bpmn.Models;
 
 /// <remarks />
 [GeneratedCode("xsd", "4.8.3928.0")]

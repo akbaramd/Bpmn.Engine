@@ -1,14 +1,10 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using System.Reflection;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
-using Microsoft.CSharp.RuntimeBinder;
-using System;
-using System.Linq;
-using System.Reflection;
-using System.Threading.Tasks;
 using Binder = Microsoft.CSharp.RuntimeBinder.Binder;
 
-namespace Novin.Bpmn.Test.Core
+namespace Novin.Bpmn.Core
 {
     public class ScriptHandler
     {

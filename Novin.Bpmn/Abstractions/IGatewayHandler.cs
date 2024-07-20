@@ -1,4 +1,4 @@
-﻿namespace Novin.Bpmn.Test.Abstractions;
+﻿namespace Novin.Bpmn.Abstractions;
 
 public interface IGatewayHandler
 {

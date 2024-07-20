@@ -1,11 +1,11 @@
-﻿using Novin.Bpmn.Test.Abstractions;
-using Novin.Bpmn.Test.Core;
-using Novin.Bpmn.Test.Executors;
-using Novin.Bpmn.Test.Executors.Abstracts;
-using Novin.Bpmn.Test.Handlers;
-using Novin.Bpmn.Test.Models;
+﻿using Novin.Bpmn.Abstractions;
+using Novin.Bpmn.Core;
+using Novin.Bpmn.Executors;
+using Novin.Bpmn.Executors.Abstracts;
+using Novin.Bpmn.Handlers;
+using Novin.Bpmn.Models;
 
-namespace Novin.Bpmn.Test;
+namespace Novin.Bpmn;
 
 public class BpmnEngine
 {
@@ -17,21 +17,23 @@ public class BpmnEngine
         var bpmnFileHandler = new BpmnFileDeserializer();
         ScriptHandler = new ScriptHandler();
         ScriptExecutor = new ScriptTaskExecutor();
+        ServiceTaskExecutor = new ServiceTaskExecutor();
         UserTaskExecutor = new UserTaskExecutor();
         var definition = bpmnFileHandler.Deserialize(path);
 
         DefinitionsHandler = new BpmnDefinitionsHandler(definition);
 
 
-        State = new ProcessState(definition, processId ?? DefinitionsHandler.GetFirstProcess().id);
+        State = new BpmnState(definition, processId ?? DefinitionsHandler.GetFirstProcess().id);
     }
 
     // Constructor for continuing from a saved state
-    public BpmnEngine(string path, ProcessState state)
+    public BpmnEngine(string path, BpmnState state)
     {
         var bpmnFileHandler = new BpmnFileDeserializer();
         ScriptHandler = new ScriptHandler();
         ScriptExecutor = new ScriptTaskExecutor();
+        ServiceTaskExecutor = new ServiceTaskExecutor();
         UserTaskExecutor = new UserTaskExecutor();
         var definition = bpmnFileHandler.Deserialize(path);
         DefinitionsHandler = new BpmnDefinitionsHandler(definition);
@@ -40,9 +42,10 @@ public class BpmnEngine
 
 
     public BpmnDefinitionsHandler DefinitionsHandler { get; }
-    public ProcessState State { get; }
+    public BpmnState State { get; }
     public IExecutor ScriptExecutor { get; }
     public IExecutor UserTaskExecutor { get; }
+    public IExecutor ServiceTaskExecutor { get; }
     public ScriptHandler ScriptHandler { get; }
 
 
@@ -154,6 +157,9 @@ public class BpmnEngine
             {
                 case BpmnScriptTask _:
                     await ScriptExecutor.ExecuteAsync(node, this);
+                    break;
+                case BpmnServiceTask _:
+                    await ServiceTaskExecutor.ExecuteAsync(node, this);
                     break;
                 case BpmnUserTask _:
                     await UserTaskExecutor.ExecuteAsync(node, this);
