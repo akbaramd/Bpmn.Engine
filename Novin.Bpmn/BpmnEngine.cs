@@ -271,11 +271,12 @@ public class BpmnEngine
 
                     foreach (var transition in instance.OutgoingTransitions)
                     {
-                        currentPath.Add(transition.FlowSequenceId);
+                      
 
-                        var targetNode = State.Nodes.Values.FirstOrDefault(n => n.Instances.Any(inst => inst.Tokens.Contains(transition.TargetToken)));
+                        var targetNode = State.Nodes.Values.FirstOrDefault(n => n.Instances.Any(inst => inst.Tokens.Contains(transition.TargetToken)&& inst.IsExecutable));
                         if (targetNode != null)
                         {
+                            currentPath.Add(transition.FlowSequenceId);
                             currentPath.Add(targetNode.Id);
                         }
                     }
@@ -291,8 +292,3 @@ public class BpmnEngine
 
 }
 
-public class BpmnPath
-{
-    public List<BpmnNode> Nodes { get; set; } = new List<BpmnNode>();
-    public List<BpmnTransition> Transitions { get; set; } = new List<BpmnTransition>();
-}

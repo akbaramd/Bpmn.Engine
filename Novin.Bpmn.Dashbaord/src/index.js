@@ -64,7 +64,21 @@ export function initializeViewer(diagramUrl,executedPathIds) {
                         const gfx = elementRegistry.getGraphics(id);
                         const paths = gfx.querySelectorAll('path');
                         paths.forEach((path) => {
-                            path.style.stroke = 'green';
+                            path.style.stroke = 'blue';
+                        });
+
+                        const rects = gfx.querySelectorAll('rect');
+                        rects.forEach((path) => {
+                            path.style.stroke = 'blue';
+                        });
+                        const polygon = gfx.querySelectorAll('polygon');
+                        polygon.forEach((path) => {
+                            path.style.stroke = 'blue';
+                        });
+
+                        const circle = gfx.querySelectorAll('circle');
+                        circle.forEach((path) => {
+                            path.style.stroke = 'blue';
                         });
                     } else {
                         console.warn(`Element not found: ${id}`);
