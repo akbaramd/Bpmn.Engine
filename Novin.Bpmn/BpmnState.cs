@@ -12,7 +12,8 @@ public class BpmnState
     public BpmnDefinitions Definition { get; set; }
     public dynamic Variables { get; set; } = new ExpandoObject();
     public Queue<BpmnNode> NodeQueue { get; set; } = new();
-    public Dictionary<string, BpmnNode> Nodes { get; set; } = new();
+    public Stack<BpmnNode> NodeStack { get; set; } = new();
+    public Stack<string> Exceptions { get; set; } = new();
     public bool IsPaused { get; set; } = false;
     public bool IsStopped { get; set; } = false;
 

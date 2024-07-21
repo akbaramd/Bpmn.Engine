@@ -12,10 +12,10 @@ namespace Novin.Bpmn.Handlers
                 return;
             }
 
-            var currentInstance = node.Instances.Peek();
-            currentInstance.Merges.Clear();
+    
+            node.Merges.Clear();
 
-            foreach (var flow in node.OutgoingFlows)
+            foreach (var flow in node.OutgoingTargets)
             {
                 var globals = new ScriptGlobals { State = engine.State };
                 if (flow.conditionExpression != null)
@@ -23,27 +23,27 @@ namespace Novin.Bpmn.Handlers
                     var expression = string.Join(" ", flow.conditionExpression.Text);
                     if (await engine.ScriptHandler.EvaluateConditionAsync(expression, globals))
                     {
-                        var newNode = engine.CreateNewNode(engine.DefinitionsHandler.GetElementById(flow.targetRef), currentInstance.Tokens.First(), currentInstance.IsExecutable, currentInstance.Tokens.First());
+                        var newElement = engine.DefinitionsHandler.GetElementById(flow.targetRef);
+                        var newNode = engine.CreateNewNode(newElement, node.Tokens.First(), node.IsExecutable, node.Tokens.First());
 
                         // Add outgoing transition
-                        currentInstance.AddTransition(currentInstance.Tokens.First(), newNode.Instances.Peek().Tokens.First(), DateTime.Now, false,flow.id);
-
+                        node.AddTransition(node.Tokens.First(), newNode.Tokens.First(), DateTime.Now, false);
                         engine.EnqueueNode(newNode);
                         break;
                     }
                 }
             }
 
-            currentInstance.IsExpired = true;
+            node.IsExpired = true;
         }
 
         public bool CheckForExclusiveMerge(BpmnNode node)
         {
-            var currentInstance = node.Instances.Peek();
-            if (currentInstance.Merges.Count > 0)
+     
+            if (node.Merges.Count > 0)
                 return true;
 
-            currentInstance.Merges.Push(new Tuple<string, bool>(currentInstance.Tokens.FirstOrDefault(),currentInstance.IsExecutable));
+            node.Merges.Push(new Tuple<string, bool>(node.Tokens.First(),node.IsExecutable));
             return false;
         }
     }

@@ -4,12 +4,8 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Novin.Bpmn.Test;
-using Novin.Bpmn.Test.Abstractions;
-using Novin.Bpmn.Test.Core;
-using Novin.Bpmn.Test.Executors;
-using Novin.Bpmn.Test.Executors.Abstracts;
-using Novin.Bpmn.Test.Models;
+using Novin.Bpmn;
+using Novin.Bpmn.Abstractions;
 
 public class Program
 {
@@ -43,90 +39,10 @@ public class Program
         stopwatch.Stop();
 
         return;
-        Console.WriteLine(new string('=', 50)); // Line divider
-        
-        // Print BPMN node history schematic
-        PrintBpmnNodeHistory(engine.State);
 
-        // Generate and print execution report
-        GenerateExecutionReport(engine.State, stopwatch.Elapsed);
-
-        // Convert the state to JSON after execution
-        // Console.WriteLine(engine.ExportStateAsJson());
     }
 
-    private static void PrintBpmnNodeHistory(BpmnState state)
-    {
-        var visitedNodes = new HashSet<string>();
-        foreach (var node in state.Nodes.Values)
-        {
-            if (visitedNodes.Contains(node.Id)) continue;
-
-            Console.WriteLine($"Node ID: {node.Id}");
-            PrintNodeInstances(node);
-            PrintOutgoingFlows(node);
-            Console.WriteLine(new string('-', 50)); // Line divider
-            visitedNodes.Add(node.Id);
-        }
-    }
-
-    private static void PrintNodeInstances(BpmnNode node)
-    {
-        foreach (var instance in node.Instances)
-        {
-            Console.WriteLine($"  Instance Timestamp: {instance.Timestamp}, IsExpired: {instance.IsExpired}");
-            if (instance.Tokens.Any())
-            {
-                Console.WriteLine("    Tokens: " + string.Join(", ", instance.Tokens));
-            }
-            if (instance.Merges.Any())
-            {
-                Console.WriteLine("    Merges: " + string.Join(", ", instance.Merges));
-            }
-            PrintTransitions("    Incoming Transitions", instance.IncomingTransitions);
-            PrintTransitions("    Outgoing Transitions", instance.OutgoingTransitions);
-        }
-    }
-
-    private static void PrintTransitions(string title, List<InstanceTransition> transitions)
-    {
-        if (transitions.Any())
-        {
-            Console.WriteLine(title + ":");
-            foreach (var transition in transitions)
-            {
-                Console.WriteLine($"      {transition.SourceToken ?? "N/A"} -> {transition.TargetToken} at {transition.TransitionTime}");
-            }
-        }
-    }
-
-    private static void PrintOutgoingFlows(BpmnNode node)
-    {
-        if (node.OutgoingFlows.Any())
-        {
-            Console.WriteLine("  Outgoing Flows:");
-            foreach (var flow in node.OutgoingFlows)
-            {
-                Console.WriteLine($"    -> Flow to Node ID: {flow.targetRef}");
-            }
-        }
-    }
-
-    private static void GenerateExecutionReport(BpmnState state, TimeSpan elapsedTime)
-    {
-        int totalNodes = state.Nodes.Count;
-        int totalInstances = state.Nodes.Values.SelectMany(x => x.Instances).Count();
-        int expiredNodes = state.Nodes.Values.SelectMany(x => x.Instances).Where(x=>x.IsExpired).Count();
-
-        Console.WriteLine(new string('=', 50));
-        Console.WriteLine("Execution Report:");
-        Console.WriteLine(new string('=', 50));
-
-        Console.WriteLine($"Total Nodes: {totalNodes}");
-        Console.WriteLine($"Total Instance: {totalInstances}");
-        Console.WriteLine($"Expired Instance: {expiredNodes}");
-        Console.WriteLine($"Total Time Elapsed: {elapsedTime}");
-    }
+  
 }
 
 

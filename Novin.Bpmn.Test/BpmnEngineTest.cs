@@ -28,7 +28,6 @@ public class BpmnEngineTest
         Assert.Equal(3,engine.State.NodeQueue.Count);
         
         await engine.StartProcess(false);
-        Assert.Equal(2,engine.State.NodeQueue.Count(x => x.Instances.First().IsExecutable));
     }
 
 }

@@ -12,29 +12,29 @@ namespace Novin.Bpmn.Handlers
                 return;
             }
 
-            var currentInstance = node.Instances.Peek();
-            currentInstance.Merges.Clear();
 
-            var outgoingTasks = node.OutgoingFlows.Select(flow => CreateAndEnqueueNode(engine, node, flow, currentInstance.Tokens.First(), currentInstance.IsExecutable));
+            node.Merges.Clear();
+
+            var outgoingTasks = node.OutgoingTargets.Select(flow => CreateAndEnqueueNode(engine, node, flow, node.Tokens.First(), node.IsExecutable));
             await Task.WhenAll(outgoingTasks);
 
-            currentInstance.IsExpired = true;
+            node.IsExpired = true;
         }
 
         public bool CheckForParallelMerge(BpmnNode node)
         {
-            var currentInstance = node.Instances.Peek();
-            currentInstance.Merges.Push(new Tuple<string, bool>(currentInstance.Tokens.FirstOrDefault(),currentInstance.IsExecutable));
+            node.Merges.Push(new Tuple<string, bool>(node.Tokens.First(),node.IsExecutable));
 
-            return currentInstance.Merges.Count == node.IncomingFlows.Count;
+            return node.Merges.Count == node.IncommingFlows.Count;
         }
 
         private Task CreateAndEnqueueNode(BpmnEngine engine, BpmnNode node, BpmnSequenceFlow flow, string token, bool isExecutable)
         {
-            var newNode = engine.CreateNewNode(engine.DefinitionsHandler.GetElementById(flow.targetRef), token, isExecutable, node.Instances.Peek().Tokens.First());
+            var newElement = engine.DefinitionsHandler.GetElementById(flow.targetRef);
+            var newNode = engine.CreateNewNode(newElement, token, isExecutable, node.Tokens.First());
 
             // Add outgoing transition
-            node.Instances.Peek().AddTransition(node.Instances.Peek().Tokens.First(), newNode.Instances.Peek().Tokens.First(), DateTime.Now, false,flow.id);
+            node.AddTransition(node.Tokens.First(), newNode.Tokens.First(), DateTime.Now, false);
 
             engine.EnqueueNode(newNode);
 
