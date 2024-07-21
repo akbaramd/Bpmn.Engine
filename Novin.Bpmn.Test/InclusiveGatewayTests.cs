@@ -1,4 +1,5 @@
-﻿using Novin.Bpmn.Test;
+﻿using Novin.Bpmn;
+using Novin.Bpmn.Test;
 
 public class InclusiveGatewayTests
 {

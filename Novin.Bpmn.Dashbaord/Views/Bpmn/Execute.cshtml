@@ -1,0 +1,197 @@
+﻿@using System.Text.Json
+@model Novin.Bpmn.BpmnState
+<style>
+    .highlight {
+        stroke: green !important;
+        stroke-width: 3px !important;
+        fill: none !important; /* Ensure that only the border is colored if necessary */
+    }
+</style>
+<div class="container mt-4">
+    <h1 class="mb-4">BPMN State Details</h1>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    Basic Information
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <tr>
+                            <th>ID</th>
+                            <td>@Model.Id</td>
+                        </tr>
+                        <tr>
+                            <th>Process ID</th>
+                            <td>@Model.ProcessId</td>
+                        </tr>
+                        <tr>
+                            <th>Is Paused</th>
+                            <td>@Model.IsPaused</td>
+                        </tr>
+                        <tr>
+                            <th>Is Stopped</th>
+                            <td>@Model.IsStopped</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    Variables
+                </div>
+                <div class="card-body">
+                    <pre>@JsonSerializer.Serialize(Model.Variables, new JsonSerializerOptions { WriteIndented = true })</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div style="height: 600px" id="canvas"></div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    Node Queue
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <thead>
+                        <tr>
+                            <th>Node ID</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var node in Model.NodeQueue)
+                        {
+                        <tr>
+                            <td>@node.Id</td>
+                        </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    Nodes
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <thead>
+                        <tr>
+                            <th>Node ID</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var kvp in Model.Nodes)
+                        {
+                        <tr>
+                            <td>@kvp.Key</td>
+                        </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card mb-4">
+                <div class="card-header">
+                    Waiting User Tasks
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <thead>
+                        <tr>
+                            <th>Task ID</th>
+                            <th>Task Name</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var kvp in Model.WaitingUserTasks)
+                        {
+                        <tr>
+                            <td>@kvp.Key</td>
+                            <td>@kvp.Value.Id</td>
+                        </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-12">
+            <div class="card mb-4">
+                <div class="card-header">
+                    Node Details
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <thead>
+                        <tr>
+                            <th>Node ID</th>
+                            <th>Instances</th>
+                            <th>Incoming Flows</th>
+                            <th>Outgoing Flows</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var kvp in Model.Nodes)
+                        {
+                        <tr>
+                            <td>@kvp.Key</td>
+                            <td>
+                                @foreach (var instance in kvp.Value.Instances)
+                                {
+                                <p>Tokens: @string.Join(", ", instance.Tokens)</p>
+                                <p>Is Expired: @instance.IsExpired</p>
+                                <p>Timestamp: @instance.Timestamp</p>
+                                }
+                            </td>
+                            <td>
+                                @foreach (var flow in kvp.Value.IncomingFlows)
+                                {
+                                <p>@flow.id</p>
+                                }
+                            </td>
+                            <td>
+                                @foreach (var flow in kvp.Value.OutgoingFlows)
+                                {
+                                <p>@flow.id</p>
+                                }
+                            </td>
+                        </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="~/js/bundle.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const paths = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(ViewBag.Paths));
+        const fileName = "/uploads/@ViewBag.FileName";
+        bpmn.initializeViewer(fileName,paths);
+    });
+</script>

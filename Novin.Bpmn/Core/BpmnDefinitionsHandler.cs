@@ -23,6 +23,10 @@ public class BpmnDefinitionsHandler
     {
         return GetProcess(processId).Items.OfType<BpmnStartEvent>().First();
     }
+    public BpmnEndEvent GetEndEventForProcess(string processId)
+    {
+        return GetProcess(processId).Items.OfType<BpmnEndEvent>().First();
+    }
 
 
     public BpmnFlowElement GetElementById(string id)

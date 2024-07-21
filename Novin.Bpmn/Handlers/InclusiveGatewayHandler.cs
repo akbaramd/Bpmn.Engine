@@ -51,7 +51,7 @@ namespace Novin.Bpmn.Handlers
             engine.EnqueueNode(newNode);
 
             // Add outgoing transition
-            node.Instances.Peek().AddTransition(node.Instances.Peek().Tokens.First(), token, DateTime.Now, false);
+            node.Instances.Peek().AddTransition(node.Instances.Peek().Tokens.First(), token, DateTime.Now, false,flow.id);
         }
     }
 }

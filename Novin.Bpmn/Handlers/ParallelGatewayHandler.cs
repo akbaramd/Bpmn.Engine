@@ -34,7 +34,7 @@ namespace Novin.Bpmn.Handlers
             var newNode = engine.CreateNewNode(engine.DefinitionsHandler.GetElementById(flow.targetRef), token, isExecutable, node.Instances.Peek().Tokens.First());
 
             // Add outgoing transition
-            node.Instances.Peek().AddTransition(node.Instances.Peek().Tokens.First(), newNode.Instances.Peek().Tokens.First(), DateTime.Now, false);
+            node.Instances.Peek().AddTransition(node.Instances.Peek().Tokens.First(), newNode.Instances.Peek().Tokens.First(), DateTime.Now, false,flow.id);
 
             engine.EnqueueNode(newNode);
 

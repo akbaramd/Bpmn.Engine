@@ -1,0 +1,35 @@
+﻿@{
+ViewData["Title"] = "BPMN Diagram";
+}
+
+<div class="card card-body mb-3">
+    <p> BPMN Diagram: <b>@ViewBag.FileName</b></p>
+    <hr/>
+    <div class="d-flex gap-3">
+        <button class="btn btn-primary" id="saveButton">Save Changes</button>
+    </div>
+</div>
+<div class="row">
+    <div class="col-md-10">
+        <div class="card">
+            <div id="canvas" style="width: 100%; height: 600px;"></div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card">
+            <div id="panel" style="height: 600px; overflow-y: auto;"></div>
+        </div>
+    </div>
+</div>
+
+<script src="~/js/bundle.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const fileName = "/uploads/@ViewBag.FileName";
+        bpmn.initializeModeler(fileName);
+
+        document.getElementById('saveButton').addEventListener('click', function() {
+            bpmn.saveChanges('@ViewBag.FileName');
+        });
+    });
+</script>

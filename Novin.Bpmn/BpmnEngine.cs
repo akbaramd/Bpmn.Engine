@@ -49,7 +49,8 @@ public class BpmnEngine
     public ScriptHandler ScriptHandler { get; }
 
 
-    public BpmnNode CreateNewNode(BpmnFlowElement element, string token, bool isExecutable, string sourceToken = null)
+    public BpmnNode CreateNewNode(BpmnFlowElement element, string token, bool isExecutable, string sourceToken = null,
+        string flowSequenceId = null)
     {
         lock (State.Nodes)
         {
@@ -76,19 +77,16 @@ public class BpmnEngine
                         Timestamp = DateTime.Now
                     };
                     newInstance.Tokens.Add(token);
-                    newInstance.AddTransition(sourceToken, token, DateTime.Now, true); // Incoming transition
-
-
+                    newInstance.AddTransition(sourceToken, token, DateTime.Now, true,
+                        flowSequenceId); // Incoming transition
                     newInstance.Forks.Push(new Tuple<string, bool>(token, isExecutable));
-
-
                     node.Instances.Push(newInstance);
                 }
                 else
                 {
                     currentInstance.Tokens.Add(token);
-                    currentInstance.AddTransition(sourceToken, token, DateTime.Now, true); // Incoming transition
-
+                    currentInstance.AddTransition(sourceToken, token, DateTime.Now, true,
+                        flowSequenceId); // Incoming transition
                     currentInstance.Forks.Push(new Tuple<string, bool>(token, isExecutable));
                 }
             }
@@ -188,51 +186,16 @@ public class BpmnEngine
             {
                 var targetToken = Guid.NewGuid().ToString();
                 var newNode = CreateNewNode(DefinitionsHandler.GetElementById(flow.targetRef),
-                    targetToken, node.Instances.Peek().IsExecutable, node.Instances.Peek().Tokens.First());
+                    targetToken, node.Instances.Peek().IsExecutable, node.Instances.Peek().Tokens.First(), flow.id);
                 EnqueueNode(newNode);
 
                 // Add outgoing transition
                 node.Instances.Peek()
-                    .AddTransition(node.Instances.Peek().Tokens.First(), targetToken, DateTime.Now, false);
+                    .AddTransition(node.Instances.Peek().Tokens.First(), targetToken, DateTime.Now, false, flow.id);
 
                 node.Instances.Peek().IsExpired = true;
             }
         }
-    }
-
-    private List<BpmnNode> FindNextNodesSync(BpmnNode node)
-    {
-        var nextNodes = new List<BpmnNode>();
-        var element = DefinitionsHandler.GetElementById(node.Id);
-
-        if (element is BpmnGateway gateway)
-        {
-            IGatewayHandler? handler = gateway switch
-            {
-                BpmnInclusiveGateway _ => new InclusiveGatewayHandler(),
-                BpmnExclusiveGateway _ => new ExclusiveGatewayHandler(),
-                BpmnParallelGateway _ => new ParallelGatewayHandler(),
-                _ => null
-            };
-
-            handler?.HandleGateway(node, this);
-        }
-        else
-        {
-            foreach (var flow in node.OutgoingFlows)
-            {
-                var targetToken = Guid.NewGuid().ToString();
-                var newNode = CreateNewNode(DefinitionsHandler.GetElementById(flow.targetRef),
-                    targetToken, node.Instances.Peek().IsExecutable);
-                nextNodes.Add(newNode);
-
-                // Add outgoing transition
-                node.Instances.Peek()
-                    .AddTransition(node.Instances.Peek().Tokens.First(), targetToken, DateTime.Now, false);
-            }
-        }
-
-        return nextNodes;
     }
 
     public void EnqueueNode(BpmnNode node)
@@ -286,11 +249,50 @@ public class BpmnEngine
         if (State.WaitingUserTasks.TryRemove(taskId, out var node))
             // Console.WriteLine($"User task {node.Id} is completed.");
         {
-            
+
             node.Instances.Peek().CanBeContinue = true;
             await FindNextNodes(node);
             Console.WriteLine($"Completed {taskId}");
         }
-        
+
     }
+
+    public List<string> GetExecutedPathsWithFlows()
+    {
+        var executedPaths = new List<string>();
+
+        foreach (var node in State.Nodes.Values)
+        {
+            foreach (var instance in node.Instances)
+            {
+                if (instance.IsExecutable)
+                {
+                    var currentPath = new List<string> { node.Id };
+
+                    foreach (var transition in instance.OutgoingTransitions)
+                    {
+                        currentPath.Add(transition.FlowSequenceId);
+
+                        var targetNode = State.Nodes.Values.FirstOrDefault(n => n.Instances.Any(inst => inst.Tokens.Contains(transition.TargetToken)));
+                        if (targetNode != null)
+                        {
+                            currentPath.Add(targetNode.Id);
+                        }
+                    }
+
+                    executedPaths.AddRange(currentPath);
+                }
+            }
+        }
+
+        return executedPaths;
+    }
+
+
+}
+
+public class BpmnPath
+{
+    public List<BpmnNode> Nodes { get; set; } = new List<BpmnNode>();
+    public List<BpmnTransition> Transitions { get; set; } = new List<BpmnTransition>();
 }
