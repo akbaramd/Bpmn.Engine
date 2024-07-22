@@ -10,7 +10,7 @@ namespace Novin.Bpmn.Executors
 
         public async Task ExecuteAsync(BpmnNode node, BpmnEngine engine)
         {
-            var element = engine.DefinitionsHandler.GetElementById(node.Id);
+            var element = engine.DefinitionsHandler.GetElementById(node.ElementId);
             if (element is BpmnScriptTask scriptTask)
             {
                 var scriptContent = scriptTask.script.InnerText;

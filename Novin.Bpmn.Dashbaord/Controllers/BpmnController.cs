@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.IO;
 using Microsoft.AspNetCore.Authorization;
 using System.Text.Json;
+using Newtonsoft.Json;
 using Novin.Bpmn;
 
 namespace BpmnFileUploader.Controllers
@@ -90,7 +91,7 @@ namespace BpmnFileUploader.Controllers
             var filePath = Path.Combine(_hostingEnvironment.WebRootPath, "uploads", fileName);
             var engine = new BpmnEngine(filePath);
             await engine.StartProcess();
-            ViewBag.Paths  = engine.GetExecutedPathsWithFlows();
+            ViewBag.Paths  = JsonConvert.SerializeObject(engine.GetExecutedPathsWithFlows());
             ViewBag.FileName = fileName;
             return View(engine.State);
         }

@@ -14,48 +14,48 @@ public class InclusiveGatewayTests
 
         // Execute the process step-by-step
         await engine.StartProcess(false);
-        Assert.Equal("Activity_1", engine.State.NodeQueue.First().Id);
+        Assert.Equal("Activity_1", engine.State.NodeQueue.First().ElementId);
         Assert.Single(engine.State.NodeQueue);
 
         await engine.StartProcess(false);
-        Assert.Equal("Activity_2", engine.State.NodeQueue.First().Id);
+        Assert.Equal("Activity_2", engine.State.NodeQueue.First().ElementId);
         Assert.Single(engine.State.NodeQueue);
 
         await engine.StartProcess(false);
-        Assert.Equal("Gateway_inclusive", engine.State.NodeQueue.First().Id);
+        Assert.Equal("Gateway_inclusive", engine.State.NodeQueue.First().ElementId);
         Assert.Single(engine.State.NodeQueue);
 
         await engine.StartProcess(false);
 
-        Assert.Equal(new[] { "Activity_3_1", "Activity_3_2", "Activity_3_3" }, engine.State.NodeQueue.Select(x => x.Id).ToArray());
-        Assert.Equal(new[] { "Activity_3_1", "Activity_3_2" }, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.Id).ToArray());
+        Assert.Equal(new[] { "Activity_3_1", "Activity_3_2", "Activity_3_3" }, engine.State.NodeQueue.Select(x => x.ElementId).ToArray());
+        Assert.Equal(new[] { "Activity_3_1", "Activity_3_2" }, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
         
         await engine.StartProcess(false);
-        Assert.Equal(new[] {  "Activity_3_2", "Activity_3_3", "Gateway_inclusive2" }, engine.State.NodeQueue.Select(x => x.Id).ToArray());
-        Assert.Equal(new[] { "Activity_3_2", "Gateway_inclusive2" }, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.Id).ToArray());
+        Assert.Equal(new[] {  "Activity_3_2", "Activity_3_3", "Gateway_inclusive2" }, engine.State.NodeQueue.Select(x => x.ElementId).ToArray());
+        Assert.Equal(new[] { "Activity_3_2", "Gateway_inclusive2" }, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
         
         await engine.StartProcess(false);
-        Assert.Equal(new[] {  "Activity_3_3", "Gateway_inclusive2", "Gateway_inclusive2" }, engine.State.NodeQueue.Select(x => x.Id).ToArray());
-        Assert.Equal(new[] { "Gateway_inclusive2", "Gateway_inclusive2" }, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.Id).ToArray());
+        Assert.Equal(new[] {  "Activity_3_3", "Gateway_inclusive2", "Gateway_inclusive2" }, engine.State.NodeQueue.Select(x => x.ElementId).ToArray());
+        Assert.Equal(new[] { "Gateway_inclusive2", "Gateway_inclusive2" }, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
         
         await engine.StartProcess(false);
-        Assert.Equal(new[] { "Gateway_inclusive2", "Gateway_inclusive2", "Gateway_inclusive2"}, engine.State.NodeQueue.Select(x => x.Id).ToArray());
-        Assert.Equal(new string[]{"Gateway_inclusive2", "Gateway_inclusive2", "Gateway_inclusive2"}, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.Id).ToArray());
+        Assert.Equal(new[] { "Gateway_inclusive2", "Gateway_inclusive2", "Gateway_inclusive2"}, engine.State.NodeQueue.Select(x => x.ElementId).ToArray());
+        Assert.Equal(new string[]{"Gateway_inclusive2", "Gateway_inclusive2", "Gateway_inclusive2"}, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
         
         await engine.StartProcess(false);
-        Assert.Equal(new[] { "Gateway_inclusive2", "Gateway_inclusive2"}, engine.State.NodeQueue.Select(x => x.Id).ToArray());
-        Assert.Equal(new[]{"Gateway_inclusive2", "Gateway_inclusive2"}, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.Id).ToArray());
+        Assert.Equal(new[] { "Gateway_inclusive2", "Gateway_inclusive2"}, engine.State.NodeQueue.Select(x => x.ElementId).ToArray());
+        Assert.Equal(new[]{"Gateway_inclusive2", "Gateway_inclusive2"}, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
           
         await engine.StartProcess(false);
-        Assert.Equal(new[] { "Gateway_inclusive2"}, engine.State.NodeQueue.Select(x => x.Id).ToArray());
-        Assert.Equal(new[]{"Gateway_inclusive2"}, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.Id).ToArray());
+        Assert.Equal(new[] { "Gateway_inclusive2"}, engine.State.NodeQueue.Select(x => x.ElementId).ToArray());
+        Assert.Equal(new[]{"Gateway_inclusive2"}, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
         
         await engine.StartProcess(false);
-        Assert.Equal(new[] { "Activity_4"}, engine.State.NodeQueue.Select(x => x.Id).ToArray());
-        Assert.Equal(new string[]{"Activity_4"}, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.Id).ToArray());
+        Assert.Equal(new[] { "Activity_4"}, engine.State.NodeQueue.Select(x => x.ElementId).ToArray());
+        Assert.Equal(new string[]{"Activity_4"}, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
         
         await engine.StartProcess(false);
-        Assert.Equal(new[] { "Event_End"}, engine.State.NodeQueue.Select(x => x.Id).ToArray());
-        Assert.Equal(new string[]{"Event_End"}, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.Id).ToArray());
+        Assert.Equal(new[] { "Event_End"}, engine.State.NodeQueue.Select(x => x.ElementId).ToArray());
+        Assert.Equal(new string[]{"Event_End"}, engine.State.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
     }
 }

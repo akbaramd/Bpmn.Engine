@@ -9,7 +9,7 @@ namespace Novin.Bpmn.Executors
 
         public async Task ExecuteAsync(BpmnNode node, BpmnEngine engine)
         {
-            var serviceTask = engine.DefinitionsHandler.GetElementById(node.Id) as BpmnServiceTask;
+            var serviceTask = engine.DefinitionsHandler.GetElementById(node.ElementId) as BpmnServiceTask;
             if (serviceTask != null)
             {
 
@@ -24,7 +24,7 @@ namespace Novin.Bpmn.Executors
                     await handler?.HandleAsync(engine.State)!;
                 }
 
-                Console.WriteLine($"Service task {node.Id} executed. Response: {serviceTask.implementation}");
+                Console.WriteLine($"Service task {node.ElementId} executed. Response: {serviceTask.implementation}");
             }
         }
     }

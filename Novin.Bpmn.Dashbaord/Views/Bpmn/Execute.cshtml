@@ -1,4 +1,6 @@
 ﻿@using System.Text.Json
+@using Newtonsoft.Json
+@using JsonSerializer = System.Text.Json.JsonSerializer
 @model Novin.Bpmn.BpmnState
 <style>
     .highlight {
@@ -46,7 +48,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-8">
             <div class="card" style="height: 100%">
                 <div style="height: 100%" id="canvas"></div>
@@ -69,9 +71,9 @@
                         <tbody>
                         @foreach (var node in Model.NodeQueue)
                         {
-                        <tr>
-                            <td>@node.Id</td>
-                        </tr>
+                            <tr>
+                                <td>@node.Id</td>
+                            </tr>
                         }
                         </tbody>
                     </table>
@@ -92,11 +94,11 @@
                         </tr>
                         </thead>
                         <tbody>
-                        @foreach (var kvp in Model.Nodes)
+                        @foreach (var kvp in Model.NodeStack)
                         {
-                        <tr>
-                            <td>@kvp.Key</td>
-                        </tr>
+                            <tr>
+                                <td>@kvp.Id</td>
+                            </tr>
                         }
                         </tbody>
                     </table>
@@ -122,10 +124,10 @@
                         <tbody>
                         @foreach (var kvp in Model.WaitingUserTasks)
                         {
-                        <tr>
-                            <td>@kvp.Key</td>
-                            <td>@kvp.Value.Id</td>
-                        </tr>
+                            <tr>
+                                <td>@kvp.Key</td>
+                                <td>@kvp.Value.Id</td>
+                            </tr>
                         }
                         </tbody>
                     </table>
@@ -149,31 +151,29 @@
                         </tr>
                         </thead>
                         <tbody>
-                        @foreach (var kvp in Model.Nodes)
+                        @foreach (var kvp in Model.NodeStack)
                         {
-                        <tr>
-                            <td>@kvp.Key</td>
-                            <td>
-                                @foreach (var instance in kvp.Value.Instances)
-                                {
-                                <p>Tokens: @string.Join(", ", instance.Tokens)</p>
-                                <p>Is Expired: @instance.IsExpired</p>
-                                <p>Timestamp: @instance.Timestamp</p>
-                                }
-                            </td>
-                            <td>
-                                @foreach (var flow in kvp.Value.IncomingFlows)
-                                {
-                                <p>@flow.id</p>
-                                }
-                            </td>
-                            <td>
-                                @foreach (var flow in kvp.Value.OutgoingFlows)
-                                {
-                                <p>@flow.id</p>
-                                }
-                            </td>
-                        </tr>
+                            <tr>
+                                <td>@kvp.Id</td>
+                                <td>
+
+                                    <p>Is Expired: @kvp.IsExpired</p>
+                                    <p>Timestamp: @kvp.Timestamp</p>
+
+                                </td>
+                                <td>
+                                    @foreach (var flow in kvp.IncomingFlows)
+                                    {
+                                        <p>@flow.id</p>
+                                    }
+                                </td>
+                                <td>
+                                    @foreach (var flow in kvp.OutgoingFlows)
+                                    {
+                                        <p>@flow.id</p>
+                                    }
+                                </td>
+                            </tr>
                         }
                         </tbody>
                     </table>
@@ -186,7 +186,7 @@
 <script src="~/js/bundle.js"></script>
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        const paths = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(ViewBag.Paths));
+        const paths = @Html.Raw(ViewBag.Paths);
         const fileName = "/uploads/@ViewBag.FileName";
         bpmn.initializeViewer(fileName,paths);
     });

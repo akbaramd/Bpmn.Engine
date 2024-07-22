@@ -13,9 +13,11 @@ public class BpmnState
     public dynamic Variables { get; set; } = new ExpandoObject();
     public Queue<BpmnNode> NodeQueue { get; set; } = new();
     public Stack<BpmnNode> NodeStack { get; set; } = new();
+    public Stack<BpmnNodeTransition> TransitionStack { get; set; } = new();
     public Stack<string> Exceptions { get; set; } = new();
     public bool IsPaused { get; set; } = false;
     public bool IsStopped { get; set; } = false;
+    public bool IsFinished { get; set; } = false;
 
     public ConcurrentDictionary<string, BpmnNode> WaitingUserTasks { get; private set; }
 

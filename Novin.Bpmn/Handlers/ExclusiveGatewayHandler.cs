@@ -1,50 +1,40 @@
 ﻿using Novin.Bpmn.Abstractions;
 using Novin.Bpmn.Core;
 
-namespace Novin.Bpmn.Handlers
+namespace Novin.Bpmn.Handlers;
+
+public class ExclusiveGatewayHandler : IGatewayHandler
 {
-    public class ExclusiveGatewayHandler : IGatewayHandler
+    public async Task HandleGateway(BpmnNode node, BpmnEngine engine)
     {
-        public async Task HandleGateway(BpmnNode node, BpmnEngine engine)
+        if (!CheckForExclusiveMerge(node)) return;
+
+        foreach (var flow in node.OutgoingFlows)
         {
-            if (!CheckForExclusiveMerge(node))
-            {
-                return;
-            }
+            var globals = new ScriptGlobals { State = engine.State };
+            if (string.IsNullOrWhiteSpace(flow.conditionExpression.ToString())) continue;
 
-    
-            node.Merges.Clear();
+            var expression = string.Join(" ", flow.conditionExpression.Text);
+            if (!await engine.ScriptHandler.EvaluateConditionAsync(expression, globals)) continue;
 
-            foreach (var flow in node.OutgoingTargets)
-            {
-                var globals = new ScriptGlobals { State = engine.State };
-                if (flow.conditionExpression != null)
-                {
-                    var expression = string.Join(" ", flow.conditionExpression.Text);
-                    if (await engine.ScriptHandler.EvaluateConditionAsync(expression, globals))
-                    {
-                        var newElement = engine.DefinitionsHandler.GetElementById(flow.targetRef);
-                        var newNode = engine.CreateNewNode(newElement, node.Uid, node.IsExecutable, node.Uid);
+            var newElement = engine.DefinitionsHandler.GetElementById(flow.targetRef);
+            var newNode = engine.CreateNewNode(newElement, node.Id, node.IsExecutable, node, flow);
 
-                        // Add outgoing transition
-                        node.AddTransition(node.Uid, newNode.Uid, DateTime.Now, false);
-                        engine.EnqueueNode(newNode);
-                        break;
-                    }
-                }
-            }
-
-            node.IsExpired = true;
+            // Add outgoing transition
+            // node.AddTransition(node.Id, newNode.Id, DateTime.Now, false);
+            engine.EnqueueNode(newNode);
+            break;
         }
 
-        public bool CheckForExclusiveMerge(BpmnNode node)
-        {
-     
-            if (node.Merges.Count > 0)
-                return true;
+        node.IsExpired = true;
+    }
 
-            node.Merges.Push(new Tuple<string,Guid, bool>(node.Id,node.Uid,node.IsExecutable));
-            return false;
-        }
+    public bool CheckForExclusiveMerge(BpmnNode node)
+    {
+        if (node.Merges.Count > 0)
+            return true;
+
+        node.Merges.Push(new (node.ElementId, node.Id, node.IsExecutable));
+        return false;
     }
 }

@@ -40,7 +40,9 @@ export function initializeModeler(diagramUrl) {
         .catch(err => console.error('Error loading BPMN diagram', err));
 }
 
-export function initializeViewer(diagramUrl,executedPathIds) {
+export function initializeViewer(diagramUrl,details) {
+    
+  
     const viewer = new BpmnViewer({
         container: '#canvas'
     });
@@ -53,33 +55,72 @@ export function initializeViewer(diagramUrl,executedPathIds) {
                 const canvas = viewer.get('canvas');
                 const elementRegistry = await viewer.get('elementRegistry');
                 canvas.zoom('fit-viewport');
-                executedPathIds.forEach(function (id) {
+
+             
+                
+                details.filter(x=>x.IsActive).forEach(function (node) {
+                    const id = node.ElementId;
                     const element = elementRegistry.get(id);
                     console.log(element)
                     if (element) {
                         canvas.addMarker(id, 'highlight');
                         console.log(`Element found and highlighted: ${id}`);
-
+                        const color = "blue";
                         // Explicitly set the stroke color for the graphical representation
                         const gfx = elementRegistry.getGraphics(id);
                         const paths = gfx.querySelectorAll('path');
                         paths.forEach((path) => {
-                            path.style.stroke = 'blue';
+                            path.style.stroke =color;
                         });
 
                         const rects = gfx.querySelectorAll('rect');
                         rects.forEach((path) => {
-                            path.style.stroke = 'blue';
+                            path.style.stroke = color;
                         });
                         const polygon = gfx.querySelectorAll('polygon');
                         polygon.forEach((path) => {
-                            path.style.stroke = 'blue';
+                            path.style.stroke = color;
                         });
 
                         const circle = gfx.querySelectorAll('circle');
                         circle.forEach((path) => {
-                            path.style.stroke = 'blue';
+                            path.style.stroke = color;
                         });
+                        
+                        
+                    } else {
+                        console.warn(`Element not found: ${id}`);
+                    }
+                });
+
+                details.filter(x=>x.HasUserTask).forEach(function (node) {
+                    const id = node.ElementId;
+                    const element = elementRegistry.get(id);
+                    console.log(element)
+                    if (element) {
+                        const color = "green";
+                        // Explicitly set the stroke color for the graphical representation
+                        const gfx = elementRegistry.getGraphics(id);
+                        const paths = gfx.querySelectorAll('path');
+                        paths.forEach((path) => {
+                            path.style.stroke =color;
+                        });
+
+                        const rects = gfx.querySelectorAll('rect');
+                        rects.forEach((path) => {
+                            path.style.stroke = color;
+                        });
+                        const polygon = gfx.querySelectorAll('polygon');
+                        polygon.forEach((path) => {
+                            path.style.stroke = color;
+                        });
+
+                        const circle = gfx.querySelectorAll('circle');
+                        circle.forEach((path) => {
+                            path.style.stroke = color;
+                        });
+
+
                     } else {
                         console.warn(`Element not found: ${id}`);
                     }
