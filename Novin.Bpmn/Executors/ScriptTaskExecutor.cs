@@ -8,15 +8,15 @@ namespace Novin.Bpmn.Executors
     {
         private readonly ScriptHandler _scriptHandler = new();
 
-        public async Task ExecuteAsync(BpmnNode node, BpmnEngine engine)
+        public async Task ExecuteAsync(BpmnProcessNode processNode, BpmnProcessEngine processEngine)
         {
-            var element = engine.DefinitionsHandler.GetElementById(node.ElementId);
+            var element = processEngine.DefinitionsHandler.GetElementById(processNode.ElementId);
             if (element is BpmnScriptTask scriptTask)
             {
                 var scriptContent = scriptTask.script.InnerText;
                 try
                 {
-                    var globals = new ScriptGlobals { State = engine.State };
+                    var globals = new ScriptGlobals { State = processEngine.ProcessState };
                     await _scriptHandler.ExecuteScriptAsync(scriptContent, globals);
                 }
                 catch (Exception ex)

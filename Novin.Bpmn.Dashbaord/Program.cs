@@ -1,6 +1,10 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Novin.Bpmn;
+using Novin.Bpmn.Abstractions;
+using Novin.Bpmn.Dashbaord;
 using Novin.Bpmn.Dashbaord.Data;
+using Novin.Bpmn.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,7 +19,15 @@ builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.Requ
     .AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddControllersWithViews();
 
+builder.Services.AddSingleton<ITaskStorage, InMemoryTaskStorage>();
+builder.Services.AddSingleton<IUserAccessor, BpmnInMemoryUserAccessor>();
+builder.Services.AddSingleton<IDefinitionAccessor, BpmnInMemoryDefinitionAccessor>();
+builder.Services.AddSingleton<IProcessAccsessor, EfProcessAccessor>();
+builder.Services.AddSingleton<BpmnEngine>();
+
 var app = builder.Build();
+
+
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

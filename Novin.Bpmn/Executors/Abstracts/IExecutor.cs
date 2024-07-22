@@ -2,7 +2,7 @@
 {
     public interface IExecutor
     {
-        Task ExecuteAsync(BpmnNode node, BpmnEngine engine);
+        Task ExecuteAsync(BpmnProcessNode processNode, BpmnProcessEngine processEngine);
     }
 
     public interface ITaskExecutor : IExecutor

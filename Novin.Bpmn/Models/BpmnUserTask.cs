@@ -43,4 +43,10 @@ public partial class BpmnUserTask : BpmnTask
 
     [XmlAttribute("candidateGroups", Namespace = "http://camunda.org/schema/1.0/bpmn")]
     public string CandidateGroups { get; set; }
+    
+    [XmlAttribute("candidateUsers", Namespace = "http://camunda.org/schema/1.0/bpmn")]
+    public string CandidateUsers { get; set; }
+    
+    [XmlAttribute("assignee", Namespace = "http://camunda.org/schema/1.0/bpmn")]
+    public string Assignee { get; set; }
 }

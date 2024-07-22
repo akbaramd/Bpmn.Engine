@@ -5,36 +5,36 @@ namespace Novin.Bpmn.Handlers;
 
 public class ExclusiveGatewayHandler : IGatewayHandler
 {
-    public async Task HandleGateway(BpmnNode node, BpmnEngine engine)
+    public async Task HandleGateway(BpmnProcessNode processNode, BpmnProcessEngine processEngine)
     {
-        if (!CheckForExclusiveMerge(node)) return;
+        if (!CheckForExclusiveMerge(processNode)) return;
 
-        foreach (var flow in node.OutgoingFlows)
+        foreach (var flow in processNode.OutgoingFlows)
         {
-            var globals = new ScriptGlobals { State = engine.State };
+            var globals = new ScriptGlobals { State = processEngine.ProcessState };
             if (string.IsNullOrWhiteSpace(flow.conditionExpression.ToString())) continue;
 
             var expression = string.Join(" ", flow.conditionExpression.Text);
-            if (!await engine.ScriptHandler.EvaluateConditionAsync(expression, globals)) continue;
+            if (!await processEngine.ScriptHandler.EvaluateConditionAsync(expression, globals)) continue;
 
-            var newElement = engine.DefinitionsHandler.GetElementById(flow.targetRef);
-            var newNode = engine.CreateNewNode(newElement, node.Id, node.IsExecutable, node, flow);
+            var newElement = processEngine.DefinitionsHandler.GetElementById(flow.targetRef);
+            var newNode = processEngine.CreateNewNode(newElement, processNode.Id, processNode.IsExecutable, processNode, flow);
 
             // Add outgoing transition
             // node.AddTransition(node.Id, newNode.Id, DateTime.Now, false);
-            engine.EnqueueNode(newNode);
+            processEngine.EnqueueNode(newNode);
             break;
         }
 
-        node.IsExpired = true;
+        processNode.IsExpired = true;
     }
 
-    public bool CheckForExclusiveMerge(BpmnNode node)
+    public bool CheckForExclusiveMerge(BpmnProcessNode processNode)
     {
-        if (node.Merges.Count > 0)
+        if (processNode.Merges.Count > 0)
             return true;
 
-        node.Merges.Push(new (node.ElementId, node.Id, node.IsExecutable));
+        processNode.Merges.Push(new (processNode.ElementId, processNode.Id, processNode.IsExecutable));
         return false;
     }
 }

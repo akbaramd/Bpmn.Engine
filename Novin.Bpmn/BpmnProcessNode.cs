@@ -2,7 +2,7 @@
 
 namespace Novin.Bpmn;
 
-public class BpmnNode
+public class BpmnProcessNode
 {
     public string ElementId { get; set; }
     public Guid Id { get; set; }
@@ -10,30 +10,33 @@ public class BpmnNode
     public DateTime Timestamp { get; set; }
     public bool IsExecutable => Instances.Any(x => x.isExecutable) ;
     public bool CanBeContinue { get; set; } = true;
-    public string? Details { get; set; } // Additional execution details if needed
-
-    // History and tracking properties
-    
+    public string? Details { get; set; } 
+    // New properties for user handling
+    public string? AssignedUserId { get; set; }
+    public string? CompletedByUserId { get; set; }
     public List<BpmnSequenceFlow> IncomingFlows { get; set; } = new List<BpmnSequenceFlow>();
     public List<BpmnSequenceFlow> OutgoingFlows { get; set; } = new List<BpmnSequenceFlow>();
 
     public Stack<(string sourceElementId,Guid sourceNodeId, bool isExecutable)> Merges { get; set; } = new Stack<(string sourceElementId,Guid sourceNodeId, bool isExecutable)>(); // Merges state
     public Stack<(string sourceElementId,Guid sourceNodeId,Guid targetNodeId, bool isExecutable)> Instances { get; set; } = new Stack<(string sourceElementId,Guid sourceNodeId,Guid targetNodeId, bool isExecutable)>(); // Merges state
 
-  
+     
 }
 
-public class BpmnNodeTransition
-    {
-        public Guid Id { get; set; }
-        public string ElementId { get; set; }
-        public Guid SourceNodeId { get; set; }
-        public Guid TargetNodeId { get; set; }
-        public DateTime TransitionTime { get; set; }
+public class BpmnTask
+{
+    public string TaskId { get; set; }
+    public string Name { get; set; }
+    public string Assignee { get; set; }
+    public List<string> CandidateUsers { get; set; } = new();
+    public List<string> CandidateGroups { get; set; } = new();
+    public bool Status { get; set; } = false;   
+}
 
-        public override string ToString()
-        {
-            return $"{ElementId} - {Id}" ;
-        }
-    }
-
+public class BpmnUser
+{
+    public string Id { get; set; }
+    public string Name { get; set; }
+    public string Group { get; set; }
+    // Additional properties as needed
+}

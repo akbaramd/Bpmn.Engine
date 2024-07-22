@@ -1,58 +1,32 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text.Json;
-using System.Threading.Tasks;
+﻿// Define the path to the BPMN file
+
 using Novin.Bpmn;
 using Novin.Bpmn.Abstractions;
+using Novin.Bpmn.Storage;
 
-public class Program
-{
-    public static async Task Main(string[] args)
-    {
-        // Define the BPMN file path
-        string bpmnFilePath = "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\simple_inclusive.bpmn";
-        // string bpmnFilePath = "D:\\Projects\\Company\\AkbarAhmadiSaray\\Bomn\\Bpmn.Engine\\Novin.Bpmn.Test\\Bpmn\\simple_inclusive.bpmn";
+string bpmnFilePath = "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\simple_inclusive.bpmn";
+string deploymentName = "SimpleInclusiveProcess";
+string version = "1.0.0";
 
-        // Create an instance of the BPMN engine with the given file path and dependencies
-        var engine = new BpmnEngine(bpmnFilePath , processId:"process");
+// Initialize the definition and process storage
+IDefinitionAccessor definitionAccessor = new BpmnInMemoryDefinitionAccessor();
+IProcessAccsessor processAccsessor = new BpmnInMemoryProcessAccsessor();
 
-        // Start the timer
-        Stopwatch stopwatch = Stopwatch.StartNew();
+// Initialize user handler and task storage (implement these interfaces as needed)
+IUserAccessor userAccessor = new BpmnInMemoryUserAccessor();
+ITaskStorage taskStorage = new InMemoryTaskStorage();
 
-        // Execute the process asynchronously
-        await engine.StartProcess();
+// Initialize the BpmnEngine
+BpmnEngine engine = new BpmnEngine(userAccessor, taskStorage, definitionAccessor, processAccsessor);
 
-        var res = engine.GetExecutedPathsWithFlows();
-        // Complete user tasks if any
-        while (engine.State.WaitingUserTasks.Any())
-        {
-            foreach (var userTask in engine.State.WaitingUserTasks)
-            {
-                await engine.CompleteUserTask(userTask.Value.ElementId);
-                await engine.StartProcess();
-            }
-        }
+// Deploy the BPMN definition
+engine.DeployDefinition(bpmnFilePath, deploymentName, version);
+Console.WriteLine("BPMN definition deployed successfully.");
 
-        // Stop the timer
-        stopwatch.Stop();
+// Create a new process from the deployed definition
+var processEngine = await engine.CreateProcessAsync(deploymentName, version);
+Console.WriteLine("BPMN process created successfully.");
 
-        return;
-
-    }
-
-  
-}
-
-
-
-class TestServiceHandler : IServiceTaskHandler
-{
-    public Task HandleAsync(BpmnState state)
-    {
-        state.Variables.Index = 1;
-        Console.WriteLine(state);
-        return Task.CompletedTask;;
-    }
-}
+// Start the process
+await processEngine.StartProcess();
+Console.WriteLine("BPMN process started successfully.");

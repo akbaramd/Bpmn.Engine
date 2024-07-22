@@ -5,34 +5,34 @@ namespace Novin.Bpmn.Handlers
 {
     public class ParallelGatewayHandler : IGatewayHandler
     {
-        public async Task HandleGateway(BpmnNode node, BpmnEngine engine)
+        public async Task HandleGateway(BpmnProcessNode processNode, BpmnProcessEngine processEngine)
         {
-            if (!CheckForParallelMerge(node))
+            if (!CheckForParallelMerge(processNode))
             {
                 return;
             }
 
-            var outgoingTasks = node.OutgoingFlows.Select(flow => CreateAndEnqueueNode(engine, node, flow, node.Id, node.IsExecutable));
+            var outgoingTasks = processNode.OutgoingFlows.Select(flow => CreateAndEnqueueNode(processEngine, processNode, flow, processNode.Id, processNode.IsExecutable));
             await Task.WhenAll(outgoingTasks);
 
-            node.IsExpired = true;
+            processNode.IsExpired = true;
         }
 
-        public bool CheckForParallelMerge(BpmnNode node)
+        public bool CheckForParallelMerge(BpmnProcessNode processNode)
         {
-            node.Merges.Push(new (node.ElementId,node.Id,node.IsExecutable));
-            return node.Merges.Count == node.IncomingFlows.Count;
+            processNode.Merges.Push(new (processNode.ElementId,processNode.Id,processNode.IsExecutable));
+            return processNode.Merges.Count == processNode.IncomingFlows.Count;
         }
 
-        private Task CreateAndEnqueueNode(BpmnEngine engine, BpmnNode node, BpmnSequenceFlow flow, Guid id, bool isExecutable)
+        private Task CreateAndEnqueueNode(BpmnProcessEngine processEngine, BpmnProcessNode processNode, BpmnSequenceFlow flow, Guid id, bool isExecutable)
         {
-            var newElement = engine.DefinitionsHandler.GetElementById(flow.targetRef);
-            var newNode = engine.CreateNewNode(newElement, id, isExecutable, node,flow);
+            var newElement = processEngine.DefinitionsHandler.GetElementById(flow.targetRef);
+            var newNode = processEngine.CreateNewNode(newElement, id, isExecutable, processNode,flow);
 
             // Add outgoing transition
             // node.AddTransition(node.Id, newNode.Id, DateTime.Now, false);
 
-            engine.EnqueueNode(newNode);
+            processEngine.EnqueueNode(newNode);
 
             return Task.CompletedTask;
         }

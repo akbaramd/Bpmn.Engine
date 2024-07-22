@@ -4,5 +4,6 @@ namespace Novin.Bpmn.Abstractions;
 
 public interface IBpmnFileDeserializer
 {
-    BpmnDefinitions Deserialize(string filePath);
+    BpmnDefinitions DeserializeFromPath(string filePath);
+    BpmnDefinitions Deserialize(string content);
 }

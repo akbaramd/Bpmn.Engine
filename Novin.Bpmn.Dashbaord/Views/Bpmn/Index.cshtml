@@ -1,42 +1,42 @@
-﻿@model List<string>
+﻿@model IQueryable<NovinBpmnDefinitions>
 
 <div class="card card-body mb-3">
     <form method="post" enctype="multipart/form-data" asp-action="Upload">
         <div class="form-group">
             <label for="file">Choose file to upload</label>
-            <input type="file" name="file" class="form-control-file" id="file"/>
+            <input type="file" name="file" class="form-control-file" id="file" />
         </div>
         <button type="submit" class="btn btn-primary">Upload</button>
     </form>
 </div>
 
 <div class="card card-body">
-    @if (Model.Count > 0)
+    @if (Model.Any())
     {
         <table class="table table-bordered">
             <thead>
-            <tr>
-                <th>#</th>
-                <th>File Name</th>
-                <th>Actions</th>
-            </tr>
+                <tr>
+                    <th>Deployment Key</th>
+                    <th>Version</th>
+                    <th>Actions</th>
+                </tr>
             </thead>
             <tbody>
-            @for (var i = 0; i < Model.Count; i++)
-            {
-                <tr>
-                    <td>@(i + 1)</td>
-                    <td>@Model[i]</td>
-                    <td>
-                        <form method="post" asp-action="Delete" asp-controller="Bpmn" style="display:inline;">
-                            <input type="hidden" name="fileName" value="@Model[i]"/>
-                            <button type="submit" class="btn btn-danger">Delete</button>
-                        </form>
-                        <a asp-action="Diagram" asp-controller="Bpmn" asp-route-fileName="@Model[i]" class="btn btn-secondary">Diagram</a>
-                        <a asp-action="Execute" asp-controller="Bpmn" asp-route-fileName="@Model[i]" class="btn btn-secondary">Execute</a>
-                    </td>
-                </tr>
-            }
+                @foreach (var definition in Model)
+                {
+                    <tr>
+                        <td>@definition.DeploymentKey</td>
+                        <td>@definition.Version</td>
+                        <td>
+                            <form method="post" asp-action="Delete" asp-controller="Bpmn" style="display:inline;">
+                                <input type="hidden" name="deploymentKey" value="@definition.DeploymentKey" />
+                                <button type="submit" class="btn btn-danger">Delete</button>
+                            </form>
+                            <a asp-action="Diagram" asp-controller="Bpmn" asp-route-fileName="@definition.DeploymentKey" class="btn btn-secondary">Diagram</a>
+                            <a asp-action="Execute" asp-controller="Bpmn" asp-route-fileName="@definition.DeploymentKey" class="btn btn-secondary">Execute</a>
+                        </td>
+                    </tr>
+                }
             </tbody>
         </table>
     }
@@ -44,5 +44,4 @@
     {
         <p>No files uploaded yet.</p>
     }
-
 </div>

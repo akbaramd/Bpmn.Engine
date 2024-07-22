@@ -6,45 +6,45 @@ namespace Novin.Bpmn.Handlers
 {
     public class InclusiveGatewayHandler : IGatewayHandler
     {
-        public async Task HandleGateway(BpmnNode node, BpmnEngine engine)
+        public async Task HandleGateway(BpmnProcessNode processNode, BpmnProcessEngine processEngine)
         {
-            if (!CheckForInclusiveMerge(node))
+            if (!CheckForInclusiveMerge(processNode))
             {
                 return;
             }
             
-            Console.WriteLine($"{node.ElementId} merged");
+            Console.WriteLine($"{processNode.ElementId} merged");
       
-            var outgoingTasks = node.OutgoingFlows.Select(async flow =>
+            var outgoingTasks = processNode.OutgoingFlows.Select(async flow =>
             {
-                var globals = new ScriptGlobals { State = engine.State };
+                var globals = new ScriptGlobals { State = processEngine.ProcessState };
                 if (!string.IsNullOrWhiteSpace(flow.conditionExpression?.Text.ToString()))
                 {
                     var expression = string.Join(" ", flow.conditionExpression.Text);
-                    if (!await engine.ScriptHandler.EvaluateConditionAsync(expression, globals))
+                    if (!await processEngine.ScriptHandler.EvaluateConditionAsync(expression, globals))
                     {
-                        CreateAndEnqueueNode(engine, node, flow, Guid.NewGuid(), false);
+                        CreateAndEnqueueNode(processEngine, processNode, flow, Guid.NewGuid(), false);
                         return;
                     }
                 }
-                CreateAndEnqueueNode(engine, node, flow, Guid.NewGuid(), node.IsExecutable);
+                CreateAndEnqueueNode(processEngine, processNode, flow, Guid.NewGuid(), processNode.IsExecutable);
             });
             await Task.WhenAll(outgoingTasks);
 
-            node.IsExpired = true;
+            processNode.IsExpired = true;
         }
 
-        public bool CheckForInclusiveMerge(BpmnNode node)
+        public bool CheckForInclusiveMerge(BpmnProcessNode processNode)
         {
-            node.Merges.Push(new (node.ElementId, node.Id, node.IsExecutable));
-            return node.Merges.Count == node.IncomingFlows.Count;
+            processNode.Merges.Push(new (processNode.ElementId, processNode.Id, processNode.IsExecutable));
+            return processNode.Merges.Count == processNode.IncomingFlows.Count;
         }
 
-        private void CreateAndEnqueueNode(BpmnEngine engine, BpmnNode node, BpmnSequenceFlow flow, Guid id, bool isExecutable)
+        private void CreateAndEnqueueNode(BpmnProcessEngine processEngine, BpmnProcessNode processNode, BpmnSequenceFlow flow, Guid id, bool isExecutable)
         {
-            var element = engine.DefinitionsHandler.GetElementById(flow.targetRef);
-            var newNode = engine.CreateNewNode(element, id, isExecutable, node,flow);
-            engine.EnqueueNode(newNode);
+            var element = processEngine.DefinitionsHandler.GetElementById(flow.targetRef);
+            var newNode = processEngine.CreateNewNode(element, id, isExecutable, processNode,flow);
+            processEngine.EnqueueNode(newNode);
 
             // Add outgoing transition
             // node.AddTransition(node.Id, id, DateTime.Now, false);

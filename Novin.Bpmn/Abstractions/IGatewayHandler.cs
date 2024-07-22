@@ -2,5 +2,5 @@
 
 public interface IGatewayHandler
 {
-    Task HandleGateway(BpmnNode node, BpmnEngine engine);
+    Task HandleGateway(BpmnProcessNode processNode, BpmnProcessEngine processEngine);
 }

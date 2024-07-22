@@ -1,20 +1,36 @@
-﻿using Novin.Bpmn.Executors.Abstracts;
+﻿using Novin.Bpmn;
+using Novin.Bpmn.Abstractions;
+using Novin.Bpmn.Executors.Abstracts;
 using Novin.Bpmn.Models;
-
-namespace Novin.Bpmn.Executors;
+using BpmnTask = Novin.Bpmn.BpmnTask;
 
 public class UserTaskExecutor : IExecutor
 {
-    public Task ExecuteAsync(BpmnNode node, BpmnEngine engine)
+    private readonly ITaskStorage _taskStorage;
+    private readonly IUserAccessor userAccessor;
+
+    public UserTaskExecutor(ITaskStorage taskStorage, IUserAccessor userAccessor)
     {
-        var element = engine.DefinitionsHandler.GetElementById(node.ElementId);
+        _taskStorage = taskStorage;
+        this.userAccessor = userAccessor;
+    }
+
+    public async Task ExecuteAsync(BpmnProcessNode processNode, BpmnProcessEngine processEngine)
+    {
+        var element = processEngine.DefinitionsHandler.GetElementById(processNode.ElementId);
         if (element is BpmnUserTask userTask)
         {
-            engine.State.WaitingUserTasks[node.ElementId] = node;
-            node.CanBeContinue =
-                false; // Console.WriteLine($"User task {userTask.id} is waiting for completion.");
-        }
+            var customTask = new BpmnTask()
+            {
+                TaskId = processNode.Id.ToString(),
+                Name = userTask.name,
+                CandidateUsers = userTask.CandidateUsers?.Split(',').ToList(),
+                CandidateGroups = userTask.CandidateGroups?.Split(',').ToList()
+            };
 
-        return Task.CompletedTask;
+            await _taskStorage.AddTaskAsync(customTask);
+            processEngine.ProcessState.WaitingUserTasks[processNode.ElementId] = processNode;
+            processNode.CanBeContinue = false;
+        }
     }
 }

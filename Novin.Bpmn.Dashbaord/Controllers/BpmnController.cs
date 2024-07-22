@@ -1,10 +1,13 @@
 ﻿using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
-using System.Text.Json;
 using Newtonsoft.Json;
 using Novin.Bpmn;
+using Novin.Bpmn.Abstractions;
+using Novin.Bpmn.Models;
 
 namespace BpmnFileUploader.Controllers
 {
@@ -12,17 +15,21 @@ namespace BpmnFileUploader.Controllers
     public class BpmnController : Controller
     {
         private readonly IWebHostEnvironment _hostingEnvironment;
+        private readonly BpmnEngine _engine;
+        private readonly IDefinitionAccessor definitionAccessor;
 
-        public BpmnController(IWebHostEnvironment hostingEnvironment)
+        public BpmnController(IWebHostEnvironment hostingEnvironment, BpmnEngine engine, IDefinitionAccessor definitionAccessor)
         {
             _hostingEnvironment = hostingEnvironment;
+            _engine = engine;
+            this.definitionAccessor = definitionAccessor;
         }
 
-        public IActionResult Index()
-        {
-            var files = Directory.GetFiles(Path.Combine(_hostingEnvironment.WebRootPath, "uploads")).Select(Path.GetFileName).ToList();
-            return View(files);
-        }
+        // public IActionResult Index()
+        // {
+        //     var definitions = definitionAccessor.Get();
+        //     return View(definitions);
+        // }
 
         [HttpPost]
         public IActionResult Upload(IFormFile file)
@@ -35,65 +42,44 @@ namespace BpmnFileUploader.Controllers
                 {
                     file.CopyTo(stream);
                 }
+
+                // Deploy the BPMN definition
+                _engine.DeployDefinition(filePath, file.FileName);
             }
 
             return RedirectToAction("Index");
         }
 
-        [HttpPost]
-        public IActionResult Delete(string fileName)
-        {
-            var filePath = Path.Combine(_hostingEnvironment.WebRootPath, "uploads", fileName);
-
-            if (System.IO.File.Exists(filePath))
-            {
-                System.IO.File.Delete(filePath);
-            }
-
-            return RedirectToAction("Index");
-        }
+        // [HttpPost]
+        // public IActionResult Delete(string deploymentKey)
+        // {
+        //     definitionAccessor.Delete(deploymentKey);
+        //     return RedirectToAction("Index");
+        // }
 
         public IActionResult Diagram(string fileName)
         {
             ViewBag.FileName = fileName;
             return View();
         }
+        //
+        // [HttpPost]
+        // public IActionResult Save([FromBody] SaveDiagramRequest request)
+        // {
+        //     // Update the BPMN definition in the storage
+        //     definitionAccessor.Update(request.BpmnXML, request.FileName);
+        //
+        //     return Ok();
+        // }
 
-        [HttpPost]
-        public IActionResult Save([FromBody] SaveDiagramRequest request)
-        {
-            var filePath = Path.Combine(_hostingEnvironment.WebRootPath, "uploads", request.FileName);
 
-            System.IO.File.WriteAllText(filePath, request.BpmnXML);
-
-            return Ok();
-        }
-
-        [HttpGet]
-        public IActionResult GetDiagram(string fileName)
-        {
-            var filePath = Path.Combine(_hostingEnvironment.WebRootPath, "uploads", fileName);
-
-            if (!System.IO.File.Exists(filePath))
-            {
-                return NotFound();
-            }
-
-            var content = System.IO.File.ReadAllText(filePath);
-            Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
-            Response.Headers["Pragma"] = "no-cache";
-            Response.Headers["Expires"] = "0";
-            return Content(content, "text/xml");
-        }
-        
         public async Task<IActionResult> Execute(string fileName)
         {
-            var filePath = Path.Combine(_hostingEnvironment.WebRootPath, "uploads", fileName);
-            var engine = new BpmnEngine(filePath);
-            await engine.StartProcess();
-            ViewBag.Paths  = JsonConvert.SerializeObject(engine.GetExecutedPathsWithFlows());
+            var processEngine = await _engine.CreateProcessAsync(fileName);
+            await processEngine.StartProcess();
+            ViewBag.Paths = JsonConvert.SerializeObject(processEngine.GetExecutedPathsWithFlows());
             ViewBag.FileName = fileName;
-            return View(engine.State);
+            return View(processEngine.ProcessState);
         }
     }
 
@@ -103,4 +89,3 @@ namespace BpmnFileUploader.Controllers
         public string BpmnXML { get; set; }
     }
 }
-    
