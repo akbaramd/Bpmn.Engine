@@ -15,7 +15,7 @@ namespace Novin.Bpmn.Handlers
 
             node.Merges.Clear();
 
-            var outgoingTasks = node.OutgoingTargets.Select(flow => CreateAndEnqueueNode(engine, node, flow, node.Tokens.First(), node.IsExecutable));
+            var outgoingTasks = node.OutgoingTargets.Select(flow => CreateAndEnqueueNode(engine, node, flow, node.Uid, node.IsExecutable));
             await Task.WhenAll(outgoingTasks);
 
             node.IsExpired = true;
@@ -23,18 +23,18 @@ namespace Novin.Bpmn.Handlers
 
         public bool CheckForParallelMerge(BpmnNode node)
         {
-            node.Merges.Push(new Tuple<string, bool>(node.Tokens.First(),node.IsExecutable));
+            node.Merges.Push(new Tuple<string,Guid, bool>(node.Id,node.Uid,node.IsExecutable));
 
             return node.Merges.Count == node.IncommingFlows.Count;
         }
 
-        private Task CreateAndEnqueueNode(BpmnEngine engine, BpmnNode node, BpmnSequenceFlow flow, string token, bool isExecutable)
+        private Task CreateAndEnqueueNode(BpmnEngine engine, BpmnNode node, BpmnSequenceFlow flow, Guid id, bool isExecutable)
         {
             var newElement = engine.DefinitionsHandler.GetElementById(flow.targetRef);
-            var newNode = engine.CreateNewNode(newElement, token, isExecutable, node.Tokens.First());
+            var newNode = engine.CreateNewNode(newElement, id, isExecutable, node.Uid);
 
             // Add outgoing transition
-            node.AddTransition(node.Tokens.First(), newNode.Tokens.First(), DateTime.Now, false);
+            node.AddTransition(node.Uid, newNode.Uid, DateTime.Now, false);
 
             engine.EnqueueNode(newNode);
 

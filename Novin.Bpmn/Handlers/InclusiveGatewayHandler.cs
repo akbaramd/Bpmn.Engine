@@ -12,9 +12,9 @@ namespace Novin.Bpmn.Handlers
             {
                 return;
             }
-
+            
+            Console.WriteLine($"{node.Id} merged");
       
-            var isExecutable = node.Merges.Any(x => x.Item2);
             var outgoingTasks = node.OutgoingTargets.Select(async flow =>
             {
                 var globals = new ScriptGlobals { State = engine.State };
@@ -23,11 +23,11 @@ namespace Novin.Bpmn.Handlers
                     var expression = string.Join(" ", flow.conditionExpression.Text);
                     if (!await engine.ScriptHandler.EvaluateConditionAsync(expression, globals))
                     {
-                        CreateAndEnqueueNode(engine, node, flow, Guid.NewGuid().ToString(), false);
+                        CreateAndEnqueueNode(engine, node, flow, Guid.NewGuid(), false);
                         return;
                     }
                 }
-                CreateAndEnqueueNode(engine, node, flow, Guid.NewGuid().ToString(), isExecutable);
+                CreateAndEnqueueNode(engine, node, flow, Guid.NewGuid(), node.IsExecutable);
             });
             await Task.WhenAll(outgoingTasks);
 
@@ -38,20 +38,20 @@ namespace Novin.Bpmn.Handlers
         {
           
             if (!node.Merges.Any())
-                node.Merges = new Stack<Tuple<string,bool>>();
+                node.Merges = new Stack<Tuple<string,Guid,bool>>();
 
-            node.Merges.Push(new Tuple<string, bool>(node.Tokens.First(),node.IsExecutable));
+            node.Merges.Push(new Tuple<string,Guid, bool>(node.Id,node.Uid,node.IsExecutable));
             return node.Merges.Count == node.IncommingFlows.Count;
         }
 
-        private void CreateAndEnqueueNode(BpmnEngine engine, BpmnNode node, BpmnSequenceFlow flow, string token, bool isExecutable)
+        private void CreateAndEnqueueNode(BpmnEngine engine, BpmnNode node, BpmnSequenceFlow flow, Guid id, bool isExecutable)
         {
             var element = engine.DefinitionsHandler.GetElementById(flow.targetRef);
-            var newNode = engine.CreateNewNode(element, token, isExecutable, node.Tokens.First());
+            var newNode = engine.CreateNewNode(element, id, isExecutable, node.Uid);
             engine.EnqueueNode(newNode);
 
             // Add outgoing transition
-            node.AddTransition(node.Tokens.First(), token, DateTime.Now, false);
+            node.AddTransition(node.Uid, id, DateTime.Now, false);
         }
     }
 }

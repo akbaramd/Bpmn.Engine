@@ -29,7 +29,7 @@ public class BpmnEngine
         if (State.NodeQueue.Count != 0) return;
 
         var startEvent = DefinitionsHandler.GetStartEventForProcess(State.ProcessId);
-        var startNode = CreateNewNode(startEvent, Guid.NewGuid().ToString(), true);
+        var startNode = CreateNewNode(startEvent, Guid.NewGuid(), true);
         State.NodeQueue.Enqueue(startNode);
     }
 
@@ -48,7 +48,7 @@ public class BpmnEngine
         if (State.NodeQueue.Count != 0) return;
 
         var startEvent = DefinitionsHandler.GetStartEventForProcess(State.ProcessId);
-        var startNode = CreateNewNode(startEvent,  Guid.NewGuid().ToString(),true);
+        var startNode = CreateNewNode(startEvent,  Guid.NewGuid(),true);
         State.NodeQueue.Enqueue(startNode);
     }
 
@@ -61,7 +61,7 @@ public class BpmnEngine
     public ScriptHandler ScriptHandler { get; }
 
 
-    public BpmnNode CreateNewNode(BpmnFlowElement element, string nodeToken, bool isExecutable , string? sourceToken = null)
+    public BpmnNode CreateNewNode(BpmnFlowElement element, Guid nodeId, bool isExecutable , Guid? sourceNodeId = null)
     {
         lock (State.NodeStack)
         {
@@ -70,17 +70,19 @@ public class BpmnEngine
             if (State.NodeStack.Any(x => x.Id.Equals(element.id) && x.IsExpired == false))
                 node = State.NodeStack.Peek();
             else
+            {
                 node = new BpmnNode
                 {
                     Id = element.id,
                     OutgoingTargets = DefinitionsHandler.GetOutgoingSequenceFlows(element),
                     IncommingFlows = DefinitionsHandler.GetIncomingSequenceFlows(element)
                 };
+                State.NodeStack.Push(node);
+            }
 
-            node.Tokens.Add(nodeToken);
             
-            node.AddTransition(sourceToken, nodeToken, DateTime.Now, true); 
-            node.Forks.Push(new Tuple<string, bool>(nodeToken, isExecutable));
+            node.AddTransition(sourceNodeId??Guid.Empty, nodeId, DateTime.Now, true); 
+            node.Forks.Push(new Tuple<string,Guid, bool>(element.id,nodeId, isExecutable));
 
             return node;
         }
@@ -98,9 +100,9 @@ public class BpmnEngine
             while (State.NodeQueue.Any())
                 try
                 {
-                    var nodeToProcess = State.NodeQueue.Peek();
+                    var nodeToProcess = State.NodeQueue.Dequeue();;
                     await ProcessNode(nodeToProcess);
-                    State.NodeQueue.Dequeue();
+                    
                 }
                 catch (Exception e)
                 {
@@ -188,13 +190,13 @@ public class BpmnEngine
         {
             foreach (var target in node.OutgoingTargets)
             {
-                var newToken = Guid.NewGuid().ToString();
-                var newNode = CreateNewNode(DefinitionsHandler.GetElementById(target.targetRef),newToken,node.IsExecutable,node.Tokens.First());
+                var newToken = Guid.NewGuid();
+                var newNode = CreateNewNode(DefinitionsHandler.GetElementById(target.targetRef),newToken,node.IsExecutable,node.Uid);
                 EnqueueNode(newNode);
 
                 // Add outgoing transition
                 node
-                    .AddTransition(node.Tokens.First(), newToken, DateTime.Now, false);
+                    .AddTransition(node.Uid, newToken, DateTime.Now, false);
 
                 node.IsExpired = true;
             }

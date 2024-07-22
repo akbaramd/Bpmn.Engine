@@ -24,10 +24,10 @@ namespace Novin.Bpmn.Handlers
                     if (await engine.ScriptHandler.EvaluateConditionAsync(expression, globals))
                     {
                         var newElement = engine.DefinitionsHandler.GetElementById(flow.targetRef);
-                        var newNode = engine.CreateNewNode(newElement, node.Tokens.First(), node.IsExecutable, node.Tokens.First());
+                        var newNode = engine.CreateNewNode(newElement, node.Uid, node.IsExecutable, node.Uid);
 
                         // Add outgoing transition
-                        node.AddTransition(node.Tokens.First(), newNode.Tokens.First(), DateTime.Now, false);
+                        node.AddTransition(node.Uid, newNode.Uid, DateTime.Now, false);
                         engine.EnqueueNode(newNode);
                         break;
                     }
@@ -43,7 +43,7 @@ namespace Novin.Bpmn.Handlers
             if (node.Merges.Count > 0)
                 return true;
 
-            node.Merges.Push(new Tuple<string, bool>(node.Tokens.First(),node.IsExecutable));
+            node.Merges.Push(new Tuple<string,Guid, bool>(node.Id,node.Uid,node.IsExecutable));
             return false;
         }
     }
