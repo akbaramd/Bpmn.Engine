@@ -94,12 +94,12 @@ public class BpmnProcessEngine
 
             if (immediately)
             {
-                while (ProcessState.NodeQueue.Count != 0)
+                while (ProcessState.NodeQueue.Count != 0 && ProcessState.NodeQueue.Any(x=>x.UserTask == null || x.UserTask.IsCompleted))
                     try
                     {
                         var nodeToProcess = ProcessState.NodeQueue.Peek();
                         await ProcessNode(nodeToProcess);
-                        ProcessState.NodeQueue.Dequeue();
+
                     }
                     catch (Exception e)
                     {
@@ -142,6 +142,7 @@ public class BpmnProcessEngine
 
                 if (processNode.IsExecutable) await ExecuteTask(processNode);
                 if (processNode.CanBeContinue) await FindNextNodes(processNode);
+                
             }
             catch (Exception ex)
             {
@@ -195,15 +196,16 @@ public class BpmnProcessEngine
                     var newNode = CreateNewNode(DefinitionsHandler.GetElementById(target.targetRef), newToken,
                         processNode.IsExecutable, processNode, target);
                     EnqueueNode(newNode);
-                    processNode.IsExpired = true;
+                    processNode.Expire();
                     processNode.Merges.Push(new ValueTuple<string, Guid, bool>(processNode.ElementId, processNode.Id, processNode.IsExecutable));
                 }
             }
+            ProcessState!.NodeQueue.Dequeue();
         }
 
         public void EnqueueNode(BpmnProcessNode processNode)
         {
-            lock (ProcessState.NodeQueue)
+            lock (ProcessState!.NodeQueue)
             {
                 ProcessState.NodeQueue.Enqueue(processNode);
             }
@@ -249,8 +251,10 @@ public class BpmnProcessEngine
 
         public async Task CompleteUserTask(string taskId)
         {
-            if (ProcessState.WaitingUserTasks.TryRemove(taskId, out var node))
+            var node = ProcessState?.NodeStack.FirstOrDefault(x => x.UserTask is not null && x.UserTask.TaskId.Equals(taskId));
+            if (node is not null)
             {
+                node.UserTask!.IsCompleted = true;
                 await FindNextNodes(node);
                 Console.WriteLine($"Completed {taskId}");
             }
@@ -267,7 +271,7 @@ public class BpmnProcessEngine
                     ElementId = node.ElementId,
                     IsActive = node.IsExecutable &&
                                (node.IncomingFlows.Count == 0 || node.IncomingFlows.Count() == node.Instances.Count),
-                    HasUserTask = ProcessState.WaitingUserTasks.Any(x => x.Key.Equals(node.ElementId))
+                    HasUserTask = node.UserTask is not null
                 });
 
                 var transitions = ProcessState.TransitionStack.Where(x => x.SourceNodeId.Equals(node.Id));

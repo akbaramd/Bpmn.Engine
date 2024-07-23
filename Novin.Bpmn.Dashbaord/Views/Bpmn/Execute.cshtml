@@ -122,11 +122,11 @@
                         </tr>
                         </thead>
                         <tbody>
-                        @foreach (var kvp in Model.WaitingUserTasks)
+                        @foreach (var kvp in Model.NodeStack.Select(x=>x.UserTask))
                         {
                         <tr>
-                            <td>@kvp.Key</td>
-                            <td>@kvp.Value.Id</td>
+                            <td>@kvp.TaskId</td>
+                            <td>@kvp.Name</td>
                         </tr>
                         }
                         </tbody>
@@ -157,7 +157,7 @@
                             <td>@node.Id</td>
                             <td>
                                 <p>Is Expired: @node.IsExpired</p>
-                                <p>Timestamp: @node.Timestamp</p>
+                                <p>ExpiredAt: @node.ExpiredAt</p>
                             </td>
                             <td>
                                 @foreach (var flow in node.IncomingFlows)

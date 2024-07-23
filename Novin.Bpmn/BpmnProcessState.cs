@@ -19,13 +19,10 @@ public class BpmnProcessState
     public bool IsStopped { get; set; } = false;
     public bool IsFinished { get; set; } = false;
 
-    public ConcurrentDictionary<string, BpmnProcessNode> WaitingUserTasks { get; private set; }
-
     public BpmnProcessState(BpmnDefinitions definitions , string processElementId)
     {
         Id = Guid.NewGuid().ToString();
         Definition = definitions;
-        WaitingUserTasks = new ConcurrentDictionary<string, BpmnProcessNode>();
         ProcessElementId = processElementId;
     }
 
@@ -33,7 +30,6 @@ public class BpmnProcessState
     public static BpmnProcessState RestoreState(string savedState, BpmnDefinitions definitions)
     {
         var state = JsonSerializer.Deserialize<BpmnProcessState>(savedState);
-        state.WaitingUserTasks = new ConcurrentDictionary<string, BpmnProcessNode>(state.WaitingUserTasks);
         return state;
     }
 

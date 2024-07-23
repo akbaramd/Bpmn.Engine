@@ -31,7 +31,7 @@ namespace Novin.Bpmn.Handlers
             });
             await Task.WhenAll(outgoingTasks);
 
-            processNode.IsExpired = true;
+            processNode.Expire();
         }
 
         public bool CheckForInclusiveMerge(BpmnProcessNode processNode)

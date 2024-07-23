@@ -88,7 +88,7 @@ namespace Novin.Bpmn.Dashbaord
                 Assignee = task.Assignee,
                 CandidateUsers = task.CandidateByUsers?.Split(',').ToList() ?? new List<string>(),
                 CandidateGroups = task.CandidateByGroups?.Split(',').ToList() ?? new List<string>(),
-                Status = false // Adjust based on your logic
+                IsCompleted = false
             };
         }
     }

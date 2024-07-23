@@ -26,14 +26,13 @@ public class UserTaskExecutor : IExecutor
                 Name = userTask.name,
                 CandidateUsers = userTask.CandidateUsers?.Split(',').ToList(),
                 CandidateGroups = userTask.CandidateGroups?.Split(',').ToList(),
-                Assignee = processNode.AssignedUserId,
+                Assignee = userTask.Assignee,
                 ProcessId = processEngine.ProcessState.Id,
-                Status = false
+                IsCompleted = false
             };
 
+            processNode.AddUserTask(customTask);
             await _taskStorage.AddTaskAsync(customTask);
-            processEngine.ProcessState.WaitingUserTasks[processNode.ElementId] = processNode;
-            processNode.CanBeContinue = false;
         }
     }
 }

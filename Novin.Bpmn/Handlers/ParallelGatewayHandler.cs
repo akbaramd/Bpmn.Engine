@@ -15,7 +15,7 @@ namespace Novin.Bpmn.Handlers
             var outgoingTasks = processNode.OutgoingFlows.Select(flow => CreateAndEnqueueNode(processEngine, processNode, flow, processNode.Id, processNode.IsExecutable));
             await Task.WhenAll(outgoingTasks);
 
-            processNode.IsExpired = true;
+            processNode.Expire();
         }
 
         public bool CheckForParallelMerge(BpmnProcessNode processNode)

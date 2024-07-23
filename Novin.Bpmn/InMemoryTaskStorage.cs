@@ -36,7 +36,6 @@ public class InMemoryTaskStorage : ITaskStorage
         if (_tasks.TryGetValue(taskId, out var task))
         {
             task.Assignee = userId;
-            task.Status = false;
         }
         return Task.CompletedTask;
     }

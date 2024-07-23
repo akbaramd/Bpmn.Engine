@@ -26,7 +26,7 @@ public class ExclusiveGatewayHandler : IGatewayHandler
             break;
         }
 
-        processNode.IsExpired = true;
+        processNode.Expire();
     }
 
     public bool CheckForExclusiveMerge(BpmnProcessNode processNode)
