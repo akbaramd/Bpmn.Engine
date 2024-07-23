@@ -7,12 +7,12 @@ public class BpmnInMemoryProcessAccsessor : IProcessAccsessor
 {
     private readonly ConcurrentDictionary<string, BpmnProcessState?> processes = new();
 
-    public void StoreProcessState(string processId, BpmnProcessState? processState)
+    public void StoreProcessState(string deploymentKey,string processId, BpmnProcessState? processState)
     {
         processes[processId] = processState;
     }
 
-    public BpmnProcessState? GetProcessState(string processId)
+    public BpmnProcessState? GetProcessState(string deploymentKey,string processId)
     {
         if (processes.TryGetValue(processId, out var processState))
         {

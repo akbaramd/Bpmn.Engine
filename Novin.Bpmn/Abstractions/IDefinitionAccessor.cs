@@ -2,8 +2,8 @@
 
 public interface IDefinitionAccessor
  {
-     void Add(string definitionXml, string deploymentName, string? version = null);
-     NovinBpmnDefinitions Get(string deploymentName, string? version = null);
+     void Add( string definitionXml, string deploymentName, string version);
+     NovinBpmnDefinitions Get(string deploymentName, string version);
      List<NovinBpmnDefinitions> Get(string deploymentName);
  }
 

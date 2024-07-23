@@ -16,13 +16,13 @@
     </ItemGroup>
 
     <ItemGroup>
-      <AdditionalFiles Include="Pages\Bpmn.razor" />
-      <AdditionalFiles Include="Pages\EmptyLayout.razor" />
+        <AdditionalFiles Include="Pages\Bpmn.razor"/>
+        <AdditionalFiles Include="Pages\EmptyLayout.razor"/>
     </ItemGroup>
 
     <ItemGroup>
-      <None Include="package-lock.json" />
-      <None Include="package.json" />
+        <None Include="package-lock.json"/>
+        <None Include="package.json"/>
     </ItemGroup>
 
 </Project>

@@ -16,14 +16,15 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
+    .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddControllersWithViews();
 
-builder.Services.AddSingleton<ITaskStorage, InMemoryTaskStorage>();
-builder.Services.AddSingleton<IUserAccessor, BpmnInMemoryUserAccessor>();
-builder.Services.AddSingleton<IDefinitionAccessor, BpmnInMemoryDefinitionAccessor>();
-builder.Services.AddSingleton<IProcessAccsessor, EfProcessAccessor>();
-builder.Services.AddSingleton<BpmnEngine>();
+builder.Services.AddScoped<ITaskStorage, EfTaskStorage>();
+builder.Services.AddScoped<IUserAccessor, EfUserAccessor>();
+builder.Services.AddScoped<IDefinitionAccessor, EfDefinitionsAccessor>();
+builder.Services.AddScoped<IProcessAccsessor, EfProcessAccessor>();
+builder.Services.AddScoped<BpmnEngine>();
 
 var app = builder.Build();
 
@@ -43,8 +44,10 @@ else
 
 app.UseHttpsRedirection();
 app.UseRouting();
-app.UseStaticFiles();
+
 app.UseAuthorization();
+
+app.UseStaticFiles();
 
 app.MapStaticAssets();
 

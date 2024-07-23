@@ -25,6 +25,8 @@ public class BpmnProcessNode
 
 public class BpmnTask
 {
+    public string DeploymentKey { get; set; }
+    public string ProcessId { get; set; }
     public string TaskId { get; set; }
     public string Name { get; set; }
     public string Assignee { get; set; }

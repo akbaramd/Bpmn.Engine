@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 using Novin.Bpmn.Abstractions;
 using Novin.Bpmn.Dashbaord.Data;
 using Novin.Bpmn.Dashbaord.Models;
@@ -14,19 +15,21 @@ public class EfProcessAccessor : IProcessAccsessor
         this.context = context;
     }
 
-    public void StoreProcessState(string processId, BpmnProcessState? processState)
+    public void StoreProcessState(string deploymentKey, string processId, BpmnProcessState? processState)
     {
+        var definition = context.Definitions.First(x => x.DefinationKey.Equals(deploymentKey));
         context.Processes.Add(new Process()
         {
-Content = JsonConvert.SerializeObject(processId),
-ProcessId = processId,
+            Content = JsonConvert.SerializeObject(processState),
+            ProcessId = processId,
+            DefinitionId = definition.Id
         });
         context.SaveChanges();
     }
 
-    public BpmnProcessState? GetProcessState(string processId)
+    public BpmnProcessState? GetProcessState(string deploymentKey, string processId)
     {
-        var item =  context.Processes.First(x => x.ProcessId.Equals(processId));
+        var item = context.Processes.Include(x=>x.Definition).First(x => x.ProcessId.Equals(processId) && x.Definition.DefinationKey.Equals(deploymentKey));
         return JsonConvert.DeserializeObject<BpmnProcessState>(item.Content);
     }
 }

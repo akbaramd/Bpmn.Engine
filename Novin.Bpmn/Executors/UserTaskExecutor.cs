@@ -25,7 +25,10 @@ public class UserTaskExecutor : IExecutor
                 TaskId = processNode.Id.ToString(),
                 Name = userTask.name,
                 CandidateUsers = userTask.CandidateUsers?.Split(',').ToList(),
-                CandidateGroups = userTask.CandidateGroups?.Split(',').ToList()
+                CandidateGroups = userTask.CandidateGroups?.Split(',').ToList(),
+                Assignee = processNode.AssignedUserId,
+                ProcessId = processEngine.ProcessState.Id,
+                Status = false
             };
 
             await _taskStorage.AddTaskAsync(customTask);

@@ -1,4 +1,4 @@
-﻿@model IQueryable<NovinBpmnDefinitions>
+﻿@model List<Definitions>
 
 <div class="card card-body mb-3">
     <form method="post" enctype="multipart/form-data" asp-action="Upload">
@@ -25,15 +25,15 @@
                 @foreach (var definition in Model)
                 {
                     <tr>
-                        <td>@definition.DeploymentKey</td>
-                        <td>@definition.Version</td>
+                        <td>@definition.DefinationKey</td>
+                        <td>@definition.version</td>
                         <td>
                             <form method="post" asp-action="Delete" asp-controller="Bpmn" style="display:inline;">
-                                <input type="hidden" name="deploymentKey" value="@definition.DeploymentKey" />
+                                <input type="hidden" name="deploymentKey" value="@definition.DefinationKey" />
                                 <button type="submit" class="btn btn-danger">Delete</button>
                             </form>
-                            <a asp-action="Diagram" asp-controller="Bpmn" asp-route-fileName="@definition.DeploymentKey" class="btn btn-secondary">Diagram</a>
-                            <a asp-action="Execute" asp-controller="Bpmn" asp-route-fileName="@definition.DeploymentKey" class="btn btn-secondary">Execute</a>
+                            <a asp-action="Diagram" asp-controller="Bpmn" asp-route-fileName="@definition.DefinationKey" class="btn btn-secondary">Diagram</a>
+                            <a asp-action="Processes" asp-controller="Bpmn" asp-route-fileName="@definition.DefinationKey" class="btn btn-secondary">Process</a>
                         </td>
                     </tr>
                 }

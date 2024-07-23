@@ -1,0 +1,39 @@
+﻿@using Microsoft.AspNetCore.Mvc.TagHelpers
+@model BpmnFileUploader.Controllers.ProcessViewModel
+
+<div class="card card-body">
+    <h2>Processes for Definition: @Model.DefinitionKey</h2>
+
+    <a asp-action="Execute" asp-controller="Bpmn" asp-route-fileName="@Model.DefinitionKey" class="btn btn-secondary">Process</a>
+    
+    @if (Model.Processes.Any())
+    {
+        <table class="table table-bordered">
+            <thead>
+            <tr>
+                <th>Process Instance ID</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var process in Model.Processes)
+            {
+                <tr>
+                    <td>@process.ProcessId</td>
+                    <td>
+                        <form method="post" asp-action="ExecuteProcess" asp-controller="Bpmn" style="display:inline;">
+                            <input type="hidden" name="processInstanceId" value="@process.ProcessId" />
+                            <button type="submit" class="btn btn-primary">Execute</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <p>No processes available for this definition.</p>
+    }
+</div>

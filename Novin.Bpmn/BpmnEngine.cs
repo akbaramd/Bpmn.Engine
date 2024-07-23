@@ -29,10 +29,10 @@ namespace Novin.Bpmn
             this.processAccsessor = processAccsessor;
         }
 
-        public void DeployDefinition(string path, string deploymentName, string? version = null)
+        public void DeployDefinition(string path, string deploymentKey, string? version = null)
         {
             var definitionXml = File.ReadAllText(path);
-            definitionAccessor.Add(definitionXml, deploymentName, version);
+            definitionAccessor.Add(definitionXml, deploymentKey, version);
         }
 
         public async Task<BpmnProcessEngine> CreateProcessAsync(string deploymentName, string? version = null)
@@ -59,14 +59,14 @@ namespace Novin.Bpmn
                 new UserTaskExecutor(taskStorage, userAccessor),
                 new ServiceTaskExecutor());
 
-            processAccsessor.StoreProcessState(state.Id, state);
+            processAccsessor.StoreProcessState(deploymentName,state.Id, state);
 
             return processEngine;
         }
 
-        public async Task<BpmnProcessEngine> GetProcessEngineAsync(string processId)
+        public async Task<BpmnProcessEngine> GetProcessEngineAsync(string deploymentName,string processId)
         {
-            var processState = processAccsessor.GetProcessState(processId);
+            var processState = processAccsessor.GetProcessState(deploymentName,processId);
             var definitionsHandler = new BpmnDefinitionsHandler(processState.Definition);
 
             var processEngine = new BpmnProcessEngine(

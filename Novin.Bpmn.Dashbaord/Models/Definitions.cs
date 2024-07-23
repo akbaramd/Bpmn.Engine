@@ -1,6 +1,6 @@
 ﻿namespace Novin.Bpmn.Dashbaord.Models;
 
-public class Defiantions
+public class Definitions
 {
     public Guid Id { get; set; }
     public string Content { get; set; }
