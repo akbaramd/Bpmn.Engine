@@ -1,14 +1,19 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BPMNDiagram))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DI")]
-[System.Xml.Serialization.XmlRootAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DI", IsNullable = false)]
-public abstract partial class Diagram
+[XmlInclude(typeof(BPMNDiagram))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/DD/20100524/DI")]
+[XmlRoot(Namespace = "http://www.omg.org/spec/DD/20100524/DI", IsNullable = false)]
+public abstract class Diagram
 {
     private string nameField;
 
@@ -21,7 +26,7 @@ public abstract partial class Diagram
     private string idField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }
@@ -29,7 +34,7 @@ public abstract partial class Diagram
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string documentation
     {
         get { return documentationField; }
@@ -37,7 +42,7 @@ public abstract partial class Diagram
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public double resolution
     {
         get { return resolutionField; }
@@ -45,7 +50,7 @@ public abstract partial class Diagram
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlIgnoreAttribute()]
+    [XmlIgnore]
     public bool resolutionSpecified
     {
         get { return resolutionFieldSpecified; }
@@ -53,7 +58,7 @@ public abstract partial class Diagram
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "ID")]
+    [XmlAttribute(DataType = "ID")]
     public string id
     {
         get { return idField; }

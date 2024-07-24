@@ -1,6 +1,9 @@
 ﻿using Novin.Bpmn.Abstractions;
 using Novin.Bpmn.Core;
 using Novin.Bpmn.Models;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Novin.Bpmn.Handlers
 {
@@ -12,12 +15,12 @@ namespace Novin.Bpmn.Handlers
             {
                 return;
             }
-            
+
             Console.WriteLine($"{processNode.ElementId} merged");
-      
+
             var outgoingTasks = processNode.OutgoingFlows.Select(async flow =>
             {
-                var globals = new ScriptGlobals { State = processEngine.ProcessState };
+                var globals = new ScriptGlobals { State = processEngine.Instance };
                 if (!string.IsNullOrWhiteSpace(flow.conditionExpression?.Text.ToString()))
                 {
                     var expression = string.Join(" ", flow.conditionExpression.Text);
@@ -36,18 +39,15 @@ namespace Novin.Bpmn.Handlers
 
         public bool CheckForInclusiveMerge(BpmnProcessNode processNode)
         {
-            processNode.Merges.Push(new (processNode.ElementId, processNode.Id, processNode.IsExecutable));
+            processNode.AddMerge(processNode.ElementId, processNode.Id, processNode.IsExecutable);
             return processNode.Merges.Count == processNode.IncomingFlows.Count;
         }
 
         private void CreateAndEnqueueNode(BpmnProcessEngine processEngine, BpmnProcessNode processNode, BpmnSequenceFlow flow, Guid id, bool isExecutable)
         {
-            var element = processEngine.DefinitionsHandler.GetElementById(flow.targetRef);
-            var newNode = processEngine.CreateNewNode(element, id, isExecutable, processNode,flow);
+            var newElement = processEngine.DefinitionsHandler.GetElementById(flow.targetRef);
+            var newNode = processEngine.CreateNewNode(newElement, id, isExecutable, processNode, flow);
             processEngine.EnqueueNode(newNode);
-
-            // Add outgoing transition
-            // node.AddTransition(node.Id, id, DateTime.Now, false);
         }
     }
 }

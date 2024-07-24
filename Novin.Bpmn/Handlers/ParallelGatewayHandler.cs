@@ -1,5 +1,9 @@
 ﻿using Novin.Bpmn.Abstractions;
+using Novin.Bpmn.Core;
 using Novin.Bpmn.Models;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Novin.Bpmn.Handlers
 {
@@ -20,17 +24,14 @@ namespace Novin.Bpmn.Handlers
 
         public bool CheckForParallelMerge(BpmnProcessNode processNode)
         {
-            processNode.Merges.Push(new (processNode.ElementId,processNode.Id,processNode.IsExecutable));
+            processNode.AddMerge(processNode.ElementId, processNode.Id, processNode.IsExecutable);
             return processNode.Merges.Count == processNode.IncomingFlows.Count;
         }
 
         private Task CreateAndEnqueueNode(BpmnProcessEngine processEngine, BpmnProcessNode processNode, BpmnSequenceFlow flow, Guid id, bool isExecutable)
         {
             var newElement = processEngine.DefinitionsHandler.GetElementById(flow.targetRef);
-            var newNode = processEngine.CreateNewNode(newElement, id, isExecutable, processNode,flow);
-
-            // Add outgoing transition
-            // node.AddTransition(node.Id, newNode.Id, DateTime.Now, false);
+            var newNode = processEngine.CreateNewNode(newElement, Guid.NewGuid(), isExecutable, processNode, flow);
 
             processEngine.EnqueueNode(newNode);
 

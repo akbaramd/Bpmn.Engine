@@ -1,14 +1,19 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("sequenceFlow", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("sequenceFlow", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnSequenceFlow : BpmnFlowElement
+public class BpmnSequenceFlow : BpmnFlowElement
 {
     private BpmnExpression conditionExpressionField;
 
@@ -28,7 +33,7 @@ public partial class BpmnSequenceFlow : BpmnFlowElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "IDREF")]
+    [XmlAttribute(DataType = "IDREF")]
     public string sourceRef
     {
         get { return sourceRefField; }
@@ -36,7 +41,7 @@ public partial class BpmnSequenceFlow : BpmnFlowElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "IDREF")]
+    [XmlAttribute(DataType = "IDREF")]
     public string targetRef
     {
         get { return targetRefField; }
@@ -44,7 +49,7 @@ public partial class BpmnSequenceFlow : BpmnFlowElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public bool isImmediate
     {
         get { return isImmediateField; }
@@ -52,7 +57,7 @@ public partial class BpmnSequenceFlow : BpmnFlowElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlIgnoreAttribute()]
+    [XmlIgnore]
     public bool isImmediateSpecified
     {
         get { return isImmediateFieldSpecified; }

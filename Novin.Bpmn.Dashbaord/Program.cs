@@ -3,8 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Novin.Bpmn;
 using Novin.Bpmn.Abstractions;
 using Novin.Bpmn.Dashbaord;
+using Novin.Bpmn.Dashbaord.Accessors;
 using Novin.Bpmn.Dashbaord.Data;
-using Novin.Bpmn.Storage;
+using Novin.Bpmn.Handlers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,10 +21,10 @@ builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.Requ
     .AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddControllersWithViews();
 
-builder.Services.AddScoped<ITaskStorage, EfTaskStorage>();
-builder.Services.AddScoped<IUserAccessor, EfUserAccessor>();
-builder.Services.AddScoped<IDefinitionAccessor, EfDefinitionsAccessor>();
-builder.Services.AddScoped<IProcessAccsessor, EfProcessAccessor>();
+builder.Services.AddScoped<IBpmnTaskAccessor, EfBpmnTasksAccessor>();
+builder.Services.AddScoped<IBpmnUserAccessor, EfBpmnUserAccessor>();
+builder.Services.AddScoped<IBpmnDefinitionAccessor, EfBpmnDefinitionsAccessor>();
+builder.Services.AddScoped<IBpmnProcessAccessor, EfBpmnProcessAccessor>();
 builder.Services.AddScoped<BpmnEngine>();
 
 var app = builder.Build();

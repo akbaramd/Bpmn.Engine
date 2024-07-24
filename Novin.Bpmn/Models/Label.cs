@@ -1,19 +1,24 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BPMNLabel))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DI")]
-[System.Xml.Serialization.XmlRootAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DI", IsNullable = false)]
-public abstract partial class Label : Node
+[XmlInclude(typeof(BPMNLabel))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/DD/20100524/DI")]
+[XmlRoot(Namespace = "http://www.omg.org/spec/DD/20100524/DI", IsNullable = false)]
+public abstract class Label : Node
 {
     private Bounds boundsField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DC")]
+    [XmlElement(Namespace = "http://www.omg.org/spec/DD/20100524/DC")]
     public Bounds Bounds
     {
         get { return boundsField; }

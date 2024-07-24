@@ -1,21 +1,27 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("signal", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("signal", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnSignal : BpmnRootElement
+public class BpmnSignal : BpmnRootElement
 {
     private string nameField;
 
-    private System.Xml.XmlQualifiedName structureRefField;
+    private XmlQualifiedName structureRefField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }
@@ -23,8 +29,8 @@ public partial class BpmnSignal : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName structureRef
+    [XmlAttribute]
+    public XmlQualifiedName structureRef
     {
         get { return structureRefField; }
         set { structureRefField = value; }

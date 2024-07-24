@@ -39149,7 +39149,7 @@
       if (properties.default) {
         connection = find(
           element.outgoing,
-          matchPattern({ id: element.businessObject.default.id })
+          matchPattern({ id: element.businessObject.get('default.id })
         );
 
         if (connection) {

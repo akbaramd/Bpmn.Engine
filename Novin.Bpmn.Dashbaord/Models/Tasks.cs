@@ -5,6 +5,8 @@ namespace Novin.Bpmn.Dashbaord.Models;
 public class NovinTasks
 {
     public Guid Id { get; set; }
+    public string? Name { get; set; }
+    public bool IsCompleted { get; set; }
     public string TaskId { get; set; }
     public Guid ProcessId { get; set; }
     public Process Process { get; set; }
@@ -14,4 +16,5 @@ public class NovinTasks
     public string? OwnerId { get; set; }
     
     public IdentityUser? Owner { get; set; }
+    public string DeploymentKey { get; set; }
 }

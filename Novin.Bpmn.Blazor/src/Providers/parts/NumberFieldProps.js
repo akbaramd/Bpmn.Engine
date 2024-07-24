@@ -21,7 +21,7 @@ function NumberField(props) {
     const debounce = useService('debounceInput');
 
     const getValue = () => {
-        return element.businessObject.inputNumber || '';
+        return element.businessObject.get('inputNumber || '';
     };
 
     const setValue = value => {

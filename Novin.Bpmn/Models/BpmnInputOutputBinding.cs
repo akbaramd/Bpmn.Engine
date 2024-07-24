@@ -1,31 +1,37 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("ioBinding", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("ioBinding", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnInputOutputBinding : BpmnBaseElement
+public class BpmnInputOutputBinding : BpmnBaseElement
 {
-    private System.Xml.XmlQualifiedName operationRefField;
+    private XmlQualifiedName operationRefField;
 
     private string inputDataRefField;
 
     private string outputDataRefField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName operationRef
+    [XmlAttribute]
+    public XmlQualifiedName operationRef
     {
         get { return operationRefField; }
         set { operationRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "IDREF")]
+    [XmlAttribute(DataType = "IDREF")]
     public string inputDataRef
     {
         get { return inputDataRefField; }
@@ -33,7 +39,7 @@ public partial class BpmnInputOutputBinding : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "IDREF")]
+    [XmlAttribute(DataType = "IDREF")]
     public string outputDataRef
     {
         get { return outputDataRefField; }

@@ -1,18 +1,11 @@
-﻿using Microsoft.AspNetCore.Hosting;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
-using Novin.Bpmn;
-using Novin.Bpmn.Abstractions;
 using Novin.Bpmn.Dashbaord.Data;
 using Novin.Bpmn.Dashbaord.Models;
-using Novin.Bpmn.Models;
 
-namespace BpmnFileUploader.Controllers
+namespace Novin.Bpmn.Dashbaord.Controllers
 {
     [Authorize]
     public class BpmnController : Controller
@@ -52,10 +45,10 @@ namespace BpmnFileUploader.Controllers
 
             return RedirectToAction("Index");
         }
-        
+
         public IActionResult Processes(string fileName)
         {
-            var definition = context.Processes.Include(x=>x.Definition).Where(d => d.Definition.DefinationKey == fileName);
+            var definition = context.Processes.Include(x => x.Definition).Where(d => d.Definition.DefinationKey == fileName);
             if (definition == null)
             {
                 return NotFound();
@@ -70,48 +63,68 @@ namespace BpmnFileUploader.Controllers
             return View(viewModel);
         }
 
-
         [HttpPost]
         public IActionResult Delete(string deploymentKey)
         {
-            context.Definitions.Remove(context.Definitions.First(x => x.DefinationKey.Equals(deploymentKey)));
-            context.SaveChanges();
+            var definition = context.Definitions.FirstOrDefault(x => x.DefinationKey.Equals(deploymentKey));
+            if (definition != null)
+            {
+                context.Definitions.Remove(definition);
+                context.SaveChanges();
+            }
             return RedirectToAction("Index");
+        }
+
+        [HttpPost]
+        public IActionResult DeleteProcess(string processId)
+        {
+            var process = context.Processes.FirstOrDefault(x => x.Id.Equals(processId));
+            if (process != null)
+            {
+                context.Processes.Remove(process);
+                context.SaveChanges();
+            }
+            return RedirectToAction("Processes", new { fileName = process.Definition.DefinationKey });
         }
 
         public IActionResult Diagram(string fileName)
         {
-            ViewBag.FileName = fileName;
-            return View();
+            var defination = context.Definitions.First(x => x.DefinationKey.Equals(fileName));
+            return View(defination);
         }
-        
+
         [HttpPost]
         public IActionResult Save([FromBody] SaveDiagramRequest request)
         {
             // Update the BPMN definition in the storage
-            var defination = context.Definitions.First(x => x.DefinationKey.Equals(request.FileName));
+            var defination = context.Definitions.First(x => x.DefinationKey.Equals(request.DefinitionKey));
             defination.Content = request.BpmnXML;
-            context.Update(defination);
-            context.SaveChangesAsync();
+            context.Definitions.Update(defination);
+            context.SaveChanges();
             return Ok();
         }
-
 
         public async Task<IActionResult> Execute(string fileName)
         {
             var processEngine = await _engine.CreateProcessAsync(fileName);
-            await processEngine.StartProcess();
-            ViewBag.Paths = JsonConvert.SerializeObject(processEngine.GetExecutedPathsWithFlows());
-            ViewBag.FileName = fileName;
-            return View(processEngine.ProcessState);
+            var state = await processEngine.StartProcess();
+            return RedirectToAction("ProcessDetail", new { id = state.Id });
+        }
+
+        public IActionResult ProcessDetail(Guid id)
+        {
+            var process = context.Processes.Include(x => x.Definition).First(x => x.Id == id);
+            var state = JsonConvert.DeserializeObject<BpmnProcessInstance>(process.Content);
+            return View(state);
         }
     }
 
     public class SaveDiagramRequest
     {
-        public string FileName { get; set; }
+        public string DefinitionKey { get; set; }
         public string BpmnXML { get; set; }
     }
+
     public class ProcessViewModel
     {
         public string DefinitionKey { get; set; }

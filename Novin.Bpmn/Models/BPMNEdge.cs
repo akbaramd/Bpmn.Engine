@@ -1,21 +1,27 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/DI")]
-[System.Xml.Serialization.XmlRootAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/DI", IsNullable = false)]
-public partial class BPMNEdge : LabeledEdge
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/DI")]
+[XmlRoot(Namespace = "http://www.omg.org/spec/BPMN/20100524/DI", IsNullable = false)]
+public class BPMNEdge : LabeledEdge
 {
     private BPMNLabel bPMNLabelField;
 
-    private System.Xml.XmlQualifiedName bpmnElementField;
+    private XmlQualifiedName bpmnElementField;
 
-    private System.Xml.XmlQualifiedName sourceElementField;
+    private XmlQualifiedName sourceElementField;
 
-    private System.Xml.XmlQualifiedName targetElementField;
+    private XmlQualifiedName targetElementField;
 
     private MessageVisibleKind messageVisibleKindField;
 
@@ -29,31 +35,31 @@ public partial class BPMNEdge : LabeledEdge
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName bpmnElement
+    [XmlAttribute]
+    public XmlQualifiedName bpmnElement
     {
         get { return bpmnElementField; }
         set { bpmnElementField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName sourceElement
+    [XmlAttribute]
+    public XmlQualifiedName sourceElement
     {
         get { return sourceElementField; }
         set { sourceElementField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName targetElement
+    [XmlAttribute]
+    public XmlQualifiedName targetElement
     {
         get { return targetElementField; }
         set { targetElementField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public MessageVisibleKind messageVisibleKind
     {
         get { return messageVisibleKindField; }
@@ -61,7 +67,7 @@ public partial class BPMNEdge : LabeledEdge
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlIgnoreAttribute()]
+    [XmlIgnore]
     public bool messageVisibleKindSpecified
     {
         get { return messageVisibleKindFieldSpecified; }

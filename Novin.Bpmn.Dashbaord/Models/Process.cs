@@ -3,7 +3,6 @@
 public class Process
 {
     public Guid Id { get; set; }
-    public string ProcessId { get; set; }
     public string Content { get; set; }
 
     public Definitions Definition { get; set; }

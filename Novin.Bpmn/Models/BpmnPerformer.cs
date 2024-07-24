@@ -1,15 +1,20 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnHumanPerformer))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnPotentialOwner))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("performer", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[XmlInclude(typeof(BpmnHumanPerformer))]
+[XmlInclude(typeof(BpmnPotentialOwner))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("performer", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnPerformer : BpmnResourceRole
+public class BpmnPerformer : BpmnResourceRole
 {
 }

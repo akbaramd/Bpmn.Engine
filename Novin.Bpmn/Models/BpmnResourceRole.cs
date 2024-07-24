@@ -1,27 +1,33 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnPerformer))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnHumanPerformer))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnPotentialOwner))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("resourceRole", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[XmlInclude(typeof(BpmnPerformer))]
+[XmlInclude(typeof(BpmnHumanPerformer))]
+[XmlInclude(typeof(BpmnPotentialOwner))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("resourceRole", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnResourceRole : BpmnBaseElement
+public class BpmnResourceRole : BpmnBaseElement
 {
     private object[] itemsField;
 
     private string nameField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("resourceAssignmentExpression",
+    [XmlElement("resourceAssignmentExpression",
         typeof(BpmnResourceAssignmentExpression))]
-    [System.Xml.Serialization.XmlElementAttribute("resourceParameterBinding", typeof(BpmnResourceParameterBinding))]
-    [System.Xml.Serialization.XmlElementAttribute("resourceRef", typeof(System.Xml.XmlQualifiedName))]
+    [XmlElement("resourceParameterBinding", typeof(BpmnResourceParameterBinding))]
+    [XmlElement("resourceRef", typeof(XmlQualifiedName))]
     public object[] Items
     {
         get { return itemsField; }
@@ -29,7 +35,7 @@ public partial class BpmnResourceRole : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }

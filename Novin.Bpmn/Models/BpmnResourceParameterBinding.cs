@@ -1,22 +1,28 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("resourceParameterBinding",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("resourceParameterBinding",
     Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public partial class BpmnResourceParameterBinding : BpmnBaseElement
+public class BpmnResourceParameterBinding : BpmnBaseElement
 {
     private BpmnExpression itemField;
 
-    private System.Xml.XmlQualifiedName parameterRefField;
+    private XmlQualifiedName parameterRefField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("expression", typeof(BpmnExpression))]
-    [System.Xml.Serialization.XmlElementAttribute("formalExpression", typeof(BpmnFormalExpression))]
+    [XmlElement("expression", typeof(BpmnExpression))]
+    [XmlElement("formalExpression", typeof(BpmnFormalExpression))]
     public BpmnExpression Item
     {
         get { return itemField; }
@@ -24,8 +30,8 @@ public partial class BpmnResourceParameterBinding : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName parameterRef
+    [XmlAttribute]
+    public XmlQualifiedName parameterRef
     {
         get { return parameterRefField; }
         set { parameterRefField = value; }

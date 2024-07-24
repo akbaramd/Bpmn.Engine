@@ -1,16 +1,22 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("itemDefinition", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("itemDefinition", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnItemDefinition : BpmnRootElement
+public class BpmnItemDefinition : BpmnRootElement
 {
-    private System.Xml.XmlQualifiedName structureRefField;
+    private XmlQualifiedName structureRefField;
 
     private bool isCollectionField;
 
@@ -23,16 +29,16 @@ public partial class BpmnItemDefinition : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName structureRef
+    [XmlAttribute]
+    public XmlQualifiedName structureRef
     {
         get { return structureRefField; }
         set { structureRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute(false)]
+    [XmlAttribute]
+    [DefaultValue(false)]
     public bool isCollection
     {
         get { return isCollectionField; }
@@ -40,8 +46,8 @@ public partial class BpmnItemDefinition : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute(BpmnItemKind.Information)]
+    [XmlAttribute]
+    [DefaultValue(BpmnItemKind.Information)]
     public BpmnItemKind itemKind
     {
         get { return itemKindField; }

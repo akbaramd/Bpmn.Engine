@@ -1,18 +1,24 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(AnonymousType = true, Namespace = "http://www.omg.org/spec/DD/20100524/DI")]
-public partial class DiagramElementExtension
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(AnonymousType = true, Namespace = "http://www.omg.org/spec/DD/20100524/DI")]
+public class DiagramElementExtension
 {
-    private System.Xml.XmlElement[] anyField;
+    private XmlElement[] anyField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAnyElementAttribute()]
-    public System.Xml.XmlElement[] Any
+    [XmlAnyElement]
+    public XmlElement[] Any
     {
         get { return anyField; }
         set { anyField = value; }

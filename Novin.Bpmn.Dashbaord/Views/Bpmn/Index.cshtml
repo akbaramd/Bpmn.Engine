@@ -1,4 +1,5 @@
-﻿@model List<Definitions>
+﻿@using Microsoft.AspNetCore.Mvc.TagHelpers
+@model List<Novin.Bpmn.Dashbaord.Models.Definitions>
 
 <div class="card card-body mb-3">
     <form method="post" enctype="multipart/form-data" asp-action="Upload">
@@ -33,7 +34,7 @@
                                 <button type="submit" class="btn btn-danger">Delete</button>
                             </form>
                             <a asp-action="Diagram" asp-controller="Bpmn" asp-route-fileName="@definition.DefinationKey" class="btn btn-secondary">Diagram</a>
-                            <a asp-action="Processes" asp-controller="Bpmn" asp-route-fileName="@definition.DefinationKey" class="btn btn-secondary">Process</a>
+                            <a asp-action="Processes" asp-controller="Bpmn" asp-route-fileName="@definition.DefinationKey" class="btn btn-secondary">Processes</a>
                         </td>
                     </tr>
                 }

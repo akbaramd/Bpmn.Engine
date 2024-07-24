@@ -1,36 +1,42 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("participant", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("participant", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnParticipant : BpmnBaseElement
+public class BpmnParticipant : BpmnBaseElement
 {
-    private System.Xml.XmlQualifiedName[] interfaceRefField;
+    private XmlQualifiedName[] interfaceRefField;
 
-    private System.Xml.XmlQualifiedName[] endPointRefField;
+    private XmlQualifiedName[] endPointRefField;
 
     private BpmnParticipantMultiplicity participantMultiplicityField;
 
     private string nameField;
 
-    private System.Xml.XmlQualifiedName processRefField;
+    private XmlQualifiedName processRefField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("interfaceRef")]
-    public System.Xml.XmlQualifiedName[] interfaceRef
+    [XmlElement("interfaceRef")]
+    public XmlQualifiedName[] interfaceRef
     {
         get { return interfaceRefField; }
         set { interfaceRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("endPointRef")]
-    public System.Xml.XmlQualifiedName[] endPointRef
+    [XmlElement("endPointRef")]
+    public XmlQualifiedName[] endPointRef
     {
         get { return endPointRefField; }
         set { endPointRefField = value; }
@@ -44,7 +50,7 @@ public partial class BpmnParticipant : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }
@@ -52,8 +58,8 @@ public partial class BpmnParticipant : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName processRef
+    [XmlAttribute]
+    public XmlQualifiedName processRef
     {
         get { return processRefField; }
         set { processRefField = value; }

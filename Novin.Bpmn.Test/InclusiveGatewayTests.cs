@@ -1,7 +1,4 @@
-﻿using Novin.Bpmn;
-using Novin.Bpmn.Test;
-
-public class InclusiveGatewayTests
+﻿public class InclusiveGatewayTests
 {
     private readonly string _bpmnFilePath =
         "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\inclusive_fork_merge_test.bpmn";
@@ -40,7 +37,7 @@ public class InclusiveGatewayTests
         
         await engine.StartProcess(false);
         Assert.Equal(new[] { "Gateway_inclusive2", "Gateway_inclusive2", "Gateway_inclusive2"}, engine.processState.NodeQueue.Select(x => x.ElementId).ToArray());
-        Assert.Equal(new string[]{"Gateway_inclusive2", "Gateway_inclusive2", "Gateway_inclusive2"}, engine.processState.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
+        Assert.Equal(new[]{"Gateway_inclusive2", "Gateway_inclusive2", "Gateway_inclusive2"}, engine.processState.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
         
         await engine.StartProcess(false);
         Assert.Equal(new[] { "Gateway_inclusive2", "Gateway_inclusive2"}, engine.processState.NodeQueue.Select(x => x.ElementId).ToArray());
@@ -52,10 +49,10 @@ public class InclusiveGatewayTests
         
         await engine.StartProcess(false);
         Assert.Equal(new[] { "Activity_4"}, engine.processState.NodeQueue.Select(x => x.ElementId).ToArray());
-        Assert.Equal(new string[]{"Activity_4"}, engine.processState.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
+        Assert.Equal(new[]{"Activity_4"}, engine.processState.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
         
         await engine.StartProcess(false);
         Assert.Equal(new[] { "Event_End"}, engine.processState.NodeQueue.Select(x => x.ElementId).ToArray());
-        Assert.Equal(new string[]{"Event_End"}, engine.processState.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
+        Assert.Equal(new[]{"Event_End"}, engine.processState.NodeQueue.Where(x=>x.IsExecutable).Select(x => x.ElementId).ToArray());
     }
 }

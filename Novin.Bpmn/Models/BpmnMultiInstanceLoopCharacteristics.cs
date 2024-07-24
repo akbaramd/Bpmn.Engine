@@ -1,20 +1,26 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("multiInstanceLoopCharacteristics",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("multiInstanceLoopCharacteristics",
     Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public partial class BpmnMultiInstanceLoopCharacteristics : BpmnLoopCharacteristics
+public class BpmnMultiInstanceLoopCharacteristics : BpmnLoopCharacteristics
 {
     private BpmnExpression loopCardinalityField;
 
-    private System.Xml.XmlQualifiedName loopDataInputRefField;
+    private XmlQualifiedName loopDataInputRefField;
 
-    private System.Xml.XmlQualifiedName loopDataOutputRefField;
+    private XmlQualifiedName loopDataOutputRefField;
 
     private BpmnDataInput inputDataItemField;
 
@@ -28,9 +34,9 @@ public partial class BpmnMultiInstanceLoopCharacteristics : BpmnLoopCharacterist
 
     private BpmnMultiInstanceFlowCondition behaviorField;
 
-    private System.Xml.XmlQualifiedName oneBehaviorEventRefField;
+    private XmlQualifiedName oneBehaviorEventRefField;
 
-    private System.Xml.XmlQualifiedName noneBehaviorEventRefField;
+    private XmlQualifiedName noneBehaviorEventRefField;
 
     public BpmnMultiInstanceLoopCharacteristics()
     {
@@ -46,14 +52,14 @@ public partial class BpmnMultiInstanceLoopCharacteristics : BpmnLoopCharacterist
     }
 
     /// <remarks/>
-    public System.Xml.XmlQualifiedName loopDataInputRef
+    public XmlQualifiedName loopDataInputRef
     {
         get { return loopDataInputRefField; }
         set { loopDataInputRefField = value; }
     }
 
     /// <remarks/>
-    public System.Xml.XmlQualifiedName loopDataOutputRef
+    public XmlQualifiedName loopDataOutputRef
     {
         get { return loopDataOutputRefField; }
         set { loopDataOutputRefField = value; }
@@ -74,7 +80,7 @@ public partial class BpmnMultiInstanceLoopCharacteristics : BpmnLoopCharacterist
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("complexBehaviorDefinition")]
+    [XmlElement("complexBehaviorDefinition")]
     public BpmnComplexBehaviorDefinition[] complexBehaviorDefinition
     {
         get { return complexBehaviorDefinitionField; }
@@ -89,8 +95,8 @@ public partial class BpmnMultiInstanceLoopCharacteristics : BpmnLoopCharacterist
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute(false)]
+    [XmlAttribute]
+    [DefaultValue(false)]
     public bool isSequential
     {
         get { return isSequentialField; }
@@ -98,8 +104,8 @@ public partial class BpmnMultiInstanceLoopCharacteristics : BpmnLoopCharacterist
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute(BpmnMultiInstanceFlowCondition.All)]
+    [XmlAttribute]
+    [DefaultValue(BpmnMultiInstanceFlowCondition.All)]
     public BpmnMultiInstanceFlowCondition behavior
     {
         get { return behaviorField; }
@@ -107,16 +113,16 @@ public partial class BpmnMultiInstanceLoopCharacteristics : BpmnLoopCharacterist
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName oneBehaviorEventRef
+    [XmlAttribute]
+    public XmlQualifiedName oneBehaviorEventRef
     {
         get { return oneBehaviorEventRefField; }
         set { oneBehaviorEventRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName noneBehaviorEventRef
+    [XmlAttribute]
+    public XmlQualifiedName noneBehaviorEventRef
     {
         get { return noneBehaviorEventRefField; }
         set { noneBehaviorEventRefField = value; }

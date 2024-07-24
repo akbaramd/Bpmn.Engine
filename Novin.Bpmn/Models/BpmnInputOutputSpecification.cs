@@ -1,15 +1,20 @@
 ﻿#nullable disable
+using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
 namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("ioSpecification", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("ioSpecification", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnInputOutputSpecification : BpmnBaseElement
+public class BpmnInputOutputSpecification : BpmnBaseElement
 {
     private BpmnDataInput[] dataInputField;
 
@@ -20,7 +25,7 @@ public partial class BpmnInputOutputSpecification : BpmnBaseElement
     private BpmnOutputSet[] outputSetField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("dataInput")]
+    [XmlElement("dataInput")]
     public BpmnDataInput[] dataInput
     {
         get { return dataInputField; }
@@ -28,7 +33,7 @@ public partial class BpmnInputOutputSpecification : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("dataOutput")]
+    [XmlElement("dataOutput")]
     public BpmnDataOutput[] dataOutput
     {
         get { return dataOutputField; }
@@ -36,7 +41,7 @@ public partial class BpmnInputOutputSpecification : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("inputSet")]
+    [XmlElement("inputSet")]
     public BpmnInputSet[] inputSet
     {
         get { return inputSetField; }
@@ -44,7 +49,7 @@ public partial class BpmnInputOutputSpecification : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("outputSet")]
+    [XmlElement("outputSet")]
     public BpmnOutputSet[] outputSet
     {
         get { return outputSetField; }

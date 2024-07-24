@@ -1,17 +1,22 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnParallelGateway))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnInclusiveGateway))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnExclusiveGateway))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnEventBasedGateway))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnComplexGateway))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-public partial class BpmnGateway : BpmnFlowNode
+[XmlInclude(typeof(BpmnParallelGateway))]
+[XmlInclude(typeof(BpmnInclusiveGateway))]
+[XmlInclude(typeof(BpmnExclusiveGateway))]
+[XmlInclude(typeof(BpmnEventBasedGateway))]
+[XmlInclude(typeof(BpmnComplexGateway))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+public class BpmnGateway : BpmnFlowNode
 {
     private BpmnGatewayDirection gatewayDirectionField;
 
@@ -21,8 +26,8 @@ public partial class BpmnGateway : BpmnFlowNode
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute(BpmnGatewayDirection.Unspecified)]
+    [XmlAttribute]
+    [DefaultValue(BpmnGatewayDirection.Unspecified)]
     public BpmnGatewayDirection gatewayDirection
     {
         get { return gatewayDirectionField; }

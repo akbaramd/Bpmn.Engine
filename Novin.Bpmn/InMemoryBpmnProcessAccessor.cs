@@ -3,16 +3,16 @@ using Novin.Bpmn.Abstractions;
 
 namespace Novin.Bpmn;
 
-public class BpmnInMemoryProcessAccsessor : IProcessAccsessor
+public class InMemoryBpmnProcessAccessor : IBpmnProcessAccessor
 {
-    private readonly ConcurrentDictionary<string, BpmnProcessState?> processes = new();
+    private readonly ConcurrentDictionary<Guid, BpmnProcessInstance?> processes = new();
 
-    public void StoreProcessState(string deploymentKey,string processId, BpmnProcessState? processState)
+    public void StoreProcessState(string deploymentKey,Guid processId, BpmnProcessInstance? processState)
     {
         processes[processId] = processState;
     }
 
-    public BpmnProcessState? GetProcessState(string deploymentKey,string processId)
+    public BpmnProcessInstance? GetProcessState(Guid processId)
     {
         if (processes.TryGetValue(processId, out var processState))
         {

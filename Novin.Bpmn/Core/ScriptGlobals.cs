@@ -2,5 +2,5 @@
 
 public class ScriptGlobals
 {
-    public BpmnProcessState? State { get; set; }
+    public BpmnProcessInstance? State { get; set; }
 }

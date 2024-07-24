@@ -1,11 +1,16 @@
 ﻿@using Microsoft.AspNetCore.Mvc.TagHelpers
-@model BpmnFileUploader.Controllers.ProcessViewModel
+@model Novin.Bpmn.Dashbaord.Controllers.ProcessViewModel
+
+<div class="card card-body  mb-3">
+    <h2 class="mb-3">@Model.DefinitionKey</h2>
+
+    <hr/>
+    <div class="d-flex gap-3">
+        <a asp-action="Execute" asp-controller="Bpmn" asp-route-fileName="@Model.DefinitionKey" class="btn btn-secondary">Start New Process</a>
+    </div>
+</div>
 
 <div class="card card-body">
-    <h2>Processes for Definition: @Model.DefinitionKey</h2>
-
-    <a asp-action="Execute" asp-controller="Bpmn" asp-route-fileName="@Model.DefinitionKey" class="btn btn-secondary">Process</a>
-    
     @if (Model.Processes.Any())
     {
         <table class="table table-bordered">
@@ -20,11 +25,14 @@
             @foreach (var process in Model.Processes)
             {
                 <tr>
-                    <td>@process.ProcessId</td>
+                    <td>@process.Id</td>
                     <td>
-                        <form method="post" asp-action="ExecuteProcess" asp-controller="Bpmn" style="display:inline;">
-                            <input type="hidden" name="processInstanceId" value="@process.ProcessId" />
-                            <button type="submit" class="btn btn-primary">Execute</button>
+                        <a asp-action="ProcessDetail" asp-controller="Bpmn" asp-route-id="@process.Id" type="submit" class="btn btn-secondary">Details</a>
+                    </td>
+                    <td>
+                        <form asp-action="DeleteProcess" asp-controller="Bpmn" method="post" class="d-inline">
+                            <input type="hidden" name="processId" value="@process.Id" />
+                            <button type="submit" class="btn btn-danger">Delete</button>
                         </form>
                     </td>
                 </tr>

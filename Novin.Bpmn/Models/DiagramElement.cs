@@ -1,30 +1,36 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(Edge))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(LabeledEdge))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BPMNEdge))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(Node))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(Plane))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BPMNPlane))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(Label))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BPMNLabel))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(Shape))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(LabeledShape))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BPMNShape))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DI")]
-[System.Xml.Serialization.XmlRootAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DI", IsNullable = false)]
-public abstract partial class DiagramElement
+[XmlInclude(typeof(Edge))]
+[XmlInclude(typeof(LabeledEdge))]
+[XmlInclude(typeof(BPMNEdge))]
+[XmlInclude(typeof(Node))]
+[XmlInclude(typeof(Plane))]
+[XmlInclude(typeof(BPMNPlane))]
+[XmlInclude(typeof(Label))]
+[XmlInclude(typeof(BPMNLabel))]
+[XmlInclude(typeof(Shape))]
+[XmlInclude(typeof(LabeledShape))]
+[XmlInclude(typeof(BPMNShape))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/DD/20100524/DI")]
+[XmlRoot(Namespace = "http://www.omg.org/spec/DD/20100524/DI", IsNullable = false)]
+public abstract class DiagramElement
 {
     private DiagramElementExtension extensionField;
 
     private string idField;
 
-    private System.Xml.XmlAttribute[] anyAttrField;
+    private XmlAttribute[] anyAttrField;
 
     /// <remarks/>
     public DiagramElementExtension extension
@@ -34,7 +40,7 @@ public abstract partial class DiagramElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "ID")]
+    [XmlAttribute(DataType = "ID")]
     public string id
     {
         get { return idField; }
@@ -42,8 +48,8 @@ public abstract partial class DiagramElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAnyAttributeAttribute()]
-    public System.Xml.XmlAttribute[] AnyAttr
+    [XmlAnyAttribute]
+    public XmlAttribute[] AnyAttr
     {
         get { return anyAttrField; }
         set { anyAttrField = value; }

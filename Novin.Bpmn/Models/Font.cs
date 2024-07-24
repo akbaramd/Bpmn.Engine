@@ -1,13 +1,18 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DC")]
-[System.Xml.Serialization.XmlRootAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DC", IsNullable = false)]
-public partial class Font
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/DD/20100524/DC")]
+[XmlRoot(Namespace = "http://www.omg.org/spec/DD/20100524/DC", IsNullable = false)]
+public class Font
 {
     private string nameField;
 
@@ -32,7 +37,7 @@ public partial class Font
     private bool isStrikeThroughFieldSpecified;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }
@@ -40,7 +45,7 @@ public partial class Font
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public double size
     {
         get { return sizeField; }
@@ -48,7 +53,7 @@ public partial class Font
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlIgnoreAttribute()]
+    [XmlIgnore]
     public bool sizeSpecified
     {
         get { return sizeFieldSpecified; }
@@ -56,7 +61,7 @@ public partial class Font
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public bool isBold
     {
         get { return isBoldField; }
@@ -64,7 +69,7 @@ public partial class Font
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlIgnoreAttribute()]
+    [XmlIgnore]
     public bool isBoldSpecified
     {
         get { return isBoldFieldSpecified; }
@@ -72,7 +77,7 @@ public partial class Font
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public bool isItalic
     {
         get { return isItalicField; }
@@ -80,7 +85,7 @@ public partial class Font
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlIgnoreAttribute()]
+    [XmlIgnore]
     public bool isItalicSpecified
     {
         get { return isItalicFieldSpecified; }
@@ -88,7 +93,7 @@ public partial class Font
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public bool isUnderline
     {
         get { return isUnderlineField; }
@@ -96,7 +101,7 @@ public partial class Font
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlIgnoreAttribute()]
+    [XmlIgnore]
     public bool isUnderlineSpecified
     {
         get { return isUnderlineFieldSpecified; }
@@ -104,7 +109,7 @@ public partial class Font
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public bool isStrikeThrough
     {
         get { return isStrikeThroughField; }
@@ -112,7 +117,7 @@ public partial class Font
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlIgnoreAttribute()]
+    [XmlIgnore]
     public bool isStrikeThroughSpecified
     {
         get { return isStrikeThroughFieldSpecified; }

@@ -1,7 +1,7 @@
 ﻿@using System.Text.Json
 @using Newtonsoft.Json
 @using JsonSerializer = System.Text.Json.JsonSerializer
-@model Novin.Bpmn.BpmnProcessState
+@model Novin.Bpmn.BpmnProcessInstance
 <style>
     .highlight {
         stroke: green !important;
@@ -71,9 +71,9 @@
                         <tbody>
                         @foreach (var node in Model.NodeQueue)
                         {
-                        <tr>
-                            <td>@node.Id</td>
-                        </tr>
+                            <tr>
+                                <td>@node.Id</td>
+                            </tr>
                         }
                         </tbody>
                     </table>
@@ -96,9 +96,9 @@
                         <tbody>
                         @foreach (var node in Model.NodeStack)
                         {
-                        <tr>
-                            <td>@node.Id</td>
-                        </tr>
+                            <tr>
+                                <td>@node.Id</td>
+                            </tr>
                         }
                         </tbody>
                     </table>
@@ -122,12 +122,12 @@
                         </tr>
                         </thead>
                         <tbody>
-                        @foreach (var kvp in Model.NodeStack.Select(x=>x.UserTask))
+                        @foreach (var kvp in Model.NodeStack.Where(x=>x.UserTask is not null).Select(x => x.UserTask))
                         {
-                        <tr>
-                            <td>@kvp.TaskId</td>
-                            <td>@kvp.Name</td>
-                        </tr>
+                            <tr>
+                                <td>@kvp.TaskId</td>
+                                <td>@kvp.Name</td>
+                            </tr>
                         }
                         </tbody>
                     </table>
@@ -153,25 +153,25 @@
                         <tbody>
                         @foreach (var node in Model.NodeStack)
                         {
-                        <tr>
-                            <td>@node.Id</td>
-                            <td>
-                                <p>Is Expired: @node.IsExpired</p>
-                                <p>ExpiredAt: @node.ExpiredAt</p>
-                            </td>
-                            <td>
-                                @foreach (var flow in node.IncomingFlows)
-                                {
-                                <p>@flow.id</p>
-                                }
-                            </td>
-                            <td>
-                                @foreach (var flow in node.OutgoingFlows)
-                                {
-                                <p>@flow.id</p>
-                                }
-                            </td>
-                        </tr>
+                            <tr>
+                                <td>@node.Id</td>
+                                <td>
+                                    <p>Is Expired: @node.IsExpired</p>
+                                    <p>ExpiredAt: @node.ExpiredAt</p>
+                                </td>
+                                <td>
+                                    @foreach (var flow in node.IncomingFlows)
+                                    {
+                                        <p>@flow.id</p>
+                                    }
+                                </td>
+                                <td>
+                                    @foreach (var flow in node.OutgoingFlows)
+                                    {
+                                        <p>@flow.id</p>
+                                    }
+                                </td>
+                            </tr>
                         }
                         </tbody>
                     </table>
@@ -184,8 +184,7 @@
 <script src="~/js/bundle.js"></script>
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        const paths = @Html.Raw(ViewBag.Paths);
-        const fileName = "/uploads/@ViewBag.FileName";
-        bpmn.initializeViewer(fileName, paths);
+        const paths = @Html.Raw(JsonConvert.SerializeObject(Model.GetExecutedPathsWithFlows()));
+        bpmn.initializeViewer(`/api/bpmn/content/process/@Model.Id`, paths);
     });
 </script>

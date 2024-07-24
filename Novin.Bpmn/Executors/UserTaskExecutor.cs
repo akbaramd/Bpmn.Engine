@@ -1,38 +1,49 @@
-﻿using Novin.Bpmn;
-using Novin.Bpmn.Abstractions;
+﻿using Novin.Bpmn.Abstractions;
 using Novin.Bpmn.Executors.Abstracts;
+using Novin.Bpmn.Handlers;
 using Novin.Bpmn.Models;
-using BpmnTask = Novin.Bpmn.BpmnTask;
+
+namespace Novin.Bpmn.Executors;
 
 public class UserTaskExecutor : IExecutor
 {
-    private readonly ITaskStorage _taskStorage;
-    private readonly IUserAccessor userAccessor;
+    private readonly IBpmnTaskAccessor _bpmnTaskAccessor;
+    private readonly IBpmnUserAccessor _bpmnUserAccessor;
 
-    public UserTaskExecutor(ITaskStorage taskStorage, IUserAccessor userAccessor)
+    public UserTaskExecutor(IBpmnTaskAccessor bpmnTaskAccessor, IBpmnUserAccessor bpmnUserAccessor)
     {
-        _taskStorage = taskStorage;
-        this.userAccessor = userAccessor;
+        _bpmnTaskAccessor = bpmnTaskAccessor;
+        _bpmnUserAccessor = bpmnUserAccessor;
     }
 
     public async Task ExecuteAsync(BpmnProcessNode processNode, BpmnProcessEngine processEngine)
     {
+        if (processNode.UserTask is not null && processNode.UserTask.IsCompleted) return;
+        
         var element = processEngine.DefinitionsHandler.GetElementById(processNode.ElementId);
         if (element is BpmnUserTask userTask)
         {
-            var customTask = new BpmnTask()
-            {
-                TaskId = processNode.Id.ToString(),
-                Name = userTask.name,
-                CandidateUsers = userTask.CandidateUsers?.Split(',').ToList(),
-                CandidateGroups = userTask.CandidateGroups?.Split(',').ToList(),
-                Assignee = userTask.Assignee,
-                ProcessId = processEngine.ProcessState.Id,
-                IsCompleted = false
-            };
-
+            var customTask = CreateUserTask(userTask, processNode, processEngine.Instance);
             processNode.AddUserTask(customTask);
-            await _taskStorage.AddTaskAsync(customTask);
+            await _bpmnTaskAccessor.StoreTask(customTask);
         }
+    }
+
+    private BpmnTask CreateUserTask(BpmnUserTask userTask, BpmnProcessNode processNode, BpmnProcessInstance instance)
+    {
+        var customTask = new BpmnTask(
+            processNode.Id.ToString(),
+            userTask.name,
+            userTask.assignee,
+            instance.Id,
+            instance.DeploymentKey);
+
+        if (!string.IsNullOrEmpty(userTask.candidateUsers))
+            customTask.AddCandidateUsers(userTask.candidateUsers.Split(','));
+
+        if (!string.IsNullOrEmpty(userTask.candidateGroups))
+            customTask.AddCandidateGroups(userTask.candidateGroups.Split(','));
+
+        return customTask;
     }
 }

@@ -1,49 +1,55 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("operation", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("operation", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnOperation : BpmnBaseElement
+public class BpmnOperation : BpmnBaseElement
 {
-    private System.Xml.XmlQualifiedName inMessageRefField;
+    private XmlQualifiedName inMessageRefField;
 
-    private System.Xml.XmlQualifiedName outMessageRefField;
+    private XmlQualifiedName outMessageRefField;
 
-    private System.Xml.XmlQualifiedName[] errorRefField;
+    private XmlQualifiedName[] errorRefField;
 
     private string nameField;
 
-    private System.Xml.XmlQualifiedName implementationRefField;
+    private XmlQualifiedName implementationRefField;
 
     /// <remarks/>
-    public System.Xml.XmlQualifiedName inMessageRef
+    public XmlQualifiedName inMessageRef
     {
         get { return inMessageRefField; }
         set { inMessageRefField = value; }
     }
 
     /// <remarks/>
-    public System.Xml.XmlQualifiedName outMessageRef
+    public XmlQualifiedName outMessageRef
     {
         get { return outMessageRefField; }
         set { outMessageRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("errorRef")]
-    public System.Xml.XmlQualifiedName[] errorRef
+    [XmlElement("errorRef")]
+    public XmlQualifiedName[] errorRef
     {
         get { return errorRefField; }
         set { errorRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }
@@ -51,8 +57,8 @@ public partial class BpmnOperation : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName implementationRef
+    [XmlAttribute]
+    public XmlQualifiedName implementationRef
     {
         get { return implementationRefField; }
         set { implementationRefField = value; }

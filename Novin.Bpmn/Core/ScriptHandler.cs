@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Dynamic;
+using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
@@ -22,7 +23,7 @@ namespace Novin.Bpmn.Core
                         MetadataReference.CreateFromFile(typeof(Binder).GetTypeInfo().Assembly.Location),
                         MetadataReference.CreateFromFile(typeof(object).GetTypeInfo().Assembly.Location),
                         MetadataReference.CreateFromFile(typeof(Enumerable).GetTypeInfo().Assembly.Location),
-                        MetadataReference.CreateFromFile(typeof(System.Dynamic.ExpandoObject).Assembly.Location)
+                        MetadataReference.CreateFromFile(typeof(ExpandoObject).Assembly.Location)
                     }))
                 .WithImports(
                     "System",

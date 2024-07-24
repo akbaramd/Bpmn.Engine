@@ -1,18 +1,24 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("relationship", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("relationship", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnRelationship : BpmnBaseElement
+public class BpmnRelationship : BpmnBaseElement
 {
-    private System.Xml.XmlQualifiedName[] sourceField;
+    private XmlQualifiedName[] sourceField;
 
-    private System.Xml.XmlQualifiedName[] targetField;
+    private XmlQualifiedName[] targetField;
 
     private string typeField;
 
@@ -21,23 +27,23 @@ public partial class BpmnRelationship : BpmnBaseElement
     private bool directionFieldSpecified;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("source")]
-    public System.Xml.XmlQualifiedName[] source
+    [XmlElement("source")]
+    public XmlQualifiedName[] source
     {
         get { return sourceField; }
         set { sourceField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("target")]
-    public System.Xml.XmlQualifiedName[] target
+    [XmlElement("target")]
+    public XmlQualifiedName[] target
     {
         get { return targetField; }
         set { targetField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string type
     {
         get { return typeField; }
@@ -45,7 +51,7 @@ public partial class BpmnRelationship : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public BpmnRelationshipDirection direction
     {
         get { return directionField; }
@@ -53,7 +59,7 @@ public partial class BpmnRelationship : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlIgnoreAttribute()]
+    [XmlIgnore]
     public bool directionSpecified
     {
         get { return directionFieldSpecified; }

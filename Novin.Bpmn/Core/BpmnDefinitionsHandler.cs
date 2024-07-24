@@ -10,6 +10,12 @@ public class BpmnDefinitionsHandler
     {
         Definitions = definitions;
     }
+    public BpmnDefinitionsHandler(string definitions)
+    {
+        Definitions = BpmnDefinitionSerializer.Deserialize(
+            definitions);
+    }
+
 
     public BpmnProcess GetFirstProcess()
     {

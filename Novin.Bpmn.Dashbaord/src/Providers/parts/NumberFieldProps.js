@@ -21,7 +21,7 @@ function ImplementationField(props) {
     const debounce = useService('debounceInput');
 
     const getValue = () => {
-        return element.businessObject.implementation || '';
+        return element.businessObject.get('implementation') || '';
     };
 
     const setValue = value => {

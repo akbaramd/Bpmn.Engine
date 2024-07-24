@@ -1,0 +1,60 @@
+﻿@model List<Novin.Bpmn.Dashbaord.Models.NovinTasks>
+
+<div class="card card-body">
+    <h2>Tasks List</h2>
+    @if (Model.Any())
+    {
+    <table class="table table-bordered">
+        <thead>
+        <tr>
+            <th>Task Name</th>
+            <th>Assignee</th>
+            <th>Candidate Users</th>
+            <th>Candidate Groups</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var task in Model)
+        {
+        <tr>
+            <td>@task.Name</td>
+            <td>@task.Assignee</td>
+            <td>@task.CandidateByUsers</td>
+            <td>@task.CandidateByGroups</td>
+            <td>
+                <form method="post" asp-action="Complete" asp-controller="Task" style="display:inline;">
+                    <input type="hidden" name="taskId" value="@task.Id" />
+                    <button type="submit" class="btn btn-success">Complete</button>
+                </form>
+                <a asp-action="Details" asp-controller="Task" asp-route-id="@task.Id" class="btn btn-secondary">Details</a>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="5">
+                <div class="card card-body">
+                    <dl class="row">
+                        <dt class="col-sm-2">Task Name</dt>
+                        <dd class="col-sm-10">@task.Name</dd>
+
+                        <dt class="col-sm-2">Assignee</dt>
+                        <dd class="col-sm-10">@task.Assignee</dd>
+
+                        <dt class="col-sm-2">Candidate Users</dt>
+                        <dd class="col-sm-10">@task.CandidateByUsers</dd>
+
+                        <dt class="col-sm-2">Candidate Groups</dt>
+                        <dd class="col-sm-10">@task.CandidateByGroups</dd>
+                    </dl>
+                </div>
+            </td>
+        </tr>
+        }
+        </tbody>
+    </table>
+    }
+    else
+    {
+    <p>No tasks available.</p>
+    }
+</div>

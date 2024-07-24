@@ -1,14 +1,20 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("definitions", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("definitions", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnDefinitions
+public class BpmnDefinitions
 {
     private BpmnImport[] importField;
 
@@ -34,7 +40,7 @@ public partial class BpmnDefinitions
 
     private string exporterVersionField;
 
-    private System.Xml.XmlAttribute[] anyAttrField;
+    private XmlAttribute[] anyAttrField;
 
     public BpmnDefinitions()
     {
@@ -43,7 +49,7 @@ public partial class BpmnDefinitions
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("import")]
+    [XmlElement("import")]
     public BpmnImport[] import
     {
         get { return importField; }
@@ -51,7 +57,7 @@ public partial class BpmnDefinitions
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("extension")]
+    [XmlElement("extension")]
     public BpmnExtension[] extension
     {
         get { return extensionField; }
@@ -59,28 +65,28 @@ public partial class BpmnDefinitions
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("category", typeof(BpmnCategory))]
-    [System.Xml.Serialization.XmlElementAttribute("collaboration", typeof(BpmnCollaboration))]
-    [System.Xml.Serialization.XmlElementAttribute("correlationProperty", typeof(BpmnCorrelationProperty))]
-    [System.Xml.Serialization.XmlElementAttribute("dataStore", typeof(BpmnDataStore))]
-    [System.Xml.Serialization.XmlElementAttribute("endPoint", typeof(BpmnEndPoint))]
-    [System.Xml.Serialization.XmlElementAttribute("error", typeof(BpmnError))]
-    [System.Xml.Serialization.XmlElementAttribute("escalation", typeof(BpmnEscalation))]
-    [System.Xml.Serialization.XmlElementAttribute("eventDefinition", typeof(BpmnEventDefinition))]
-    [System.Xml.Serialization.XmlElementAttribute("globalBusinessRuleTask", typeof(BpmnGlobalBusinessRuleTask))]
-    [System.Xml.Serialization.XmlElementAttribute("globalManualTask", typeof(BpmnGlobalManualTask))]
-    [System.Xml.Serialization.XmlElementAttribute("globalScriptTask", typeof(BpmnGlobalScriptTask))]
-    [System.Xml.Serialization.XmlElementAttribute("globalTask", typeof(BpmnGlobalTask))]
-    [System.Xml.Serialization.XmlElementAttribute("globalUserTask", typeof(BpmnGlobalUserTask))]
-    [System.Xml.Serialization.XmlElementAttribute("interface", typeof(BpmnInterface))]
-    [System.Xml.Serialization.XmlElementAttribute("itemDefinition", typeof(BpmnItemDefinition))]
-    [System.Xml.Serialization.XmlElementAttribute("message", typeof(BpmnMessage))]
-    [System.Xml.Serialization.XmlElementAttribute("partnerEntity", typeof(BpmnPartnerEntity))]
-    [System.Xml.Serialization.XmlElementAttribute("partnerRole", typeof(BpmnPartnerRole))]
-    [System.Xml.Serialization.XmlElementAttribute("process", typeof(BpmnProcess))]
-    [System.Xml.Serialization.XmlElementAttribute("resource", typeof(BpmnResource))]
-    [System.Xml.Serialization.XmlElementAttribute("rootElement", typeof(BpmnRootElement))]
-    [System.Xml.Serialization.XmlElementAttribute("signal", typeof(BpmnSignal))]
+    [XmlElement("category", typeof(BpmnCategory))]
+    [XmlElement("collaboration", typeof(BpmnCollaboration))]
+    [XmlElement("correlationProperty", typeof(BpmnCorrelationProperty))]
+    [XmlElement("dataStore", typeof(BpmnDataStore))]
+    [XmlElement("endPoint", typeof(BpmnEndPoint))]
+    [XmlElement("error", typeof(BpmnError))]
+    [XmlElement("escalation", typeof(BpmnEscalation))]
+    [XmlElement("eventDefinition", typeof(BpmnEventDefinition))]
+    [XmlElement("globalBusinessRuleTask", typeof(BpmnGlobalBusinessRuleTask))]
+    [XmlElement("globalManualTask", typeof(BpmnGlobalManualTask))]
+    [XmlElement("globalScriptTask", typeof(BpmnGlobalScriptTask))]
+    [XmlElement("globalTask", typeof(BpmnGlobalTask))]
+    [XmlElement("globalUserTask", typeof(BpmnGlobalUserTask))]
+    [XmlElement("interface", typeof(BpmnInterface))]
+    [XmlElement("itemDefinition", typeof(BpmnItemDefinition))]
+    [XmlElement("message", typeof(BpmnMessage))]
+    [XmlElement("partnerEntity", typeof(BpmnPartnerEntity))]
+    [XmlElement("partnerRole", typeof(BpmnPartnerRole))]
+    [XmlElement("process", typeof(BpmnProcess))]
+    [XmlElement("resource", typeof(BpmnResource))]
+    [XmlElement("rootElement", typeof(BpmnRootElement))]
+    [XmlElement("signal", typeof(BpmnSignal))]
     public BpmnRootElement[] Items
     {
         get { return itemsField; }
@@ -88,7 +94,7 @@ public partial class BpmnDefinitions
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("BPMNDiagram",
+    [XmlElement("BPMNDiagram",
         Namespace = "http://www.omg.org/spec/BPMN/20100524/DI")]
     public BPMNDiagram[] BPMNDiagram
     {
@@ -97,7 +103,7 @@ public partial class BpmnDefinitions
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("relationship")]
+    [XmlElement("relationship")]
     public BpmnRelationship[] relationship
     {
         get { return relationshipField; }
@@ -105,7 +111,7 @@ public partial class BpmnDefinitions
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "ID")]
+    [XmlAttribute(DataType = "ID")]
     public string id
     {
         get { return idField; }
@@ -113,7 +119,7 @@ public partial class BpmnDefinitions
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }
@@ -121,7 +127,7 @@ public partial class BpmnDefinitions
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "anyURI")]
+    [XmlAttribute(DataType = "anyURI")]
     public string targetNamespace
     {
         get { return targetNamespaceField; }
@@ -129,8 +135,8 @@ public partial class BpmnDefinitions
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "anyURI")]
-    [System.ComponentModel.DefaultValueAttribute("http://www.w3.org/1999/XPath")]
+    [XmlAttribute(DataType = "anyURI")]
+    [DefaultValue("http://www.w3.org/1999/XPath")]
     public string expressionLanguage
     {
         get { return expressionLanguageField; }
@@ -138,8 +144,8 @@ public partial class BpmnDefinitions
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "anyURI")]
-    [System.ComponentModel.DefaultValueAttribute("http://www.w3.org/2001/XMLSchema")]
+    [XmlAttribute(DataType = "anyURI")]
+    [DefaultValue("http://www.w3.org/2001/XMLSchema")]
     public string typeLanguage
     {
         get { return typeLanguageField; }
@@ -147,7 +153,7 @@ public partial class BpmnDefinitions
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string exporter
     {
         get { return exporterField; }
@@ -155,7 +161,7 @@ public partial class BpmnDefinitions
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string exporterVersion
     {
         get { return exporterVersionField; }
@@ -163,8 +169,8 @@ public partial class BpmnDefinitions
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAnyAttributeAttribute()]
-    public System.Xml.XmlAttribute[] AnyAttr
+    [XmlAnyAttribute]
+    public XmlAttribute[] AnyAttr
     {
         get { return anyAttrField; }
         set { anyAttrField = value; }

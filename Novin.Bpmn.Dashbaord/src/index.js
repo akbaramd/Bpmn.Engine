@@ -9,7 +9,7 @@ import magicModdleDescriptor from './Providers/descriptors/magic.json';
 
 let bpmnModeler;
 
-export function initializeModeler(diagramUrl) {
+export function initializeModeler(definitionKey) {
     bpmnModeler = new BpmnModeler({
         container: '#canvas',
         propertiesPanel: {
@@ -25,7 +25,7 @@ export function initializeModeler(diagramUrl) {
         }
     });
 
-    fetch(`${diagramUrl}?v=${new Date().getTime()}`)
+    fetch(`/api/bpmn/content/${definitionKey}`)
         .then(response => response.text())
         .then(bpmnXML => {
             console.log(bpmnXML);
@@ -40,14 +40,14 @@ export function initializeModeler(diagramUrl) {
         .catch(err => console.error('Error loading BPMN diagram', err));
 }
 
-export function initializeViewer(diagramUrl,details) {
+export function initializeViewer(url,details) {
     
   
     const viewer = new BpmnViewer({
         container: '#canvas'
     });
 
-    fetch(`${diagramUrl}?v=${new Date().getTime()}`)
+    fetch(url)
         .then(response => response.text())
         .then(async bpmnXML => {
             try {
@@ -56,7 +56,8 @@ export function initializeViewer(diagramUrl,details) {
                 const elementRegistry = await viewer.get('elementRegistry');
                 canvas.zoom('fit-viewport');
 
-             
+                console.log(canvas)
+                console.log(elementRegistry)
                 
                 details.filter(x=>x.IsActive).forEach(function (node) {
                     const id = node.ElementId;
@@ -93,7 +94,7 @@ export function initializeViewer(diagramUrl,details) {
                     }
                 });
 
-                details.filter(x=>x.HasUserTask).forEach(function (node) {
+                details.filter(x=>x.IsWaiting).forEach(function (node) {
                     const id = node.ElementId;
                     const element = elementRegistry.get(id);
                     console.log(element)
@@ -137,7 +138,7 @@ export async function exportDiagram() {
     return res.xml;
 }
 
-export async function saveChanges(fileName) {
+export async function saveChanges(definitionKey) {
     const updatedXML = await exportDiagram();
 
     const response = await fetch('/Bpmn/Save', {
@@ -145,7 +146,7 @@ export async function saveChanges(fileName) {
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ fileName: fileName, bpmnXML: updatedXML })
+        body: JSON.stringify({ definitionKey: definitionKey, bpmnXML: updatedXML })
     });
 
     if (!response.ok) {

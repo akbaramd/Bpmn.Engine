@@ -1,27 +1,32 @@
 ﻿#nullable disable
+using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
 namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnUserTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnServiceTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnSendTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnScriptTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnReceiveTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnManualTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnBusinessRuleTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnSubProcess))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnTransaction))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnAdHocSubProcess))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnCallActivity))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("activity", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[XmlInclude(typeof(BpmnTask))]
+[XmlInclude(typeof(BpmnUserTask))]
+[XmlInclude(typeof(BpmnServiceTask))]
+[XmlInclude(typeof(BpmnSendTask))]
+[XmlInclude(typeof(BpmnScriptTask))]
+[XmlInclude(typeof(BpmnReceiveTask))]
+[XmlInclude(typeof(BpmnManualTask))]
+[XmlInclude(typeof(BpmnBusinessRuleTask))]
+[XmlInclude(typeof(BpmnSubProcess))]
+[XmlInclude(typeof(BpmnTransaction))]
+[XmlInclude(typeof(BpmnAdHocSubProcess))]
+[XmlInclude(typeof(BpmnCallActivity))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("activity", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public abstract partial class BpmnActivity : BpmnFlowNode
+public abstract class BpmnActivity : BpmnFlowNode
 {
     private BpmnInputOutputSpecification ioSpecificationField;
 
@@ -58,7 +63,7 @@ public abstract partial class BpmnActivity : BpmnFlowNode
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("property")]
+    [XmlElement("property")]
     public BpmnProperty[] property
     {
         get { return propertyField; }
@@ -66,7 +71,7 @@ public abstract partial class BpmnActivity : BpmnFlowNode
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("dataInputAssociation")]
+    [XmlElement("dataInputAssociation")]
     public BpmnDataInputAssociation[] dataInputAssociation
     {
         get { return dataInputAssociationField; }
@@ -74,7 +79,7 @@ public abstract partial class BpmnActivity : BpmnFlowNode
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("dataOutputAssociation")]
+    [XmlElement("dataOutputAssociation")]
     public BpmnDataOutputAssociation[] dataOutputAssociation
     {
         get { return dataOutputAssociationField; }
@@ -82,8 +87,8 @@ public abstract partial class BpmnActivity : BpmnFlowNode
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("performer", typeof(BpmnPerformer))]
-    [System.Xml.Serialization.XmlElementAttribute("resourceRole", typeof(BpmnResourceRole))]
+    [XmlElement("performer", typeof(BpmnPerformer))]
+    [XmlElement("resourceRole", typeof(BpmnResourceRole))]
     public BpmnResourceRole[] Items
     {
         get { return itemsField; }
@@ -91,10 +96,10 @@ public abstract partial class BpmnActivity : BpmnFlowNode
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("loopCharacteristics", typeof(BpmnLoopCharacteristics))]
-    [System.Xml.Serialization.XmlElementAttribute("multiInstanceLoopCharacteristics",
+    [XmlElement("loopCharacteristics", typeof(BpmnLoopCharacteristics))]
+    [XmlElement("multiInstanceLoopCharacteristics",
         typeof(BpmnMultiInstanceLoopCharacteristics))]
-    [System.Xml.Serialization.XmlElementAttribute("standardLoopCharacteristics",
+    [XmlElement("standardLoopCharacteristics",
         typeof(BpmnStandardLoopCharacteristics))]
     public BpmnLoopCharacteristics Item
     {
@@ -103,8 +108,8 @@ public abstract partial class BpmnActivity : BpmnFlowNode
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute(false)]
+    [XmlAttribute]
+    [DefaultValue(false)]
     public bool isForCompensation
     {
         get { return isForCompensationField; }
@@ -112,8 +117,8 @@ public abstract partial class BpmnActivity : BpmnFlowNode
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "integer")]
-    [System.ComponentModel.DefaultValueAttribute("1")]
+    [XmlAttribute(DataType = "integer")]
+    [DefaultValue("1")]
     public string startQuantity
     {
         get { return startQuantityField; }
@@ -121,8 +126,8 @@ public abstract partial class BpmnActivity : BpmnFlowNode
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "integer")]
-    [System.ComponentModel.DefaultValueAttribute("1")]
+    [XmlAttribute(DataType = "integer")]
+    [DefaultValue("1")]
     public string completionQuantity
     {
         get { return completionQuantityField; }
@@ -130,7 +135,7 @@ public abstract partial class BpmnActivity : BpmnFlowNode
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "IDREF")]
+    [XmlAttribute(DataType = "IDREF")]
     public string @default
     {
         get { return defaultField; }

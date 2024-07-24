@@ -21,7 +21,7 @@ function ScriptField(props) {
     const debounce = useService('debounceInput');
 
     const getValue = () => {
-        return element.businessObject.script || '';
+        return element.businessObject.get('script') || '';
     };
 
     const setValue = value => {

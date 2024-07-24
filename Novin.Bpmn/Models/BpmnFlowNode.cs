@@ -1,62 +1,68 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnGateway))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnParallelGateway))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnInclusiveGateway))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnExclusiveGateway))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnEventBasedGateway))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnComplexGateway))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnChoreographyActivity))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnSubChoreography))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnChoreographyTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnCallChoreography))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnThrowEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnIntermediateThrowEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnImplicitThrowEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnEndEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnCatchEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnStartEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnIntermediateCatchEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnBoundaryEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnActivity))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnUserTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnServiceTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnSendTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnScriptTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnReceiveTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnManualTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnBusinessRuleTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnSubProcess))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnTransaction))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnAdHocSubProcess))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnCallActivity))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("flowNode", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[XmlInclude(typeof(BpmnGateway))]
+[XmlInclude(typeof(BpmnParallelGateway))]
+[XmlInclude(typeof(BpmnInclusiveGateway))]
+[XmlInclude(typeof(BpmnExclusiveGateway))]
+[XmlInclude(typeof(BpmnEventBasedGateway))]
+[XmlInclude(typeof(BpmnComplexGateway))]
+[XmlInclude(typeof(BpmnChoreographyActivity))]
+[XmlInclude(typeof(BpmnSubChoreography))]
+[XmlInclude(typeof(BpmnChoreographyTask))]
+[XmlInclude(typeof(BpmnCallChoreography))]
+[XmlInclude(typeof(BpmnEvent))]
+[XmlInclude(typeof(BpmnThrowEvent))]
+[XmlInclude(typeof(BpmnIntermediateThrowEvent))]
+[XmlInclude(typeof(BpmnImplicitThrowEvent))]
+[XmlInclude(typeof(BpmnEndEvent))]
+[XmlInclude(typeof(BpmnCatchEvent))]
+[XmlInclude(typeof(BpmnStartEvent))]
+[XmlInclude(typeof(BpmnIntermediateCatchEvent))]
+[XmlInclude(typeof(BpmnBoundaryEvent))]
+[XmlInclude(typeof(BpmnActivity))]
+[XmlInclude(typeof(BpmnTask))]
+[XmlInclude(typeof(BpmnUserTask))]
+[XmlInclude(typeof(BpmnServiceTask))]
+[XmlInclude(typeof(BpmnSendTask))]
+[XmlInclude(typeof(BpmnScriptTask))]
+[XmlInclude(typeof(BpmnReceiveTask))]
+[XmlInclude(typeof(BpmnManualTask))]
+[XmlInclude(typeof(BpmnBusinessRuleTask))]
+[XmlInclude(typeof(BpmnSubProcess))]
+[XmlInclude(typeof(BpmnTransaction))]
+[XmlInclude(typeof(BpmnAdHocSubProcess))]
+[XmlInclude(typeof(BpmnCallActivity))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("flowNode", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public abstract partial class BpmnFlowNode : BpmnFlowElement
+public abstract class BpmnFlowNode : BpmnFlowElement
 {
-    private System.Xml.XmlQualifiedName[] incomingField;
+    private XmlQualifiedName[] incomingField;
 
-    private System.Xml.XmlQualifiedName[] outgoingField;
+    private XmlQualifiedName[] outgoingField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("incoming")]
-    public System.Xml.XmlQualifiedName[] incoming
+    [XmlElement("incoming")]
+    public XmlQualifiedName[] incoming
     {
         get { return incomingField; }
         set { incomingField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("outgoing")]
-    public System.Xml.XmlQualifiedName[] outgoing
+    [XmlElement("outgoing")]
+    public XmlQualifiedName[] outgoing
     {
         get { return outgoingField; }
         set { outgoingField = value; }

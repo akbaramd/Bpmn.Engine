@@ -1,15 +1,18 @@
-﻿using System.Xml.Serialization;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
 
 namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
 [XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
 [XmlRoot("userTask", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public partial class BpmnUserTask : BpmnTask
+public class BpmnUserTask : BpmnTask
 {
     private BpmnRendering[] renderingField;
 
@@ -29,8 +32,8 @@ public partial class BpmnUserTask : BpmnTask
     }
 
     /// <remarks/>
-    [XmlAttribute()]
-    [System.ComponentModel.DefaultValueAttribute("##unspecified")]
+    [XmlAttribute]
+    [DefaultValue("##unspecified")]
     public string implementation
     {
         get { return implementationField; }
@@ -38,15 +41,15 @@ public partial class BpmnUserTask : BpmnTask
     }
 
 
-    [XmlAttribute("formKey", Namespace = "http://camunda.org/schema/1.0/bpmn")]
+    [XmlAttribute("formKey")]
     public string FormKey { get; set; }
 
-    [XmlAttribute("candidateGroups", Namespace = "http://camunda.org/schema/1.0/bpmn")]
-    public string CandidateGroups { get; set; }
+    [XmlAttribute("candidateGroups",AttributeName = "candidateGroups")]
+    public string candidateGroups { get; set; }
     
-    [XmlAttribute("candidateUsers", Namespace = "http://camunda.org/schema/1.0/bpmn")]
-    public string CandidateUsers { get; set; }
+    [XmlAttribute("candidateUsers",AttributeName = "candidateUsers")]
+    public string candidateUsers { get; set; }
     
-    [XmlAttribute("assignee", Namespace = "http://camunda.org/schema/1.0/bpmn")]
-    public string Assignee { get; set; }
+    [XmlAttribute("assignee",AttributeName = "assignee")]
+    public string assignee { get; set; }
 }

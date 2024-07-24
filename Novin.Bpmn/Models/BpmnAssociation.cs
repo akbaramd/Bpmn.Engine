@@ -1,18 +1,24 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("association", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("association", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnAssociation : BpmnArtifact
+public class BpmnAssociation : BpmnArtifact
 {
-    private System.Xml.XmlQualifiedName sourceRefField;
+    private XmlQualifiedName sourceRefField;
 
-    private System.Xml.XmlQualifiedName targetRefField;
+    private XmlQualifiedName targetRefField;
 
     private BpmnAssociationDirection associationDirectionField;
 
@@ -22,24 +28,24 @@ public partial class BpmnAssociation : BpmnArtifact
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName sourceRef
+    [XmlAttribute]
+    public XmlQualifiedName sourceRef
     {
         get { return sourceRefField; }
         set { sourceRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName targetRef
+    [XmlAttribute]
+    public XmlQualifiedName targetRef
     {
         get { return targetRefField; }
         set { targetRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute(BpmnAssociationDirection.None)]
+    [XmlAttribute]
+    [DefaultValue(BpmnAssociationDirection.None)]
     public BpmnAssociationDirection associationDirection
     {
         get { return associationDirectionField; }

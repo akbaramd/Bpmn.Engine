@@ -1,38 +1,44 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("linkEventDefinition",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("linkEventDefinition",
     Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public partial class BpmnLinkEventDefinition : BpmnEventDefinition
+public class BpmnLinkEventDefinition : BpmnEventDefinition
 {
-    private System.Xml.XmlQualifiedName[] sourceField;
+    private XmlQualifiedName[] sourceField;
 
-    private System.Xml.XmlQualifiedName targetField;
+    private XmlQualifiedName targetField;
 
     private string nameField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("source")]
-    public System.Xml.XmlQualifiedName[] source
+    [XmlElement("source")]
+    public XmlQualifiedName[] source
     {
         get { return sourceField; }
         set { sourceField = value; }
     }
 
     /// <remarks/>
-    public System.Xml.XmlQualifiedName target
+    public XmlQualifiedName target
     {
         get { return targetField; }
         set { targetField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }

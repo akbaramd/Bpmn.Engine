@@ -1,22 +1,28 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnProcess))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnGlobalTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnGlobalUserTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnGlobalScriptTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnGlobalManualTask))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnGlobalBusinessRuleTask))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("callableElement", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[XmlInclude(typeof(BpmnProcess))]
+[XmlInclude(typeof(BpmnGlobalTask))]
+[XmlInclude(typeof(BpmnGlobalUserTask))]
+[XmlInclude(typeof(BpmnGlobalScriptTask))]
+[XmlInclude(typeof(BpmnGlobalManualTask))]
+[XmlInclude(typeof(BpmnGlobalBusinessRuleTask))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("callableElement", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnCallableElement : BpmnRootElement
+public class BpmnCallableElement : BpmnRootElement
 {
-    private System.Xml.XmlQualifiedName[] supportedInterfaceRefField;
+    private XmlQualifiedName[] supportedInterfaceRefField;
 
     private BpmnInputOutputSpecification ioSpecificationField;
 
@@ -25,8 +31,8 @@ public partial class BpmnCallableElement : BpmnRootElement
     private string nameField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("supportedInterfaceRef")]
-    public System.Xml.XmlQualifiedName[] supportedInterfaceRef
+    [XmlElement("supportedInterfaceRef")]
+    public XmlQualifiedName[] supportedInterfaceRef
     {
         get { return supportedInterfaceRefField; }
         set { supportedInterfaceRefField = value; }
@@ -40,7 +46,7 @@ public partial class BpmnCallableElement : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("ioBinding")]
+    [XmlElement("ioBinding")]
     public BpmnInputOutputBinding[] ioBinding
     {
         get { return ioBindingField; }
@@ -48,7 +54,7 @@ public partial class BpmnCallableElement : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }

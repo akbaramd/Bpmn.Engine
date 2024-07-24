@@ -1,30 +1,36 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("messageFlowAssociation",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("messageFlowAssociation",
     Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public partial class BpmnMessageFlowAssociation : BpmnBaseElement
+public class BpmnMessageFlowAssociation : BpmnBaseElement
 {
-    private System.Xml.XmlQualifiedName innerMessageFlowRefField;
+    private XmlQualifiedName innerMessageFlowRefField;
 
-    private System.Xml.XmlQualifiedName outerMessageFlowRefField;
+    private XmlQualifiedName outerMessageFlowRefField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName innerMessageFlowRef
+    [XmlAttribute]
+    public XmlQualifiedName innerMessageFlowRef
     {
         get { return innerMessageFlowRefField; }
         set { innerMessageFlowRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName outerMessageFlowRef
+    [XmlAttribute]
+    public XmlQualifiedName outerMessageFlowRef
     {
         get { return outerMessageFlowRefField; }
         set { outerMessageFlowRefField = value; }

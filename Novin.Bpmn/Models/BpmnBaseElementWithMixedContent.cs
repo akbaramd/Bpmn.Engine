@@ -1,16 +1,22 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnExpression))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnFormalExpression))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("baseElementWithMixedContent",
+[XmlInclude(typeof(BpmnExpression))]
+[XmlInclude(typeof(BpmnFormalExpression))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("baseElementWithMixedContent",
     Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public abstract partial class BpmnBaseElementWithMixedContent
+public abstract class BpmnBaseElementWithMixedContent
 {
     private BpmnDocumentation[] documentationField;
 
@@ -20,10 +26,10 @@ public abstract partial class BpmnBaseElementWithMixedContent
 
     private string idField;
 
-    private System.Xml.XmlAttribute[] anyAttrField;
+    private XmlAttribute[] anyAttrField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("documentation")]
+    [XmlElement("documentation")]
     public BpmnDocumentation[] documentation
     {
         get { return documentationField; }
@@ -38,7 +44,7 @@ public abstract partial class BpmnBaseElementWithMixedContent
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlTextAttribute()]
+    [XmlText]
     public string[] Text
     {
         get { return textField; }
@@ -47,7 +53,7 @@ public abstract partial class BpmnBaseElementWithMixedContent
 
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "ID")]
+    [XmlAttribute(DataType = "ID")]
     public string id
     {
         get { return idField; }
@@ -55,8 +61,8 @@ public abstract partial class BpmnBaseElementWithMixedContent
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAnyAttributeAttribute()]
-    public System.Xml.XmlAttribute[] AnyAttr
+    [XmlAnyAttribute]
+    public XmlAttribute[] AnyAttr
     {
         get { return anyAttrField; }
         set { anyAttrField = value; }

@@ -1,22 +1,27 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("subConversation", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("subConversation", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnSubConversation : BpmnConversationNode
+public class BpmnSubConversation : BpmnConversationNode
 {
     private BpmnConversationNode[] itemsField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("callConversation", typeof(BpmnCallConversation))]
-    [System.Xml.Serialization.XmlElementAttribute("conversation", typeof(BpmnConversation))]
-    [System.Xml.Serialization.XmlElementAttribute("conversationNode", typeof(BpmnConversationNode))]
-    [System.Xml.Serialization.XmlElementAttribute("subConversation", typeof(BpmnSubConversation))]
+    [XmlElement("callConversation", typeof(BpmnCallConversation))]
+    [XmlElement("conversation", typeof(BpmnConversation))]
+    [XmlElement("conversationNode", typeof(BpmnConversationNode))]
+    [XmlElement("subConversation", typeof(BpmnSubConversation))]
     public BpmnConversationNode[] Items
     {
         get { return itemsField; }

@@ -1,14 +1,20 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("dataStore", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("dataStore", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnDataStore : BpmnRootElement
+public class BpmnDataStore : BpmnRootElement
 {
     private BpmnDataState dataStateField;
 
@@ -18,7 +24,7 @@ public partial class BpmnDataStore : BpmnRootElement
 
     private bool isUnlimitedField;
 
-    private System.Xml.XmlQualifiedName itemSubjectRefField;
+    private XmlQualifiedName itemSubjectRefField;
 
     public BpmnDataStore()
     {
@@ -33,7 +39,7 @@ public partial class BpmnDataStore : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }
@@ -41,7 +47,7 @@ public partial class BpmnDataStore : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "integer")]
+    [XmlAttribute(DataType = "integer")]
     public string capacity
     {
         get { return capacityField; }
@@ -49,8 +55,8 @@ public partial class BpmnDataStore : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute(true)]
+    [XmlAttribute]
+    [DefaultValue(true)]
     public bool isUnlimited
     {
         get { return isUnlimitedField; }
@@ -58,8 +64,8 @@ public partial class BpmnDataStore : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName itemSubjectRef
+    [XmlAttribute]
+    public XmlQualifiedName itemSubjectRef
     {
         get { return itemSubjectRefField; }
         set { itemSubjectRefField = value; }

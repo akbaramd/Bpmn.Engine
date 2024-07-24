@@ -1,18 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Novin.Bpmn.Abstractions;
-using Novin.Bpmn.Models;
+﻿using Novin.Bpmn.Handlers;
 
 namespace Novin.Bpmn
 {
-    public class BpmnInMemoryUserAccessor : IUserAccessor
+    public class InMemoryBpmnUserAccessor : IBpmnUserAccessor
     {
         private readonly Dictionary<string, BpmnUser> users = new Dictionary<string, BpmnUser>();
         private readonly Dictionary<string, List<BpmnUser>> groups = new Dictionary<string, List<BpmnUser>>();
 
-        public BpmnInMemoryUserAccessor()
+        public InMemoryBpmnUserAccessor()
         {
             // Initialize with some sample users
             var user1 = new BpmnUser { Id = "1", Name = "Alice", Group = "GroupA" };

@@ -1,23 +1,29 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("compensateEventDefinition",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("compensateEventDefinition",
     Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public partial class BpmnCompensateEventDefinition : BpmnEventDefinition
+public class BpmnCompensateEventDefinition : BpmnEventDefinition
 {
     private bool waitForCompletionField;
 
     private bool waitForCompletionFieldSpecified;
 
-    private System.Xml.XmlQualifiedName activityRefField;
+    private XmlQualifiedName activityRefField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public bool waitForCompletion
     {
         get { return waitForCompletionField; }
@@ -25,7 +31,7 @@ public partial class BpmnCompensateEventDefinition : BpmnEventDefinition
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlIgnoreAttribute()]
+    [XmlIgnore]
     public bool waitForCompletionSpecified
     {
         get { return waitForCompletionFieldSpecified; }
@@ -33,8 +39,8 @@ public partial class BpmnCompensateEventDefinition : BpmnEventDefinition
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName activityRef
+    [XmlAttribute]
+    public XmlQualifiedName activityRef
     {
         get { return activityRefField; }
         set { activityRefField = value; }

@@ -1,51 +1,56 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnGlobalChoreographyTask))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("choreography", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[XmlInclude(typeof(BpmnGlobalChoreographyTask))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("choreography", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnChoreography : BpmnCollaboration
+public class BpmnChoreography : BpmnCollaboration
 {
     private BpmnFlowElement[] items2Field;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("adHocSubProcess", typeof(BpmnAdHocSubProcess))]
-    [System.Xml.Serialization.XmlElementAttribute("boundaryEvent", typeof(BpmnBoundaryEvent))]
-    [System.Xml.Serialization.XmlElementAttribute("businessRuleTask", typeof(BpmnBusinessRuleTask))]
-    [System.Xml.Serialization.XmlElementAttribute("callActivity", typeof(BpmnCallActivity))]
-    [System.Xml.Serialization.XmlElementAttribute("callChoreography", typeof(BpmnCallChoreography))]
-    [System.Xml.Serialization.XmlElementAttribute("choreographyTask", typeof(BpmnChoreographyTask))]
-    [System.Xml.Serialization.XmlElementAttribute("complexGateway", typeof(BpmnComplexGateway))]
-    [System.Xml.Serialization.XmlElementAttribute("dataObject", typeof(BpmnDataObject))]
-    [System.Xml.Serialization.XmlElementAttribute("dataObjectReference", typeof(BpmnDataObjectReference))]
-    [System.Xml.Serialization.XmlElementAttribute("dataStoreReference", typeof(BpmnDataStoreReference))]
-    [System.Xml.Serialization.XmlElementAttribute("endEvent", typeof(BpmnEndEvent))]
-    [System.Xml.Serialization.XmlElementAttribute("event", typeof(BpmnEvent))]
-    [System.Xml.Serialization.XmlElementAttribute("eventBasedGateway", typeof(BpmnEventBasedGateway))]
-    [System.Xml.Serialization.XmlElementAttribute("exclusiveGateway", typeof(BpmnExclusiveGateway))]
-    [System.Xml.Serialization.XmlElementAttribute("flowElement", typeof(BpmnFlowElement))]
-    [System.Xml.Serialization.XmlElementAttribute("implicitThrowEvent", typeof(BpmnImplicitThrowEvent))]
-    [System.Xml.Serialization.XmlElementAttribute("inclusiveGateway", typeof(BpmnInclusiveGateway))]
-    [System.Xml.Serialization.XmlElementAttribute("intermediateCatchEvent", typeof(BpmnIntermediateCatchEvent))]
-    [System.Xml.Serialization.XmlElementAttribute("intermediateThrowEvent", typeof(BpmnIntermediateThrowEvent))]
-    [System.Xml.Serialization.XmlElementAttribute("manualTask", typeof(BpmnManualTask))]
-    [System.Xml.Serialization.XmlElementAttribute("parallelGateway", typeof(BpmnParallelGateway))]
-    [System.Xml.Serialization.XmlElementAttribute("receiveTask", typeof(BpmnReceiveTask))]
-    [System.Xml.Serialization.XmlElementAttribute("scriptTask", typeof(BpmnScriptTask))]
-    [System.Xml.Serialization.XmlElementAttribute("sendTask", typeof(BpmnSendTask))]
-    [System.Xml.Serialization.XmlElementAttribute("sequenceFlow", typeof(BpmnSequenceFlow))]
-    [System.Xml.Serialization.XmlElementAttribute("serviceTask", typeof(BpmnServiceTask))]
-    [System.Xml.Serialization.XmlElementAttribute("startEvent", typeof(BpmnStartEvent))]
-    [System.Xml.Serialization.XmlElementAttribute("subChoreography", typeof(BpmnSubChoreography))]
-    [System.Xml.Serialization.XmlElementAttribute("subProcess", typeof(BpmnSubProcess))]
-    [System.Xml.Serialization.XmlElementAttribute("task", typeof(BpmnTask))]
-    [System.Xml.Serialization.XmlElementAttribute("transaction", typeof(BpmnTransaction))]
-    [System.Xml.Serialization.XmlElementAttribute("userTask", typeof(BpmnUserTask))]
+    [XmlElement("adHocSubProcess", typeof(BpmnAdHocSubProcess))]
+    [XmlElement("boundaryEvent", typeof(BpmnBoundaryEvent))]
+    [XmlElement("businessRuleTask", typeof(BpmnBusinessRuleTask))]
+    [XmlElement("callActivity", typeof(BpmnCallActivity))]
+    [XmlElement("callChoreography", typeof(BpmnCallChoreography))]
+    [XmlElement("choreographyTask", typeof(BpmnChoreographyTask))]
+    [XmlElement("complexGateway", typeof(BpmnComplexGateway))]
+    [XmlElement("dataObject", typeof(BpmnDataObject))]
+    [XmlElement("dataObjectReference", typeof(BpmnDataObjectReference))]
+    [XmlElement("dataStoreReference", typeof(BpmnDataStoreReference))]
+    [XmlElement("endEvent", typeof(BpmnEndEvent))]
+    [XmlElement("event", typeof(BpmnEvent))]
+    [XmlElement("eventBasedGateway", typeof(BpmnEventBasedGateway))]
+    [XmlElement("exclusiveGateway", typeof(BpmnExclusiveGateway))]
+    [XmlElement("flowElement", typeof(BpmnFlowElement))]
+    [XmlElement("implicitThrowEvent", typeof(BpmnImplicitThrowEvent))]
+    [XmlElement("inclusiveGateway", typeof(BpmnInclusiveGateway))]
+    [XmlElement("intermediateCatchEvent", typeof(BpmnIntermediateCatchEvent))]
+    [XmlElement("intermediateThrowEvent", typeof(BpmnIntermediateThrowEvent))]
+    [XmlElement("manualTask", typeof(BpmnManualTask))]
+    [XmlElement("parallelGateway", typeof(BpmnParallelGateway))]
+    [XmlElement("receiveTask", typeof(BpmnReceiveTask))]
+    [XmlElement("scriptTask", typeof(BpmnScriptTask))]
+    [XmlElement("sendTask", typeof(BpmnSendTask))]
+    [XmlElement("sequenceFlow", typeof(BpmnSequenceFlow))]
+    [XmlElement("serviceTask", typeof(BpmnServiceTask))]
+    [XmlElement("startEvent", typeof(BpmnStartEvent))]
+    [XmlElement("subChoreography", typeof(BpmnSubChoreography))]
+    [XmlElement("subProcess", typeof(BpmnSubProcess))]
+    [XmlElement("task", typeof(BpmnTask))]
+    [XmlElement("transaction", typeof(BpmnTransaction))]
+    [XmlElement("userTask", typeof(BpmnUserTask))]
     public BpmnFlowElement[] Items2
     {
         get { return items2Field; }

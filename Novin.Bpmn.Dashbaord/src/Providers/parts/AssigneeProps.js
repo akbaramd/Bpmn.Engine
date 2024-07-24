@@ -33,13 +33,12 @@ function AssigneeField(props) {
     const debounce = useService('debounceInput');
 
     const getValue = () => {
-        return element.businessObject.assignee || '';
+        
+        console.log( )
+        return element.businessObject.get('assignee') || '';
     };
 
     const setValue = value => {
-        if (value && !value.startsWith('=')) {
-            value = '=' + value;
-        }
         return modeling.updateProperties(element, {
             assignee: value
         });
@@ -64,7 +63,7 @@ function CandidateGroupsField(props) {
     const debounce = useService('debounceInput');
 
     const getValue = () => {
-        return element.businessObject.candidateGroups || '';
+        return element.businessObject.get('candidateGroups') || '';
     };
 
     const setValue = value => {
@@ -92,7 +91,7 @@ function CandidateUsersField(props) {
     const debounce = useService('debounceInput');
 
     const getValue = () => {
-        return element.businessObject.candidateGroups || '';
+        return element.businessObject.get('candidateGroups') || '';
     };
 
     const setValue = value => {

@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
-using Novin.Bpmn;
 using Novin.Bpmn.Blazor;
 using Novin.Bpmn.Web;
 

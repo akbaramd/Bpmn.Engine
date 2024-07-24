@@ -1,25 +1,31 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("messageFlow", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("messageFlow", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnMessageFlow : BpmnBaseElement
+public class BpmnMessageFlow : BpmnBaseElement
 {
     private string nameField;
 
-    private System.Xml.XmlQualifiedName sourceRefField;
+    private XmlQualifiedName sourceRefField;
 
-    private System.Xml.XmlQualifiedName targetRefField;
+    private XmlQualifiedName targetRefField;
 
-    private System.Xml.XmlQualifiedName messageRefField;
+    private XmlQualifiedName messageRefField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }
@@ -27,24 +33,24 @@ public partial class BpmnMessageFlow : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName sourceRef
+    [XmlAttribute]
+    public XmlQualifiedName sourceRef
     {
         get { return sourceRefField; }
         set { sourceRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName targetRef
+    [XmlAttribute]
+    public XmlQualifiedName targetRef
     {
         get { return targetRefField; }
         set { targetRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName messageRef
+    [XmlAttribute]
+    public XmlQualifiedName messageRef
     {
         get { return messageRefField; }
         set { messageRefField = value; }

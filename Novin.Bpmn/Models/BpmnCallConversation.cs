@@ -1,21 +1,27 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("callConversation",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("callConversation",
     Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public partial class BpmnCallConversation : BpmnConversationNode
+public class BpmnCallConversation : BpmnConversationNode
 {
     private BpmnParticipantAssociation[] participantAssociationField;
 
-    private System.Xml.XmlQualifiedName calledCollaborationRefField;
+    private XmlQualifiedName calledCollaborationRefField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("participantAssociation")]
+    [XmlElement("participantAssociation")]
     public BpmnParticipantAssociation[] participantAssociation
     {
         get { return participantAssociationField; }
@@ -23,8 +29,8 @@ public partial class BpmnCallConversation : BpmnConversationNode
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName calledCollaborationRef
+    [XmlAttribute]
+    public XmlQualifiedName calledCollaborationRef
     {
         get { return calledCollaborationRefField; }
         set { calledCollaborationRefField = value; }

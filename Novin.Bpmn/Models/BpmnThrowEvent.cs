@@ -1,17 +1,23 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnIntermediateThrowEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnImplicitThrowEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnEndEvent))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("throwEvent", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[XmlInclude(typeof(BpmnIntermediateThrowEvent))]
+[XmlInclude(typeof(BpmnImplicitThrowEvent))]
+[XmlInclude(typeof(BpmnEndEvent))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("throwEvent", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public abstract partial class BpmnThrowEvent : BpmnEvent
+public abstract class BpmnThrowEvent : BpmnEvent
 {
     private BpmnDataInput[] dataInputField;
 
@@ -21,10 +27,10 @@ public abstract partial class BpmnThrowEvent : BpmnEvent
 
     private BpmnEventDefinition[] itemsField;
 
-    private System.Xml.XmlQualifiedName[] eventDefinitionRefField;
+    private XmlQualifiedName[] eventDefinitionRefField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("dataInput")]
+    [XmlElement("dataInput")]
     public BpmnDataInput[] dataInput
     {
         get { return dataInputField; }
@@ -32,7 +38,7 @@ public abstract partial class BpmnThrowEvent : BpmnEvent
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("dataInputAssociation")]
+    [XmlElement("dataInputAssociation")]
     public BpmnDataInputAssociation[] dataInputAssociation
     {
         get { return dataInputAssociationField; }
@@ -47,17 +53,17 @@ public abstract partial class BpmnThrowEvent : BpmnEvent
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("cancelEventDefinition", typeof(BpmnCancelEventDefinition))]
-    [System.Xml.Serialization.XmlElementAttribute("compensateEventDefinition", typeof(BpmnCompensateEventDefinition))]
-    [System.Xml.Serialization.XmlElementAttribute("conditionalEventDefinition", typeof(BpmnConditionalEventDefinition))]
-    [System.Xml.Serialization.XmlElementAttribute("errorEventDefinition", typeof(BpmnErrorEventDefinition))]
-    [System.Xml.Serialization.XmlElementAttribute("escalationEventDefinition", typeof(BpmnEscalationEventDefinition))]
-    [System.Xml.Serialization.XmlElementAttribute("eventDefinition", typeof(BpmnEventDefinition))]
-    [System.Xml.Serialization.XmlElementAttribute("linkEventDefinition", typeof(BpmnLinkEventDefinition))]
-    [System.Xml.Serialization.XmlElementAttribute("messageEventDefinition", typeof(BpmnMessageEventDefinition))]
-    [System.Xml.Serialization.XmlElementAttribute("signalEventDefinition", typeof(BpmnSignalEventDefinition))]
-    [System.Xml.Serialization.XmlElementAttribute("terminateEventDefinition", typeof(BpmnTerminateEventDefinition))]
-    [System.Xml.Serialization.XmlElementAttribute("timerEventDefinition", typeof(BpmnTimerEventDefinition))]
+    [XmlElement("cancelEventDefinition", typeof(BpmnCancelEventDefinition))]
+    [XmlElement("compensateEventDefinition", typeof(BpmnCompensateEventDefinition))]
+    [XmlElement("conditionalEventDefinition", typeof(BpmnConditionalEventDefinition))]
+    [XmlElement("errorEventDefinition", typeof(BpmnErrorEventDefinition))]
+    [XmlElement("escalationEventDefinition", typeof(BpmnEscalationEventDefinition))]
+    [XmlElement("eventDefinition", typeof(BpmnEventDefinition))]
+    [XmlElement("linkEventDefinition", typeof(BpmnLinkEventDefinition))]
+    [XmlElement("messageEventDefinition", typeof(BpmnMessageEventDefinition))]
+    [XmlElement("signalEventDefinition", typeof(BpmnSignalEventDefinition))]
+    [XmlElement("terminateEventDefinition", typeof(BpmnTerminateEventDefinition))]
+    [XmlElement("timerEventDefinition", typeof(BpmnTimerEventDefinition))]
     public BpmnEventDefinition[] Items
     {
         get { return itemsField; }
@@ -65,8 +71,8 @@ public abstract partial class BpmnThrowEvent : BpmnEvent
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("eventDefinitionRef")]
-    public System.Xml.XmlQualifiedName[] eventDefinitionRef
+    [XmlElement("eventDefinitionRef")]
+    public XmlQualifiedName[] eventDefinitionRef
     {
         get { return eventDefinitionRefField; }
         set { eventDefinitionRefField = value; }

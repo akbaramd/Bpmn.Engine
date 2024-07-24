@@ -1,40 +1,49 @@
 ﻿using Novin.Bpmn.Abstractions;
 using Novin.Bpmn.Core;
+using Novin.Bpmn.Models;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 
-namespace Novin.Bpmn.Handlers;
-
-public class ExclusiveGatewayHandler : IGatewayHandler
+namespace Novin.Bpmn.Handlers
 {
-    public async Task HandleGateway(BpmnProcessNode processNode, BpmnProcessEngine processEngine)
+    public class ExclusiveGatewayHandler : IGatewayHandler
     {
-        if (!CheckForExclusiveMerge(processNode)) return;
-
-        foreach (var flow in processNode.OutgoingFlows)
+        public async Task HandleGateway(BpmnProcessNode processNode, BpmnProcessEngine processEngine)
         {
-            var globals = new ScriptGlobals { State = processEngine.ProcessState };
-            if (string.IsNullOrWhiteSpace(flow.conditionExpression.ToString())) continue;
+            if (!CheckForExclusiveMerge(processNode)) return;
 
-            var expression = string.Join(" ", flow.conditionExpression.Text);
-            if (!await processEngine.ScriptHandler.EvaluateConditionAsync(expression, globals)) continue;
+            foreach (var flow in processNode.OutgoingFlows)
+            {
+                if (!await EvaluateFlowConditionAsync(flow, processEngine)) continue;
 
-            var newElement = processEngine.DefinitionsHandler.GetElementById(flow.targetRef);
-            var newNode = processEngine.CreateNewNode(newElement, processNode.Id, processNode.IsExecutable, processNode, flow);
+                var newElement = processEngine.DefinitionsHandler.GetElementById(flow.targetRef);
+                var newNode = processEngine.CreateNewNode(newElement, Guid.NewGuid(), processNode.IsExecutable, processNode, flow);
 
-            // Add outgoing transition
-            // node.AddTransition(node.Id, newNode.Id, DateTime.Now, false);
-            processEngine.EnqueueNode(newNode);
-            break;
+                processEngine.EnqueueNode(newNode);
+                break;
+            }
+
+            processNode.Expire();
         }
 
-        processNode.Expire();
-    }
+        private bool CheckForExclusiveMerge(BpmnProcessNode processNode)
+        {
+            if (processNode.Merges.Count > 0)
+                return true;
 
-    public bool CheckForExclusiveMerge(BpmnProcessNode processNode)
-    {
-        if (processNode.Merges.Count > 0)
-            return true;
+            processNode.AddMerge(processNode.ElementId, processNode.Id, processNode.IsExecutable);
+            return false;
+        }
 
-        processNode.Merges.Push(new (processNode.ElementId, processNode.Id, processNode.IsExecutable));
-        return false;
+        private async Task<bool> EvaluateFlowConditionAsync(BpmnSequenceFlow flow, BpmnProcessEngine processEngine)
+        {
+            var expression = flow.conditionExpression?.Text?.FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(expression))
+                return false;
+
+            var globals = new ScriptGlobals { State = processEngine.Instance };
+            return await processEngine.ScriptHandler.EvaluateConditionAsync(expression, globals);
+        }
     }
 }

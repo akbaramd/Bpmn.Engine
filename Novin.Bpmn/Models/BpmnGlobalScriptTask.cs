@@ -1,28 +1,34 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("globalScriptTask",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("globalScriptTask",
     Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public partial class BpmnGlobalScriptTask : BpmnGlobalTask
+public class BpmnGlobalScriptTask : BpmnGlobalTask
 {
-    private System.Xml.XmlNode scriptField;
+    private XmlNode scriptField;
 
     private string scriptLanguageField;
 
     /// <remarks/>
-    public System.Xml.XmlNode script
+    public XmlNode script
     {
         get { return scriptField; }
         set { scriptField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "anyURI")]
+    [XmlAttribute(DataType = "anyURI")]
     public string scriptLanguage
     {
         get { return scriptLanguageField; }

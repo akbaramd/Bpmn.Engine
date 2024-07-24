@@ -1,6 +1,6 @@
-﻿namespace Novin.Bpmn;
+﻿namespace Novin.Bpmn.Handlers;
 
-public interface IUserAccessor
+public interface IBpmnUserAccessor
 {
     Task<BpmnUser> GetUserByIdAsync(string userId);
     Task<IEnumerable<BpmnUser>> GetUsersByIdsAsync(IEnumerable<string> userIds);

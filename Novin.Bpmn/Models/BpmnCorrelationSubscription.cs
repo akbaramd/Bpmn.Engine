@@ -1,21 +1,27 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("correlationSubscription",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("correlationSubscription",
     Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public partial class BpmnCorrelationSubscription : BpmnBaseElement
+public class BpmnCorrelationSubscription : BpmnBaseElement
 {
     private BpmnCorrelationPropertyBinding[] correlationPropertyBindingField;
 
-    private System.Xml.XmlQualifiedName correlationKeyRefField;
+    private XmlQualifiedName correlationKeyRefField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("correlationPropertyBinding")]
+    [XmlElement("correlationPropertyBinding")]
     public BpmnCorrelationPropertyBinding[] correlationPropertyBinding
     {
         get { return correlationPropertyBindingField; }
@@ -23,8 +29,8 @@ public partial class BpmnCorrelationSubscription : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName correlationKeyRef
+    [XmlAttribute]
+    public XmlQualifiedName correlationKeyRef
     {
         get { return correlationKeyRefField; }
         set { correlationKeyRefField = value; }

@@ -1,14 +1,19 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("outputSet", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("outputSet", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnOutputSet : BpmnBaseElement
+public class BpmnOutputSet : BpmnBaseElement
 {
     private string[] dataOutputRefsField;
 
@@ -21,7 +26,7 @@ public partial class BpmnOutputSet : BpmnBaseElement
     private string nameField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("dataOutputRefs", DataType = "IDREF")]
+    [XmlElement("dataOutputRefs", DataType = "IDREF")]
     public string[] dataOutputRefs
     {
         get { return dataOutputRefsField; }
@@ -29,7 +34,7 @@ public partial class BpmnOutputSet : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("optionalOutputRefs", DataType = "IDREF")]
+    [XmlElement("optionalOutputRefs", DataType = "IDREF")]
     public string[] optionalOutputRefs
     {
         get { return optionalOutputRefsField; }
@@ -37,7 +42,7 @@ public partial class BpmnOutputSet : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("whileExecutingOutputRefs", DataType = "IDREF")]
+    [XmlElement("whileExecutingOutputRefs", DataType = "IDREF")]
     public string[] whileExecutingOutputRefs
     {
         get { return whileExecutingOutputRefsField; }
@@ -45,7 +50,7 @@ public partial class BpmnOutputSet : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("inputSetRefs", DataType = "IDREF")]
+    [XmlElement("inputSetRefs", DataType = "IDREF")]
     public string[] inputSetRefs
     {
         get { return inputSetRefsField; }
@@ -53,7 +58,7 @@ public partial class BpmnOutputSet : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }

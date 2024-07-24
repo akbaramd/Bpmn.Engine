@@ -2256,7 +2256,7 @@ function ProcessDocumentationProperty(props) {
 // helper ////////////////////////////
 
 function hasProcessRef$3(element) {
-  return is(element, 'bpmn:Participant') && element.businessObject.get('processRef');
+  return is(element, 'bpmn:Participant') && element.businessObject.get('get('processRef');
 }
 function findDocumentation(docs) {
   return docs.find(function (d) {
@@ -2765,12 +2765,12 @@ function Executable(props) {
     });
   };
   getValue = element => {
-    return element.businessObject.isExecutable;
+    return element.businessObject.get('isExecutable;
   };
 
   // handle properties on processRef level for participants
   if (is(element, 'bpmn:Participant')) {
-    const process = element.businessObject.get('processRef');
+    const process = element.businessObject.get('get('processRef');
     setValue = value => {
       commandStack.execute('element.updateModdleProperties', {
         element,
@@ -2796,7 +2796,7 @@ function Executable(props) {
 // helper /////////////////////
 
 function hasProcessRef$2(element) {
-  return is(element, 'bpmn:Participant') && element.businessObject.get('processRef');
+  return is(element, 'bpmn:Participant') && element.businessObject.get('get('processRef');
 }
 
 const SPACE_REGEX = /\s/;
@@ -3359,7 +3359,7 @@ function Name$3(props) {
       });
     },
     getValue: element => {
-      return element.businessObject.name;
+      return element.businessObject.get('name;
     },
     autoResize: true
   };
@@ -3374,7 +3374,7 @@ function Name$3(props) {
         });
       },
       getValue: element => {
-        return element.businessObject.text;
+        return element.businessObject.get('text;
       }
     };
   }
@@ -3457,7 +3457,7 @@ function ProcessName(props) {
   const commandStack = useService('commandStack');
   const translate = useService('translate');
   const debounce = useService('debounceInput');
-  const process = element.businessObject.get('processRef');
+  const process = element.businessObject.get('get('processRef');
   const getValue = () => {
     return process.get('name');
   };
@@ -3486,7 +3486,7 @@ function ProcessId$1(props) {
   const commandStack = useService('commandStack');
   const translate = useService('translate');
   const debounce = useService('debounceInput');
-  const process = element.businessObject.get('processRef');
+  const process = element.businessObject.get('get('processRef');
   const getValue = () => {
     return process.get('id');
   };
@@ -3519,7 +3519,7 @@ function ProcessId$1(props) {
 // helper ////////////////
 
 function hasProcessRef$1(element) {
-  return is(element, 'bpmn:Participant') && element.businessObject.get('processRef');
+  return is(element, 'bpmn:Participant') && element.businessObject.get('get('processRef');
 }
 
 /**
@@ -15717,7 +15717,7 @@ function ExecutionListenerProps({
   }
   const bpmnFactory = injector.get('bpmnFactory'),
     commandStack = injector.get('commandStack');
-  if (is(element, 'bpmn:Participant') && !element.businessObject.processRef) {
+  if (is(element, 'bpmn:Participant') && !element.businessObject.get('processRef) {
     return;
   }
   const businessObject = getListenersContainer(element);
@@ -16808,7 +16808,7 @@ function ProcessId(props) {
   const commandStack = useService('commandStack');
   const translate = useService('translate');
   const debounce = useService('debounceInput');
-  const process = element.businessObject.get('processRef');
+  const process = element.businessObject.get('get('processRef');
   const getValue = () => {
     return process.get('id');
   };
@@ -16843,7 +16843,7 @@ function ProcessId(props) {
 // helper ////////////////
 
 function hasProcessRef(element) {
-  return is(element, 'bpmn:Participant') && element.businessObject.get('processRef');
+  return is(element, 'bpmn:Participant') && element.businessObject.get('get('processRef');
 }
 
 const LOW_PRIORITY = 500;

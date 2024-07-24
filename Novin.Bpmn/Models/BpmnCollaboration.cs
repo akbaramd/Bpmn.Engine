@@ -1,17 +1,23 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnGlobalConversation))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnChoreography))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnGlobalChoreographyTask))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("collaboration", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[XmlInclude(typeof(BpmnGlobalConversation))]
+[XmlInclude(typeof(BpmnChoreography))]
+[XmlInclude(typeof(BpmnGlobalChoreographyTask))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("collaboration", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnCollaboration : BpmnRootElement
+public class BpmnCollaboration : BpmnRootElement
 {
     private BpmnParticipant[] participantField;
 
@@ -29,7 +35,7 @@ public partial class BpmnCollaboration : BpmnRootElement
 
     private BpmnCorrelationKey[] correlationKeyField;
 
-    private System.Xml.XmlQualifiedName[] choreographyRefField;
+    private XmlQualifiedName[] choreographyRefField;
 
     private BpmnConversationLink[] conversationLinkField;
 
@@ -43,7 +49,7 @@ public partial class BpmnCollaboration : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("participant")]
+    [XmlElement("participant")]
     public BpmnParticipant[] participant
     {
         get { return participantField; }
@@ -51,7 +57,7 @@ public partial class BpmnCollaboration : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("messageFlow")]
+    [XmlElement("messageFlow")]
     public BpmnMessageFlow[] messageFlow
     {
         get { return messageFlowField; }
@@ -59,10 +65,10 @@ public partial class BpmnCollaboration : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("artifact", typeof(BpmnArtifact))]
-    [System.Xml.Serialization.XmlElementAttribute("association", typeof(BpmnAssociation))]
-    [System.Xml.Serialization.XmlElementAttribute("group", typeof(BpmnGroup))]
-    [System.Xml.Serialization.XmlElementAttribute("textAnnotation", typeof(BpmnTextAnnotation))]
+    [XmlElement("artifact", typeof(BpmnArtifact))]
+    [XmlElement("association", typeof(BpmnAssociation))]
+    [XmlElement("group", typeof(BpmnGroup))]
+    [XmlElement("textAnnotation", typeof(BpmnTextAnnotation))]
     public BpmnArtifact[] Items
     {
         get { return itemsField; }
@@ -70,10 +76,10 @@ public partial class BpmnCollaboration : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("callConversation", typeof(BpmnCallConversation))]
-    [System.Xml.Serialization.XmlElementAttribute("conversation", typeof(BpmnConversation))]
-    [System.Xml.Serialization.XmlElementAttribute("conversationNode", typeof(BpmnConversationNode))]
-    [System.Xml.Serialization.XmlElementAttribute("subConversation", typeof(BpmnSubConversation))]
+    [XmlElement("callConversation", typeof(BpmnCallConversation))]
+    [XmlElement("conversation", typeof(BpmnConversation))]
+    [XmlElement("conversationNode", typeof(BpmnConversationNode))]
+    [XmlElement("subConversation", typeof(BpmnSubConversation))]
     public BpmnConversationNode[] Items1
     {
         get { return items1Field; }
@@ -81,7 +87,7 @@ public partial class BpmnCollaboration : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("conversationAssociation")]
+    [XmlElement("conversationAssociation")]
     public BpmnConversationAssociation[] conversationAssociation
     {
         get { return conversationAssociationField; }
@@ -89,7 +95,7 @@ public partial class BpmnCollaboration : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("participantAssociation")]
+    [XmlElement("participantAssociation")]
     public BpmnParticipantAssociation[] participantAssociation
     {
         get { return participantAssociationField; }
@@ -97,7 +103,7 @@ public partial class BpmnCollaboration : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("messageFlowAssociation")]
+    [XmlElement("messageFlowAssociation")]
     public BpmnMessageFlowAssociation[] messageFlowAssociation
     {
         get { return messageFlowAssociationField; }
@@ -105,7 +111,7 @@ public partial class BpmnCollaboration : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("correlationKey")]
+    [XmlElement("correlationKey")]
     public BpmnCorrelationKey[] correlationKey
     {
         get { return correlationKeyField; }
@@ -113,15 +119,15 @@ public partial class BpmnCollaboration : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("choreographyRef")]
-    public System.Xml.XmlQualifiedName[] choreographyRef
+    [XmlElement("choreographyRef")]
+    public XmlQualifiedName[] choreographyRef
     {
         get { return choreographyRefField; }
         set { choreographyRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("conversationLink")]
+    [XmlElement("conversationLink")]
     public BpmnConversationLink[] conversationLink
     {
         get { return conversationLinkField; }
@@ -129,7 +135,7 @@ public partial class BpmnCollaboration : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }
@@ -137,8 +143,8 @@ public partial class BpmnCollaboration : BpmnRootElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute(false)]
+    [XmlAttribute]
+    [DefaultValue(false)]
     public bool isClosed
     {
         get { return isClosedField; }

@@ -2,5 +2,5 @@
 
 public interface IServiceTaskHandler
 {
-    public Task HandleAsync(BpmnProcessState? processState);
+    public Task HandleAsync(BpmnProcessInstance? processState);
 }

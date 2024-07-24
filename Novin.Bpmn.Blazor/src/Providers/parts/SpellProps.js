@@ -23,7 +23,7 @@ function Spell(props) {
     const debounce = useService('debounceInput');
 
     const getValue = () => {
-        return element.businessObject.spell || '';
+        return element.businessObject.get('spell || '';
     };
 
     const setValue = value => {

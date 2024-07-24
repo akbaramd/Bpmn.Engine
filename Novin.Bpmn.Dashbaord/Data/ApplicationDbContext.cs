@@ -1,5 +1,4 @@
-﻿using System.Runtime.Intrinsics.X86;
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Novin.Bpmn.Dashbaord.Models;
 
@@ -31,5 +30,10 @@ public class ApplicationDbContext : IdentityDbContext
         builder.Entity<NovinTasks>().Property(x => x.OwnerId).IsRequired(false);
         builder.Entity<NovinTasks>().Property(x => x.ProcessId).IsRequired();
         builder.Entity<Process>().Property(x => x.DefinitionId).IsRequired();
+
+        builder.Entity<NovinTasks>().HasIndex(x => x.Assignee);
+        builder.Entity<NovinTasks>().HasIndex(x => x.CandidateByGroups);
+        builder.Entity<NovinTasks>().HasIndex(x => x.CandidateByUsers);
+        builder.Entity<NovinTasks>().HasIndex(x => x.TaskId);
     }
 }

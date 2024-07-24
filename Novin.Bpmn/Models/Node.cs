@@ -1,19 +1,24 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(Plane))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BPMNPlane))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(Label))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BPMNLabel))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(Shape))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(LabeledShape))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BPMNShape))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DI")]
-[System.Xml.Serialization.XmlRootAttribute(Namespace = "http://www.omg.org/spec/DD/20100524/DI", IsNullable = false)]
-public abstract partial class Node : DiagramElement
+[XmlInclude(typeof(Plane))]
+[XmlInclude(typeof(BPMNPlane))]
+[XmlInclude(typeof(Label))]
+[XmlInclude(typeof(BPMNLabel))]
+[XmlInclude(typeof(Shape))]
+[XmlInclude(typeof(LabeledShape))]
+[XmlInclude(typeof(BPMNShape))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/DD/20100524/DI")]
+[XmlRoot(Namespace = "http://www.omg.org/spec/DD/20100524/DI", IsNullable = false)]
+public abstract class Node : DiagramElement
 {
 }

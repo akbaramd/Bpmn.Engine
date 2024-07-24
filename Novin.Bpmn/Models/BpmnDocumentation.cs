@@ -8,6 +8,10 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
+using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
 using System.Xml.Serialization;
 
 // 
@@ -16,15 +20,15 @@ using System.Xml.Serialization;
 
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[System.SerializableAttribute()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("documentation", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable()]
+[DebuggerStepThrough()]
+[DesignerCategory("code")]
+[XmlType(Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("documentation", Namespace="http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable=false)]
 public partial class BpmnDocumentation {
     
-    private System.Xml.XmlNode[] anyField;
+    private XmlNode[] anyField;
     
     private string idField;
     
@@ -35,9 +39,9 @@ public partial class BpmnDocumentation {
     }
     
     /// <remarks/>
-    [System.Xml.Serialization.XmlTextAttribute()]
-    [System.Xml.Serialization.XmlAnyElementAttribute()]
-    public System.Xml.XmlNode[] Any {
+    [XmlText()]
+    [XmlAnyElement()]
+    public XmlNode[] Any {
         get {
             return this.anyField;
         }
@@ -47,7 +51,7 @@ public partial class BpmnDocumentation {
     }
     
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType="ID")]
+    [XmlAttribute(DataType="ID")]
     public string id {
         get {
             return this.idField;
@@ -58,8 +62,8 @@ public partial class BpmnDocumentation {
     }
     
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute("text/plain")]
+    [XmlAttribute()]
+    [DefaultValue("text/plain")]
     public string textFormat {
         get {
             return this.textFormatField;

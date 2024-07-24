@@ -1,16 +1,22 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("textAnnotation", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("textAnnotation", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnTextAnnotation : BpmnArtifact
+public class BpmnTextAnnotation : BpmnArtifact
 {
-    private System.Xml.XmlNode textField;
+    private XmlNode textField;
 
     private string textFormatField;
 
@@ -20,15 +26,15 @@ public partial class BpmnTextAnnotation : BpmnArtifact
     }
 
     /// <remarks/>
-    public System.Xml.XmlNode text
+    public XmlNode text
     {
         get { return textField; }
         set { textField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute("text/plain")]
+    [XmlAttribute]
+    [DefaultValue("text/plain")]
     public string textFormat
     {
         get { return textFormatField; }

@@ -1,10 +1,11 @@
-﻿@{
+﻿@model Novin.Bpmn.Dashbaord.Models.Definitions
+@{
 ViewData["Title"] = "BPMN Diagram";
 }
 
 <div class="card card-body mb-3">
-    <p>BPMN Diagram: <b>@ViewBag.FileName</b></p>
-    <hr />
+    <h2>@Model.DefinationKey</h2>
+    <hr/>
     <div class="d-flex gap-3">
         <button class="btn btn-primary" id="saveButton">Save Changes</button>
     </div>
@@ -25,11 +26,10 @@ ViewData["Title"] = "BPMN Diagram";
 <script src="~/js/bundle.js"></script>
 <script>
     document.addEventListener("DOMContentLoaded", function () {
-        const fileName = "/uploads/@ViewBag.FileName";
-        bpmn.initializeModeler(fileName);
+        bpmn.initializeModeler(`@Model.DefinationKey`);
 
         document.getElementById('saveButton').addEventListener('click', function () {
-            bpmn.saveChanges('@ViewBag.FileName');
+            bpmn.saveChanges(`@Model.DefinationKey`);
         });
     });
 </script>

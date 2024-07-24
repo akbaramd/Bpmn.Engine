@@ -1,44 +1,50 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnSubConversation))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnConversation))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnCallConversation))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("conversationNode",
+[XmlInclude(typeof(BpmnSubConversation))]
+[XmlInclude(typeof(BpmnConversation))]
+[XmlInclude(typeof(BpmnCallConversation))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("conversationNode",
     Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public abstract partial class BpmnConversationNode : BpmnBaseElement
+public abstract class BpmnConversationNode : BpmnBaseElement
 {
-    private System.Xml.XmlQualifiedName[] participantRefField;
+    private XmlQualifiedName[] participantRefField;
 
-    private System.Xml.XmlQualifiedName[] messageFlowRefField;
+    private XmlQualifiedName[] messageFlowRefField;
 
     private BpmnCorrelationKey[] correlationKeyField;
 
     private string nameField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("participantRef")]
-    public System.Xml.XmlQualifiedName[] participantRef
+    [XmlElement("participantRef")]
+    public XmlQualifiedName[] participantRef
     {
         get { return participantRefField; }
         set { participantRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("messageFlowRef")]
-    public System.Xml.XmlQualifiedName[] messageFlowRef
+    [XmlElement("messageFlowRef")]
+    public XmlQualifiedName[] messageFlowRef
     {
         get { return messageFlowRefField; }
         set { messageFlowRefField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("correlationKey")]
+    [XmlElement("correlationKey")]
     public BpmnCorrelationKey[] correlationKey
     {
         get { return correlationKeyField; }
@@ -46,7 +52,7 @@ public abstract partial class BpmnConversationNode : BpmnBaseElement
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
+    [XmlAttribute]
     public string name
     {
         get { return nameField; }

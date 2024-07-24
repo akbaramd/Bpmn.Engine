@@ -1,27 +1,32 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnThrowEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnIntermediateThrowEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnImplicitThrowEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnEndEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnCatchEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnStartEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnIntermediateCatchEvent))]
-[System.Xml.Serialization.XmlIncludeAttribute(typeof(BpmnBoundaryEvent))]
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("event", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[XmlInclude(typeof(BpmnThrowEvent))]
+[XmlInclude(typeof(BpmnIntermediateThrowEvent))]
+[XmlInclude(typeof(BpmnImplicitThrowEvent))]
+[XmlInclude(typeof(BpmnEndEvent))]
+[XmlInclude(typeof(BpmnCatchEvent))]
+[XmlInclude(typeof(BpmnStartEvent))]
+[XmlInclude(typeof(BpmnIntermediateCatchEvent))]
+[XmlInclude(typeof(BpmnBoundaryEvent))]
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("event", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public abstract partial class BpmnEvent : BpmnFlowNode
+public abstract class BpmnEvent : BpmnFlowNode
 {
     private BpmnProperty[] propertyField;
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("property")]
+    [XmlElement("property")]
     public BpmnProperty[] property
     {
         get { return propertyField; }

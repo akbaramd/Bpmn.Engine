@@ -1,18 +1,24 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("extension", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("extension", Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL",
     IsNullable = false)]
-public partial class BpmnExtension
+public class BpmnExtension
 {
     private BpmnDocumentation[] documentationField;
 
-    private System.Xml.XmlQualifiedName definitionField;
+    private XmlQualifiedName definitionField;
 
     private bool mustUnderstandField;
 
@@ -22,7 +28,7 @@ public partial class BpmnExtension
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlElementAttribute("documentation")]
+    [XmlElement("documentation")]
     public BpmnDocumentation[] documentation
     {
         get { return documentationField; }
@@ -30,16 +36,16 @@ public partial class BpmnExtension
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    public System.Xml.XmlQualifiedName definition
+    [XmlAttribute]
+    public XmlQualifiedName definition
     {
         get { return definitionField; }
         set { definitionField = value; }
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute(false)]
+    [XmlAttribute]
+    [DefaultValue(false)]
     public bool mustUnderstand
     {
         get { return mustUnderstandField; }

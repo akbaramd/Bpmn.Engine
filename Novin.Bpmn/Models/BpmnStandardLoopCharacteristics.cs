@@ -1,14 +1,19 @@
-﻿namespace Novin.Bpmn.Models;
+﻿using System.CodeDom.Compiler;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Xml.Serialization;
+
+namespace Novin.Bpmn.Models;
 
 /// <remarks/>
-[System.CodeDom.Compiler.GeneratedCodeAttribute("xsd", "4.8.3928.0")]
-[Serializable()]
-[System.Diagnostics.DebuggerStepThroughAttribute()]
-[System.ComponentModel.DesignerCategoryAttribute("code")]
-[System.Xml.Serialization.XmlTypeAttribute(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
-[System.Xml.Serialization.XmlRootAttribute("standardLoopCharacteristics",
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType(Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL")]
+[XmlRoot("standardLoopCharacteristics",
     Namespace = "http://www.omg.org/spec/BPMN/20100524/MODEL", IsNullable = false)]
-public partial class BpmnStandardLoopCharacteristics : BpmnLoopCharacteristics
+public class BpmnStandardLoopCharacteristics : BpmnLoopCharacteristics
 {
     private BpmnExpression loopConditionField;
 
@@ -29,8 +34,8 @@ public partial class BpmnStandardLoopCharacteristics : BpmnLoopCharacteristics
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute()]
-    [System.ComponentModel.DefaultValueAttribute(false)]
+    [XmlAttribute]
+    [DefaultValue(false)]
     public bool testBefore
     {
         get { return testBeforeField; }
@@ -38,7 +43,7 @@ public partial class BpmnStandardLoopCharacteristics : BpmnLoopCharacteristics
     }
 
     /// <remarks/>
-    [System.Xml.Serialization.XmlAttributeAttribute(DataType = "integer")]
+    [XmlAttribute(DataType = "integer")]
     public string loopMaximum
     {
         get { return loopMaximumField; }
