@@ -134,23 +134,16 @@ public class BpmnProcessEngine
         if (immediately)
         {
 
-            var tempQueue =new  Queue<BpmnProcessNode>();
             while (Instance.NodeQueue.Count != 0)
             {
                 var nodeToProcess = Instance.NodeQueue.Peek();
-
-                if (nodeToProcess.UserTask != null && !nodeToProcess.UserTask.IsCompleted)
-                {
-                    // Skip this node and move it to the end of the queue
-                    Instance.NodeQueue.Dequeue();
-                    tempQueue.Enqueue(nodeToProcess);
-                    continue;
-                }
 
                 try
                 {
                     await ProcessNode(nodeToProcess);
                     StoreProcessState();
+                    Instance.NodeQueue.Dequeue();
+                    
                 }
                 catch (Exception e)
                 {
@@ -158,13 +151,6 @@ public class BpmnProcessEngine
                 }
             }
             
-            while (tempQueue.Count != 0)
-            {
-                Instance.NodeQueue.Enqueue(tempQueue.Dequeue());
-            }
-
-            Instance.NodeQueue = new Queue<BpmnProcessNode>(Instance.NodeQueue.Reverse());
-
         }
         else
         {
@@ -273,7 +259,7 @@ public class BpmnProcessEngine
             }
         }
 
-        Instance.NodeQueue.Dequeue();
+        
     }
 
     public void EnqueueNode(BpmnProcessNode processNode)
