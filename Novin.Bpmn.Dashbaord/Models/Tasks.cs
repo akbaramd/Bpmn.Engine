@@ -7,7 +7,6 @@ public class NovinTasks
     public Guid Id { get; set; }
     public string? Name { get; set; }
     public bool IsCompleted { get; set; }
-    public string TaskId { get; set; }
     public Guid ProcessId { get; set; }
     public Process Process { get; set; }
     public string? Assignee { get; set; }

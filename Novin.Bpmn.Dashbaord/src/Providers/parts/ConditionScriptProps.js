@@ -5,12 +5,6 @@ import { useService } from 'bpmn-js-properties-panel';
 export default function conditionScriptProps(element) {
     return [
         {
-            id: 'conditionScript',
-            element,
-            component: ConditionScriptField,
-            isEdited: isTextFieldEntryEdited
-        },
-        {
             id: 'conditionExpression',
             element,
             component: ConditionExpressionField,
@@ -19,59 +13,32 @@ export default function conditionScriptProps(element) {
     ];
 }
 
-function ConditionScriptField(props) {
-    const { element, id } = props;
-
-    const modeling = useService('modeling');
-    const translate = useService('translate');
-    const debounce = useService('debounceInput');
-
-    const getValue = () => {
-        const businessObject = element.businessObject;
-        return (businessObject.conditionScript && businessObject.conditionScript.body) || '';
-    };
-
-    const setValue = value => {
-        const businessObject = element.businessObject;
-        const conditionScript = businessObject.conditionScript || {};
-        conditionScript.body = value;
-        return modeling.updateProperties(element, {
-            conditionScript
-        });
-    };
-
-    return html`<${TextFieldEntry}
-            id=${id}
-            element=${element}
-            description=${translate('Enter the condition script for the gateway')}
-            label=${translate('Condition Script')}
-            getValue=${getValue}
-            setValue=${setValue}
-            debounce=${debounce}
-    />`;
-}
-
 function ConditionExpressionField(props) {
     const { element, id } = props;
 
     const modeling = useService('modeling');
     const translate = useService('translate');
     const debounce = useService('debounceInput');
+    const bpmnFactory = useService('bpmnFactory');
 
     const getValue = () => {
         const businessObject = element.businessObject;
-        const conditionExpression = businessObject.conditionExpression;
+        const conditionExpression = businessObject.get('conditionExpression');
         return conditionExpression ? conditionExpression.body : '';
     };
 
     const setValue = value => {
         const businessObject = element.businessObject;
-        const conditionExpression = businessObject.conditionExpression || {};
-        conditionExpression.body = value;
-        conditionExpression.language = 'bpmn2'; // Ensure it's set to BPMN 2.0 standard
-        return modeling.updateProperties(element, {
-            conditionExpression
-        });
+        let conditionExpression = businessObject.get('conditionExpression');
+
+        if (!conditionExpression) {
+            conditionExpression = bpmnFactory.create('bpmn:FormalExpression', { body: value, language: 'bpmn2' });
+            modeling.updateProperties(element, { conditionExpression });
+        } else {
+            conditionExpression.body = value;
+            conditionExpression.language = 'bpmn2';
+            modeling.updateProperties(element, { conditionExpression });
+        }
     };
 
     return html`<${TextFieldEntry}

@@ -7,10 +7,12 @@
     <table class="table table-bordered">
         <thead>
         <tr>
+            <th>Task Id</th>
             <th>Task Name</th>
             <th>Assignee</th>
             <th>Candidate Users</th>
             <th>Candidate Groups</th>
+            <th>ProcessId</th>
             <th>Actions</th>
         </tr>
         </thead>
@@ -18,10 +20,12 @@
         @foreach (var task in Model)
         {
         <tr>
+            <td>@task.Id</td>
             <td>@task.Name</td>
             <td>@task.Assignee</td>
             <td>@task.CandidateByUsers</td>
             <td>@task.CandidateByGroups</td>
+            <td>@task.Process.Id</td>
             <td>
                 <form method="post" asp-action="Complete" asp-controller="Task" style="display:inline;">
                     <input type="hidden" name="taskId" value="@task.Id" />
@@ -34,6 +38,9 @@
             <td colspan="5">
                 <div class="card card-body">
                     <dl class="row">
+                        <dt class="col-sm-2">Task Id</dt>
+                        <dd class="col-sm-10">@task.Id</dd>
+                        
                         <dt class="col-sm-2">Task Name</dt>
                         <dd class="col-sm-10">@task.Name</dd>
 

@@ -74,14 +74,14 @@ public class BpmnTask
 {
     public string DeploymentKey { get;  set; }
     public Guid ProcessId { get;  set; }
-    public string TaskId { get;  set; }
+    public Guid TaskId { get;  set; }
     public string Name { get;  set; }
     public string Assignee { get;  set; }
     public List<string> CandidateUsers { get;  set; }
     public List<string> CandidateGroups { get;  set; }
     public bool IsCompleted { get; set; } = false;
 
-    public BpmnTask(string taskId, string name, string assignee, Guid processId, string deploymentKey)
+    public BpmnTask(Guid taskId, string name, string assignee, Guid processId, string deploymentKey)
     {
         TaskId = taskId;
         Name = name;

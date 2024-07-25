@@ -62,7 +62,7 @@ namespace Novin.Bpmn
             return processEngine;
         }
 
-        public async Task<BpmnProcessInstance> CompleteTaskAsync(string taskId, Dictionary<string, object>? variables = null)
+        public async Task<BpmnProcessInstance> CompleteTaskAsync(Guid taskId, Dictionary<string, object>? variables = null)
         {
             // Find the task by its ID
             var task = await bpmnTaskAccessor.RetrieveTask(taskId);

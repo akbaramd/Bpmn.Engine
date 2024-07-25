@@ -3,10 +3,6 @@ using Novin.Bpmn.Core;
 using Novin.Bpmn.Executors.Abstracts;
 using Novin.Bpmn.Handlers;
 using Novin.Bpmn.Models;
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Novin.Bpmn;
 
@@ -15,8 +11,8 @@ public class BpmnProcessEngine
     private readonly IBpmnProcessAccessor _bpmnProcessAccessor;
     private readonly IBpmnTaskAccessor _bpmnTaskAccessor;
     private readonly IBpmnUserAccessor _bpmnUserAccessor;
-    public readonly BpmnDefinitionsHandler DefinitionsHandler;
     private readonly object _pauseLock = new();
+    public readonly BpmnDefinitionsHandler DefinitionsHandler;
 
     public BpmnProcessEngine(
         string deploymentXml,
@@ -28,7 +24,6 @@ public class BpmnProcessEngine
         IExecutor userTaskExecutor,
         IExecutor serviceTaskExecutor)
     {
-
         _bpmnUserAccessor = bpmnUserAccessor;
         _bpmnTaskAccessor = bpmnTaskAccessor;
         _bpmnProcessAccessor = bpmnProcessAccessor;
@@ -82,11 +77,11 @@ public class BpmnProcessEngine
 
     private void InitializeState()
     {
-        if (Instance.NodeQueue.Count != 0 || Instance.NodeStack.Count != 0) return;
+        if (Instance.NextQueue.Count != 0 || Instance.NodeStack.Count != 0) return;
 
         var startEvent = DefinitionsHandler.GetStartEventForProcess(Instance.ProcessElementId);
         var startNode = CreateNewNode(startEvent, Guid.NewGuid(), true);
-        Instance.NodeQueue.Enqueue(startNode);
+        Instance.NextQueue.Enqueue(startNode);
         StoreProcessState();
     }
 
@@ -97,7 +92,9 @@ public class BpmnProcessEngine
         {
             var existingNode = Instance.NodeStack.FirstOrDefault(x => x.ElementId.Equals(element.id) && !x.IsExpired);
 
-            var node = existingNode ?? new BpmnProcessNode(element.id, nodeId,DefinitionsHandler.GetIncomingSequenceFlows(element),DefinitionsHandler.GetOutgoingSequenceFlows(element));
+            var node = existingNode ?? new BpmnProcessNode(element.id, nodeId,
+                DefinitionsHandler.GetIncomingSequenceFlows(element),
+                DefinitionsHandler.GetOutgoingSequenceFlows(element));
 
 
             if (existingNode == null) Instance.NodeStack.Push(node);
@@ -132,17 +129,14 @@ public class BpmnProcessEngine
         await WaitIfPaused();
 
         if (immediately)
-        {
-
-            while (Instance.NodeQueue.Count != 0)
+            while (Instance.NextQueue.Count != 0)
             {
-                var nodeToProcess = Instance.NodeQueue.Peek();
+                var nodeToProcess = Instance.NextQueue.Dequeue();
 
                 try
                 {
                     await ProcessNode(nodeToProcess);
                     StoreProcessState();
-                    Instance.NodeQueue.Dequeue();
                     
                 }
                 catch (Exception e)
@@ -150,25 +144,22 @@ public class BpmnProcessEngine
                     HandleExceptions(e);
                 }
             }
-            
-        }
         else
-        {
-            while (Instance.NodeQueue.Count != 0)
+            while (Instance.NextQueue.Count != 0)
             {
-                var nodeToProcess = Instance.NodeQueue.Peek();
+                var nodeToProcess = Instance.NextQueue.Peek();
 
                 if (nodeToProcess.UserTask != null && !nodeToProcess.UserTask.IsCompleted)
                 {
                     // Skip this node and move it to the end of the queue
-                    Instance.NodeQueue.Enqueue(Instance.NodeQueue.Dequeue());
+                    Instance.NextQueue.Enqueue(Instance.NextQueue.Dequeue());
                     continue;
                 }
 
                 try
                 {
                     await ProcessNode(nodeToProcess);
-                    Instance.NodeQueue.Dequeue(); // Remove the processed node from the queue
+                    Instance.NextQueue.Dequeue(); // Remove the processed node from the queue
                     StoreProcessState();
                 }
                 catch (Exception e)
@@ -176,10 +167,10 @@ public class BpmnProcessEngine
                     HandleExceptions(e);
                 }
             }
-        }
 
         return Instance;
     }
+
     private void HandleExceptions(Exception exception)
     {
         Instance.Exceptions.Push(exception.Message);
@@ -252,21 +243,28 @@ public class BpmnProcessEngine
                 var newToken = Guid.NewGuid();
                 var newNode = CreateNewNode(DefinitionsHandler.GetElementById(target.targetRef), newToken,
                     processNode.IsExecutable, processNode, target);
-                EnqueueNode(newNode);
+                EnqueueNext(newNode);
                 processNode.Expire();
                 processNode.AddMerge(processNode.ElementId, processNode.Id, processNode.IsExecutable);
                 StoreProcessState();
             }
         }
-
-        
     }
 
-    public void EnqueueNode(BpmnProcessNode processNode)
+    public void EnqueueNext(BpmnProcessNode processNode)
     {
-        lock (Instance.NodeQueue)
+        lock (Instance.NextQueue)
         {
-            Instance.NodeQueue.Enqueue(processNode);
+            Instance.NextQueue.Enqueue(processNode);
+            StoreProcessState();
+        }
+    }
+
+    public void EnqueuePending(BpmnProcessNode processNode)
+    {
+        lock (Instance.PendingQueue)
+        {
+            Instance.PendingQueue.Add(processNode);
             StoreProcessState();
         }
     }
@@ -312,20 +310,23 @@ public class BpmnProcessEngine
         return Instance.SaveState();
     }
 
-    public async Task CompleteUserTask(string taskId)
+    public async Task CompleteUserTask(Guid taskId)
     {
         var node = Instance.NodeStack.FirstOrDefault(x => x.UserTask != null && x.UserTask.TaskId.Equals(taskId));
         if (node != null)
         {
-            node.UserTask.CompleteTask();
+            node.UserTask!.CompleteTask();
             await _bpmnTaskAccessor.StoreTask(node.UserTask);
+
             await FindNextNodes(node);
+            Instance.PendingQueue.Remove(Instance.PendingQueue.First(x =>
+                x.UserTask != null && x.UserTask.TaskId.Equals(taskId)));
             StoreProcessState();
             Console.WriteLine($"Completed {taskId}");
         }
     }
 
-    private void StoreProcessState()
+    public void StoreProcessState()
     {
         _bpmnProcessAccessor.StoreProcessState(Instance.DeploymentKey, Instance.Id, Instance);
     }

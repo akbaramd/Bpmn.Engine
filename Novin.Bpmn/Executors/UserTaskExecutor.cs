@@ -25,14 +25,17 @@ public class UserTaskExecutor : IExecutor
         {
             var customTask = CreateUserTask(userTask, processNode, processEngine.Instance);
             processNode.AddUserTask(customTask);
+            processEngine.EnqueuePending(processNode);
+            processEngine.StoreProcessState();
             await _bpmnTaskAccessor.StoreTask(customTask);
+            
         }
     }
 
     private BpmnTask CreateUserTask(BpmnUserTask userTask, BpmnProcessNode processNode, BpmnProcessInstance instance)
     {
         var customTask = new BpmnTask(
-            processNode.Id.ToString(),
+            processNode.Id,
             userTask.name,
             userTask.assignee,
             instance.Id,

@@ -34,6 +34,6 @@ public class ApplicationDbContext : IdentityDbContext
         builder.Entity<NovinTasks>().HasIndex(x => x.Assignee);
         builder.Entity<NovinTasks>().HasIndex(x => x.CandidateByGroups);
         builder.Entity<NovinTasks>().HasIndex(x => x.CandidateByUsers);
-        builder.Entity<NovinTasks>().HasIndex(x => x.TaskId);
+        builder.Entity<NovinTasks>().HasKey(x => x.Id);
     }
 }

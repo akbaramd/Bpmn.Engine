@@ -50,8 +50,88 @@
         </div>
 
         <div class="col-md-8">
-            <div class="card" style="height: 100%">
+            <div class="card mb-3" style="height: 100%">
                 <div style="height: 100%" id="canvas"></div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card mb-4">
+                <div class="card-header">
+                    Waiting User Tasks
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <thead>
+                        <tr>
+                            <th>Task ID</th>
+                            <th>Task Name</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var task in Model.NodeStack.Where(x=>x.UserTask is not null && !x.UserTask.IsCompleted).Select(x => x.UserTask))
+                        {
+                        <tr>
+                            <td>@task.TaskId</td>
+                            <td>@task.Name</td>
+                            <td>
+                                <form method="post" asp-action="Complete" asp-controller="Task" style="display:inline;">
+                                    <input type="hidden" name="taskId" value="@task.TaskId" />
+                                    <button type="submit" class="btn btn-success">Complete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-12">
+            <div class="card mb-4">
+                <div class="card-header">
+                    Node Details
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <thead>
+                        <tr>
+                            <th>Node ID</th>
+                            <th>Element ID</th>
+                            <th>Instances</th>
+                            <th>Incoming Flows</th>
+                            <th>Outgoing Flows</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var node in Model.NodeStack)
+                        {
+                        <tr>
+                            <td>@node.Id</td>
+                            <td>@node.ElementId</td>
+                            <td>
+                                <p>Is Expired: @node.IsExpired</p>
+                                <p>ExpiredAt: @node.ExpiredAt</p>
+                            </td>
+                            <td>
+                                @foreach (var flow in node.IncomingFlows)
+                                {
+                                <p>@flow.id</p>
+                                }
+                            </td>
+                            <td>
+                                @foreach (var flow in node.OutgoingFlows)
+                                {
+                                <p>@flow.id</p>
+                                }
+                            </td>
+                        </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -69,7 +149,7 @@
                         </tr>
                         </thead>
                         <tbody>
-                        @foreach (var node in Model.NodeQueue)
+                        @foreach (var node in Model.NextQueue)
                         {
                             <tr>
                                 <td>@node.Id</td>
@@ -91,6 +171,7 @@
                         <thead>
                         <tr>
                             <th>Node ID</th>
+                            <th>Element ID</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -98,6 +179,7 @@
                         {
                             <tr>
                                 <td>@node.Id</td>
+                                <td>@node.ElementId</td>
                             </tr>
                         }
                         </tbody>
@@ -107,78 +189,7 @@
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-md-12">
-            <div class="card mb-4">
-                <div class="card-header">
-                    Waiting User Tasks
-                </div>
-                <div class="card-body">
-                    <table class="table">
-                        <thead>
-                        <tr>
-                            <th>Task ID</th>
-                            <th>Task Name</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        @foreach (var kvp in Model.NodeStack.Where(x=>x.UserTask is not null).Select(x => x.UserTask))
-                        {
-                            <tr>
-                                <td>@kvp.TaskId</td>
-                                <td>@kvp.Name</td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-12">
-            <div class="card mb-4">
-                <div class="card-header">
-                    Node Details
-                </div>
-                <div class="card-body">
-                    <table class="table">
-                        <thead>
-                        <tr>
-                            <th>Node ID</th>
-                            <th>Instances</th>
-                            <th>Incoming Flows</th>
-                            <th>Outgoing Flows</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        @foreach (var node in Model.NodeStack)
-                        {
-                            <tr>
-                                <td>@node.Id</td>
-                                <td>
-                                    <p>Is Expired: @node.IsExpired</p>
-                                    <p>ExpiredAt: @node.ExpiredAt</p>
-                                </td>
-                                <td>
-                                    @foreach (var flow in node.IncomingFlows)
-                                    {
-                                        <p>@flow.id</p>
-                                    }
-                                </td>
-                                <td>
-                                    @foreach (var flow in node.OutgoingFlows)
-                                    {
-                                        <p>@flow.id</p>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
+ 
 </div>
 
 <script src="~/js/bundle.js"></script>

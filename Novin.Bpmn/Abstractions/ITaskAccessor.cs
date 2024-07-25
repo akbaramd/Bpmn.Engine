@@ -3,6 +3,6 @@
 public interface IBpmnTaskAccessor
 {
     Task StoreTask(BpmnTask task);
-    Task<BpmnTask?> RetrieveTask(string taskId);
+    Task<BpmnTask?> RetrieveTask(Guid taskId);
 
 }

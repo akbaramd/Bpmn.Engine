@@ -29,14 +29,12 @@ namespace Novin.Bpmn.Dashbaord.Controllers
             var user = await _userManager.FindByIdAsync(userId);
             var roles = await _userManager.GetRolesAsync(user);
 
-            var allTasks = await _context.Tasks.ToListAsync();
-
-            var tasks = allTasks.Where(task => task.IsCompleted == false && ( task.Assignee == userId ||
-                                                 (task.CandidateByUsers != null && task.CandidateByUsers.Split(',').Contains(userId)) ||
-                                                 (task.CandidateByGroups != null && task.CandidateByGroups.Split(',').Any(role => roles.Contains(role)))))
+            var allTasks =  _context.Tasks.Include(x=>x.Process).ToList().Where(task => task.IsCompleted == false && ( task.Assignee == userId ||
+                                                              (task.CandidateByUsers != null && task.CandidateByUsers.Contains(userId)) ||
+                                                              (task.CandidateByGroups != null && task.CandidateByGroups.Split(',').Any(role => roles.Contains(role)))))
                 .ToList();
 
-            return View(tasks);
+            return View(allTasks);
         }
         
         [HttpPost]
@@ -45,7 +43,7 @@ namespace Novin.Bpmn.Dashbaord.Controllers
             var task = await _context.Tasks.FindAsync(taskId);
             if (task != null)
             {
-                await _engine.CompleteTaskAsync(task.TaskId);
+                await _engine.CompleteTaskAsync(task.Id);
                 _context.Update(task);
                 await _context.SaveChangesAsync();
                 

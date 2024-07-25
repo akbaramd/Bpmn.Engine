@@ -270,10 +270,6 @@ namespace Novin.Bpmn.Dashbaord.Migrations
                     b.Property<Guid>("ProcessId")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TaskId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
                     b.HasKey("Id");
 
                     b.HasIndex("Assignee");
@@ -285,8 +281,6 @@ namespace Novin.Bpmn.Dashbaord.Migrations
                     b.HasIndex("OwnerId");
 
                     b.HasIndex("ProcessId");
-
-                    b.HasIndex("TaskId");
 
                     b.ToTable("Tasks");
                 });

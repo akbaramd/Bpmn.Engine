@@ -20,7 +20,7 @@ namespace Novin.Bpmn.Handlers
                 var newElement = processEngine.DefinitionsHandler.GetElementById(flow.targetRef);
                 var newNode = processEngine.CreateNewNode(newElement, Guid.NewGuid(), processNode.IsExecutable, processNode, flow);
 
-                processEngine.EnqueueNode(newNode);
+                processEngine.EnqueueNext(newNode);
                 break;
             }
 

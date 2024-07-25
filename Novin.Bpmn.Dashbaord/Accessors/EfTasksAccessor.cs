@@ -16,7 +16,7 @@ namespace Novin.Bpmn.Dashbaord.Accessors
 
         public async Task StoreTask(BpmnTask task)
         {
-            var find = await context.Tasks.FirstOrDefaultAsync(x => x.TaskId.Equals(task.TaskId));
+            var find = await context.Tasks.FirstOrDefaultAsync(x => x.Id.Equals(task.TaskId));
             if (find == null)
             {   
                 var novinTask = MapBpmnTaskToNovinTask(task);
@@ -32,17 +32,18 @@ namespace Novin.Bpmn.Dashbaord.Accessors
                 find.ProcessId = task.ProcessId;
                 find.DeploymentKey = task.DeploymentKey;
                 find.OwnerId = task.Assignee;
+                find.IsCompleted = task.IsCompleted;
                 context.Tasks.Update(find);
                 await context.SaveChangesAsync();
             }
             
         }
 
-        public async Task<BpmnTask?> RetrieveTask(string taskId)
+        public async Task<BpmnTask?> RetrieveTask(Guid taskId)
         {
             var task = await context.Tasks
                 .Include(t => t.Process)
-                .FirstOrDefaultAsync(t => t.TaskId == taskId);
+                .FirstOrDefaultAsync(t => t.Id == taskId);
 
             return task == null ? null : MapNovinTaskToBpmnTask(task);
         }
@@ -52,8 +53,7 @@ namespace Novin.Bpmn.Dashbaord.Accessors
             var process = context.Processes.First(x => x.Id.Equals(task.ProcessId));
             return new NovinTasks
             {
-                Id = Guid.NewGuid(),
-                TaskId = task.TaskId,
+                Id = task.TaskId,
                 Name = task.Name,
                 Assignee = task.Assignee,
                 IsCompleted = task.IsCompleted,
@@ -68,7 +68,7 @@ namespace Novin.Bpmn.Dashbaord.Accessors
         private BpmnTask MapNovinTaskToBpmnTask(NovinTasks task)
         {
             var customTask = new BpmnTask(
-                taskId: task.TaskId,
+                taskId: task.Id,
                 name: task.Name,
                 assignee: task.Assignee,
                 processId: task.ProcessId,

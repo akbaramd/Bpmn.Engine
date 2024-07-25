@@ -26,7 +26,8 @@ public class BpmnProcessInstance
     public string DefinitionXml { get;  set; }
     public string DeploymentKey { get;  set; }
     public dynamic Variables { get;  set; } = new ExpandoObject();
-    public Queue<BpmnProcessNode> NodeQueue { get;  set; } = new();
+    public Queue<BpmnProcessNode> NextQueue { get;  set; } = new();
+    public List<BpmnProcessNode> PendingQueue { get;  set; } = new();
     public Stack<BpmnProcessNode> NodeStack { get;  set; } = new();
     public Stack<BpmnNodeTransition> TransitionStack { get;  set; } = new();
     public Stack<string> Exceptions { get;  set; } = new();
@@ -55,7 +56,7 @@ public class BpmnProcessInstance
                 ElementId = node.ElementId,
                 IsActive = node.IsExecutable &&
                            (node.IncomingFlows.Count == 0 || node.IncomingFlows.Count == node.Instances.Count),
-                IsWaiting = NodeQueue.Any(x=>x.Id.Equals(node.Id)),
+                IsPending = PendingQueue.Any(x=>x.Id.Equals(node.Id)),
                 Count = node.Instances.Count
             };
 
@@ -68,8 +69,8 @@ public class BpmnProcessInstance
                     executedPaths[transition.ElementId] = new BpmnNodeState
                     {
                         ElementId = transition.ElementId,
-                        IsActive = node.IsExecutable && node.IncomingFlows.Count == node.Instances.Count,
-                        IsWaiting = false,
+                        IsActive = node.IsExecutable ,
+                        IsPending = false,
                         Count = 1
                     };
         }

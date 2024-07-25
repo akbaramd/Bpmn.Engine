@@ -40,9 +40,7 @@ export function initializeModeler(definitionKey) {
         .catch(err => console.error('Error loading BPMN diagram', err));
 }
 
-export function initializeViewer(url,details) {
-    
-  
+export function initializeViewer(url, details) {
     const viewer = new BpmnViewer({
         container: '#canvas'
     });
@@ -51,27 +49,26 @@ export function initializeViewer(url,details) {
         .then(response => response.text())
         .then(async bpmnXML => {
             try {
-                viewer.importXML(bpmnXML);
+                await viewer.importXML(bpmnXML);
                 const canvas = viewer.get('canvas');
-                const elementRegistry = await viewer.get('elementRegistry');
+                const elementRegistry = viewer.get('elementRegistry');
                 canvas.zoom('fit-viewport');
 
-                console.log(canvas)
-                console.log(elementRegistry)
-                
-                details.filter(x=>x.IsActive).forEach(function (node) {
+                console.log(canvas);
+                console.log(elementRegistry);
+
+                details.filter(x => x.IsActive).forEach(function (node) {
                     const id = node.ElementId;
                     const element = elementRegistry.get(id);
-                    console.log(element)
+                    console.log(element);
                     if (element) {
                         canvas.addMarker(id, 'highlight');
                         console.log(`Element found and highlighted: ${id}`);
                         const color = "blue";
-                        // Explicitly set the stroke color for the graphical representation
                         const gfx = elementRegistry.getGraphics(id);
                         const paths = gfx.querySelectorAll('path');
                         paths.forEach((path) => {
-                            path.style.stroke =color;
+                            path.style.stroke = color;
                         });
 
                         const rects = gfx.querySelectorAll('rect');
@@ -87,24 +84,20 @@ export function initializeViewer(url,details) {
                         circle.forEach((path) => {
                             path.style.stroke = color;
                         });
-                        
-                        
                     } else {
                         console.warn(`Element not found: ${id}`);
                     }
                 });
 
-                details.filter(x=>x.IsWaiting).forEach(function (node) {
+                details.filter(x => x.IsPending).forEach(function (node) {
                     const id = node.ElementId;
                     const element = elementRegistry.get(id);
-                    console.log(element)
                     if (element) {
                         const color = "green";
-                        // Explicitly set the stroke color for the graphical representation
                         const gfx = elementRegistry.getGraphics(id);
                         const paths = gfx.querySelectorAll('path');
                         paths.forEach((path) => {
-                            path.style.stroke =color;
+                            path.style.stroke = color;
                         });
 
                         const rects = gfx.querySelectorAll('rect');
@@ -121,11 +114,23 @@ export function initializeViewer(url,details) {
                             path.style.stroke = color;
                         });
 
-
+                        // Add the title attribute for the popover
+                        gfx.setAttribute('title', `Task ID: ${node.ElementId}`);
+                        gfx.setAttribute('data-toggle', 'popover');
+                        console.log(node)
+                        if (node.UserTask){
+                            gfx.setAttribute('data-content', `Task ID: ${node.UserTask.TaskId}`);
+                        }
                     } else {
                         console.warn(`Element not found: ${id}`);
                     }
                 });
+
+                // Initialize Bootstrap popover after DOM is updated
+                $('[data-toggle="popover"]').popover({
+                    trigger: 'hover'
+                });
+
             } catch (e) {
                 console.log(e);
             }
