@@ -19,5 +19,8 @@ public class InMemoryBpmnTaskAccessor : IBpmnTaskAccessor
         return Task.FromResult(task);
     }
 
-    
+    public Task<BpmnTask?> RetrieveUserTask(string userId, Guid processId)
+    {
+        throw new NotImplementedException();
+    }
 }

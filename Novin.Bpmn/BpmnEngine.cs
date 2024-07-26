@@ -62,7 +62,7 @@ namespace Novin.Bpmn
             return processEngine;
         }
 
-        public async Task<BpmnProcessInstance> CompleteTaskAsync(Guid taskId, Dictionary<string, object>? variables = null)
+        public async Task<BpmnProcessInstance> CompleteTaskAsync(Guid taskId, dynamic? variables = null)
         {
             // Find the task by its ID
             var task = await bpmnTaskAccessor.RetrieveTask(taskId);
@@ -92,10 +92,8 @@ namespace Novin.Bpmn
             // Complete the task using the process engine
             if (variables != null)
             {
-                foreach (var variable in variables)
-                {
-                    processEngine.Instance.Variables[variable.Key] = variable.Value;
-                }
+
+                processEngine.Instance.Variables = variables;
             }
 
             await processEngine.CompleteUserTask(taskId);

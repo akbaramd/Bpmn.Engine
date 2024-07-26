@@ -76,10 +76,7 @@
                             <td>@task.TaskId</td>
                             <td>@task.Name</td>
                             <td>
-                                <form method="post" asp-action="Complete" asp-controller="Task" style="display:inline;">
-                                    <input type="hidden" name="taskId" value="@task.TaskId" />
-                                    <button type="submit" class="btn btn-success">Complete</button>
-                                </form>
+                                <a href="/user-task/@task.TaskId" type="submit" class="btn btn-success">Complete</a>
                             </td>
                         </tr>
                         }

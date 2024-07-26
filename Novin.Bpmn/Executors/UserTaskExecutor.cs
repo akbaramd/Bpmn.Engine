@@ -36,6 +36,7 @@ public class UserTaskExecutor : IExecutor
     {
         var customTask = new BpmnTask(
             processNode.Id,
+            userTask.formId,
             userTask.name,
             userTask.assignee,
             instance.Id,

@@ -1,0 +1,13 @@
+﻿@model Novin.Bpmn.Dashbaord.Controllers.Forms.AddNumberToVariableModel
+
+<h1>Add Number to Variable</h1>
+
+<form asp-action="SubmitForm" method="post">
+    <div class="form-group">
+        <label asp-for="Index"></label>
+        <input asp-for="Index" class="form-control" />
+        <input type="hidden" asp-for="TaskId" />
+        <span asp-validation-for="Index" class="text-danger"></span>
+    </div>
+    <button type="submit" class="btn btn-primary">Submit</button>
+</form>

@@ -41,8 +41,8 @@ public class BpmnUserTask : BpmnTask
     }
 
 
-    [XmlAttribute("formKey")]
-    public string FormKey { get; set; }
+    [XmlAttribute("formId")]
+    public string formId { get; set; }
 
     [XmlAttribute("candidateGroups",AttributeName = "candidateGroups")]
     public string candidateGroups { get; set; }
@@ -52,4 +52,6 @@ public class BpmnUserTask : BpmnTask
     
     [XmlAttribute("assignee",AttributeName = "assignee")]
     public string assignee { get; set; }
+    
+
 }

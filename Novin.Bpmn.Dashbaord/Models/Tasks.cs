@@ -13,6 +13,7 @@ public class NovinTasks
     public string? CandidateByUsers { get; set; }
     public string? CandidateByGroups { get; set; }
     public string? OwnerId { get; set; }
+    public string? FormId { get; set; }
     
     public IdentityUser? Owner { get; set; }
     public string DeploymentKey { get; set; }

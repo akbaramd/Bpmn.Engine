@@ -51,10 +51,18 @@ app.UseAuthorization();
 app.UseStaticFiles();
 
 app.MapStaticAssets();
+app.MapControllerRoute(
+    name: "UserForms",
+    pattern: "user-task/{taskId}",
+    defaults: new { action = "ShowForm" ,controller="AddNumberToVariables"},
+    constraints: new { taskId = new UserFormRouteConstraint(app.Services) });
 
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
+
+
+
 app.MapRazorPages();
 
 app.Run();

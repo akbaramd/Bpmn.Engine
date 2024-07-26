@@ -33,6 +33,7 @@ namespace Novin.Bpmn.Dashbaord.Accessors
                 find.DeploymentKey = task.DeploymentKey;
                 find.OwnerId = task.Assignee;
                 find.IsCompleted = task.IsCompleted;
+                find.FormId = task.FormId;
                 context.Tasks.Update(find);
                 await context.SaveChangesAsync();
             }
@@ -44,6 +45,18 @@ namespace Novin.Bpmn.Dashbaord.Accessors
             var task = await context.Tasks
                 .Include(t => t.Process)
                 .FirstOrDefaultAsync(t => t.Id == taskId);
+
+            return task == null ? null : MapNovinTaskToBpmnTask(task);
+        }
+
+        public async Task<BpmnTask?> RetrieveUserTask(string userId, Guid processId)
+        {
+            var task = await context.Tasks
+                    .Include(t => t.Process)
+                .FirstOrDefaultAsync(task => task.IsCompleted == false && task.ProcessId == processId && (task.Assignee == userId ||
+                                                              (task.CandidateByUsers != null &&
+                                                               task.CandidateByUsers.Contains(userId)) ||
+                                                              (task.CandidateByGroups != null )));
 
             return task == null ? null : MapNovinTaskToBpmnTask(task);
         }
@@ -60,6 +73,7 @@ namespace Novin.Bpmn.Dashbaord.Accessors
                 CandidateByUsers = task.CandidateUsers != null ? string.Join(",", task.CandidateUsers) : null,
                 CandidateByGroups = task.CandidateGroups != null ? string.Join(",", task.CandidateGroups) : null,
                 ProcessId = process.Id,
+                FormId = task.FormId,
                 DeploymentKey = task.DeploymentKey,
                 OwnerId = task.Assignee
             };
@@ -69,6 +83,7 @@ namespace Novin.Bpmn.Dashbaord.Accessors
         {
             var customTask = new BpmnTask(
                 taskId: task.Id,
+                formId: task.FormId,
                 name: task.Name,
                 assignee: task.Assignee,
                 processId: task.ProcessId,
