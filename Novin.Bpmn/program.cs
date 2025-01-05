@@ -4,50 +4,57 @@ using System.Threading.Tasks;
 using Novin.Bpmn;
 using Novin.Bpmn.Abstractions;
 using Novin.Bpmn.Core;
+using Novin.Bpmn.Executors;
 using Novin.Bpmn.Executors.Abstracts;
 using Novin.Bpmn.Handlers;
 using Novin.Bpmn.Models;
-using BpmnTask = Novin.Bpmn.BpmnTask;
 
 class Program
 {
     static async Task Main(string[] args)
     {
-        // Define the path to the BPMN file
-        string bpmnFilePath = "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\simple_inclusive.bpmn";
-        string deploymentName = "SimpleInclusiveProcess";
+        // Define the path to the BPMN file and deployment name
+        const string bpmnFilePath = "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\simple_inclusive.bpmn";
+        const string deploymentName = "SimpleInclusiveProcess";
 
-        // Initialize the definition and process storage
+        // Initialize storage and accessors
         IBpmnDefinitionAccessor bpmnDefinitionAccessor = new InMemoryBpmnDefinitionAccessor();
         IBpmnProcessAccessor bpmnProcessAccessor = new InMemoryBpmnProcessAccessor();
-
-        // Initialize user handler and task storage
-        IBpmnUserAccessor bpmnUserAccessor = new InMemoryBpmnUserAccessor();
         IBpmnTaskAccessor bpmnTaskAccessor = new InMemoryBpmnTaskAccessor();
 
-        // Initialize the BpmnEngine
-        var engine = new BpmnEngine(bpmnUserAccessor, bpmnTaskAccessor, bpmnDefinitionAccessor, bpmnProcessAccessor);
+        // Initialize executors
+        IScriptTaskExecutor scriptExecutor = new ScriptTaskExecutor();
+        IUserTaskExecutor userTaskExecutor = new UserTaskExecutor(bpmnTaskAccessor);
+        IServiceTaskExecutor serviceTaskExecutor = new ServiceTaskExecutor();
+
+        // Initialize the BpmnEngine with executors
+        var engine = new BpmnEngine(
+            bpmnTaskAccessor,
+            bpmnDefinitionAccessor,
+            bpmnProcessAccessor,
+            scriptExecutor,
+            userTaskExecutor,
+            serviceTaskExecutor);
 
         // Deploy the BPMN definition
         engine.DeployDefinition(bpmnFilePath, deploymentName);
         Console.WriteLine("BPMN definition deployed successfully.");
 
-        // Create a new process from the deployed definition
+        // Create and start the process
         var processEngine = await engine.CreateProcessAsync(deploymentName);
         Console.WriteLine("BPMN process created successfully.");
-
-        // Start the process
-        var instance = await processEngine.StartProcess(); // Start without immediately processing all tasks
+        var instance = await processEngine.StartProcess();
         Console.WriteLine("BPMN process started successfully.");
 
-        // Check and handle user tasks
-        await HandleUserTasks(engine,processEngine, instance);
+        // Handle user tasks
+        await HandleUserTasks(engine, processEngine, instance);
     }
 
     static async Task HandleUserTasks(BpmnEngine engine, BpmnProcessEngine processEngine, BpmnProcessInstance instance)
     {
         while (true)
         {
+            // Retrieve all pending user tasks
             var userTasks = GetPendingUserTasks(instance);
 
             if (userTasks.Count == 0)
@@ -56,14 +63,19 @@ class Program
                 break;
             }
 
-            foreach (var userTask in userTasks)
+            Console.WriteLine($"Found {userTasks.Count} pending user task(s).");
+
+            foreach (var userTaskNode in userTasks)
             {
-                   instance = await engine.CompleteTaskAsync(userTask.UserTask.TaskId);
-                 
+                Console.WriteLine($"Completing task: {userTaskNode.UserTask?.TaskId} ({userTaskNode.UserTask?.Name})");
+
+                // Simulate completing the user task
+                instance = await engine.CompleteTaskAsync(userTaskNode.UserTask!.TaskId);
+                Console.WriteLine($"Task {userTaskNode.UserTask.TaskId} completed.");
             }
 
-            // Process next steps in the workflow after completing user tasks
-            await HandleUserTasks(engine, processEngine, instance);
+            // Process the next steps in the workflow after completing user tasks
+            instance = await processEngine.StartProcess();
         }
     }
 

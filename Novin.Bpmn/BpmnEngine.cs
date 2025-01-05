@@ -1,95 +1,105 @@
 ﻿using Novin.Bpmn.Abstractions;
 using Novin.Bpmn.Core;
-using Novin.Bpmn.Executors;
+using Novin.Bpmn.Executors.Abstracts;
 using Novin.Bpmn.Handlers;
 
 namespace Novin.Bpmn
 {
     public class BpmnEngine
     {
-        private readonly IBpmnUserAccessor bpmnUserAccessor;
-        private readonly IBpmnTaskAccessor bpmnTaskAccessor;
-        private readonly IBpmnDefinitionAccessor bpmnDefinitionAccessor;
-        private readonly IBpmnProcessAccessor bpmnProcessAccessor;
+        private readonly IBpmnTaskAccessor _bpmnTaskAccessor;
+        private readonly IBpmnDefinitionAccessor _bpmnDefinitionAccessor;
+        private readonly IBpmnProcessAccessor _bpmnProcessAccessor;
+
+        // Injected executors
+        private readonly IScriptTaskExecutor _scriptTaskExecutor;
+        private readonly IUserTaskExecutor _userTaskExecutor;
+        private readonly IServiceTaskExecutor _serviceTaskExecutor;
 
         public BpmnEngine(
-            IBpmnUserAccessor bpmnUserAccessor,
             IBpmnTaskAccessor bpmnTaskAccessor,
             IBpmnDefinitionAccessor bpmnDefinitionAccessor,
-            IBpmnProcessAccessor bpmnProcessAccessor)
+            IBpmnProcessAccessor bpmnProcessAccessor,
+            IScriptTaskExecutor scriptTaskExecutor, // Load from DI
+            IUserTaskExecutor userTaskExecutor,  // Load from DI
+            IServiceTaskExecutor serviceTaskExecutor // Load from DI
+        )
         {
-            this.bpmnUserAccessor = bpmnUserAccessor;
-            this.bpmnTaskAccessor = bpmnTaskAccessor;
-            this.bpmnDefinitionAccessor = bpmnDefinitionAccessor;
-            this.bpmnProcessAccessor = bpmnProcessAccessor;
+            _bpmnTaskAccessor = bpmnTaskAccessor;
+            _bpmnDefinitionAccessor = bpmnDefinitionAccessor;
+            _bpmnProcessAccessor = bpmnProcessAccessor;
+            _scriptTaskExecutor = scriptTaskExecutor;
+            _userTaskExecutor = userTaskExecutor;
+            _serviceTaskExecutor = serviceTaskExecutor;
         }
 
         public void DeployDefinition(string path, string deploymentKey)
         {
             var definitionXml = File.ReadAllText(path);
-            bpmnDefinitionAccessor.StoreDefinition(definitionXml, deploymentKey);
+            _bpmnDefinitionAccessor.StoreDefinition(definitionXml, deploymentKey);
         }
 
         public async Task<BpmnProcessEngine> CreateProcessAsync(string deploymentKey)
         {
-            var novinDefinition = bpmnDefinitionAccessor.GetDefinitionByDeploymentKey(deploymentKey);
-
-            var definitionsHandler = new BpmnDefinitionsHandler(novinDefinition.Content);
+            var novinDefinition = _bpmnDefinitionAccessor.GetDefinitionByDeploymentKey(deploymentKey);
+            if (novinDefinition == null)
+            {
+                throw new Exception($"Definition not found for deployment key: {deploymentKey}");
+            }
 
             var processEngine = new BpmnProcessEngine(
                 novinDefinition.Content,
                 deploymentKey,
-                bpmnUserAccessor, bpmnTaskAccessor, bpmnProcessAccessor,
-                new ScriptTaskExecutor(),
-                new UserTaskExecutor(bpmnTaskAccessor, bpmnUserAccessor),
-                new ServiceTaskExecutor());
+                _bpmnTaskAccessor,
+                _bpmnProcessAccessor,
+                _scriptTaskExecutor,
+                _userTaskExecutor,
+                _serviceTaskExecutor);
 
             return processEngine;
         }
 
         public async Task<BpmnProcessEngine> CreateProcessAsync(Guid processId)
         {
-            var processState = bpmnProcessAccessor.GetProcessState(processId);
-  
+            var processState = _bpmnProcessAccessor.GetProcessState(processId);
+            if (processState == null)
+            {
+                throw new Exception($"Process state not found for process ID: {processId}");
+            }
 
             var processEngine = new BpmnProcessEngine(
                 processState,
-                bpmnUserAccessor, bpmnTaskAccessor, bpmnProcessAccessor,
-                new ScriptTaskExecutor(),
-                new UserTaskExecutor(bpmnTaskAccessor, bpmnUserAccessor),
-                new ServiceTaskExecutor());
+                _bpmnTaskAccessor,
+                _bpmnProcessAccessor,
+                _scriptTaskExecutor,
+                _userTaskExecutor,
+                _serviceTaskExecutor);
 
             return processEngine;
         }
 
         public async Task<BpmnProcessInstance> CompleteTaskAsync(Guid taskId, Dictionary<string, object>? variables = null)
         {
-            // Find the task by its ID
-            var task = await bpmnTaskAccessor.RetrieveTask(taskId);
+            var task = await _bpmnTaskAccessor.RetrieveTask(taskId);
             if (task == null)
             {
                 throw new Exception($"Task with ID {taskId} not found.");
             }
 
-            // Find the process and deployment definition using the task's process ID and deployment key
-            var processState = bpmnProcessAccessor.GetProcessState(task.ProcessId);
+            var processState = _bpmnProcessAccessor.GetProcessState(task.ProcessId);
             if (processState == null)
             {
-                throw new Exception($"Process with ID {task.ProcessId} and deployment key {task.DeploymentKey} not found.");
+                throw new Exception($"Process state for ID {task.ProcessId} not found.");
             }
 
-
-            // Create a process engine instance
             var processEngine = new BpmnProcessEngine(
                 processState,
-                bpmnUserAccessor,
-                bpmnTaskAccessor, 
-                bpmnProcessAccessor,
-                new ScriptTaskExecutor(),
-                new UserTaskExecutor(bpmnTaskAccessor, bpmnUserAccessor),
-                new ServiceTaskExecutor());
+                _bpmnTaskAccessor,
+                _bpmnProcessAccessor,
+                _scriptTaskExecutor,
+                _userTaskExecutor,
+                _serviceTaskExecutor);
 
-            // Complete the task using the process engine
             if (variables != null)
             {
                 foreach (var variable in variables)

@@ -2,9 +2,13 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Novin.Bpmn;
 using Novin.Bpmn.Abstractions;
+using Novin.Bpmn.Blazor;
+using Novin.Bpmn.Core;
 using Novin.Bpmn.Dashbaord;
 using Novin.Bpmn.Dashbaord.Accessors;
 using Novin.Bpmn.Dashbaord.Data;
+using Novin.Bpmn.Executors;
+using Novin.Bpmn.Executors.Abstracts;
 using Novin.Bpmn.Handlers;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,12 +25,10 @@ builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.Requ
     .AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddControllersWithViews();
 
-builder.Services.AddScoped<IBpmnTaskAccessor, EfBpmnTasksAccessor>();
-builder.Services.AddScoped<IBpmnUserAccessor, EfBpmnUserAccessor>();
-builder.Services.AddScoped<IBpmnDefinitionAccessor, EfBpmnDefinitionsAccessor>();
-builder.Services.AddScoped<IBpmnProcessAccessor, EfBpmnProcessAccessor>();
-builder.Services.AddScoped<BpmnEngine>();
-
+builder.Services.AddBpmnEngine();
+builder.Services.AddTransient<IBpmnTaskAccessor, EfBpmnTasksAccessor>();
+builder.Services.AddTransient<IBpmnDefinitionAccessor, EfBpmnDefinitionsAccessor>();
+builder.Services.AddTransient<IBpmnProcessAccessor, EfBpmnProcessAccessor>();
 var app = builder.Build();
 
 

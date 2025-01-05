@@ -10,21 +10,18 @@ public class BpmnProcessEngine
 {
     private readonly IBpmnProcessAccessor _bpmnProcessAccessor;
     private readonly IBpmnTaskAccessor _bpmnTaskAccessor;
-    private readonly IBpmnUserAccessor _bpmnUserAccessor;
     private readonly object _pauseLock = new();
     public readonly BpmnDefinitionsHandler DefinitionsHandler;
 
     public BpmnProcessEngine(
         string deploymentXml,
         string deploymentKey,
-        IBpmnUserAccessor bpmnUserAccessor,
         IBpmnTaskAccessor bpmnTaskAccessor,
         IBpmnProcessAccessor bpmnProcessAccessor,
-        IExecutor scriptExecutor,
-        IExecutor userTaskExecutor,
-        IExecutor serviceTaskExecutor)
+        IScriptTaskExecutor scriptExecutor,
+        IUserTaskExecutor userTaskExecutor,
+        IServiceTaskExecutor serviceTaskExecutor)
     {
-        _bpmnUserAccessor = bpmnUserAccessor;
         _bpmnTaskAccessor = bpmnTaskAccessor;
         _bpmnProcessAccessor = bpmnProcessAccessor;
         DefinitionsHandler = new BpmnDefinitionsHandler(deploymentXml);
@@ -40,15 +37,13 @@ public class BpmnProcessEngine
 
     public BpmnProcessEngine(
         BpmnProcessInstance instance,
-        IBpmnUserAccessor bpmnUserAccessor,
         IBpmnTaskAccessor bpmnTaskAccessor,
         IBpmnProcessAccessor bpmnProcessAccessor,
-        IExecutor scriptExecutor,
-        IExecutor userTaskExecutor,
-        IExecutor serviceTaskExecutor)
+        IScriptTaskExecutor scriptExecutor,
+        IUserTaskExecutor userTaskExecutor,
+        IServiceTaskExecutor serviceTaskExecutor)
     {
         DefinitionsHandler = new BpmnDefinitionsHandler(instance.Definition);
-        _bpmnUserAccessor = bpmnUserAccessor;
         _bpmnTaskAccessor = bpmnTaskAccessor;
         _bpmnProcessAccessor = bpmnProcessAccessor;
         Instance = instance;
