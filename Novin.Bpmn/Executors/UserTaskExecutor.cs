@@ -8,12 +8,12 @@ namespace Novin.Bpmn.Executors;
 
 public class UserTaskExecutor(IBpmnTaskAccessor bpmnTaskAccessor) : IUserTaskExecutor
 {
-    public async Task ExecuteAsync(BpmnProcessNode processNode, BpmnProcessEngine processEngine)
+    public async Task ExecuteAsync(BpmnProcessNode processNode, BpmnProcessExecutor processExecutor)
     {
         if (processNode.UserTask is not null && processNode.UserTask.IsCompleted)
             return;
 
-        var element = processEngine.DefinitionsHandler.GetElementById(processNode.ElementId);
+        var element = processExecutor.DefinitionsHandler.GetElementById(processNode.ElementId);
 
         if (element is BpmnUserTask userTask)
         {
@@ -23,10 +23,10 @@ public class UserTaskExecutor(IBpmnTaskAccessor bpmnTaskAccessor) : IUserTaskExe
                 ValidateUserTaskAssignment(userTask, processNode);
 
                 // Create and assign the user task
-                var customTask = CreateUserTask(userTask, processNode, processEngine.Instance);
+                var customTask = CreateUserTask(userTask, processNode, processExecutor.Instance);
                 processNode.AddUserTask(customTask);
-                processEngine.EnqueuePending(processNode);
-                processEngine.StoreProcessState();
+                processExecutor.EnqueuePending(processNode);
+                processExecutor.StoreProcessState();
 
                 // Persist the user task
                 await bpmnTaskAccessor.StoreTask(customTask);
@@ -70,7 +70,8 @@ public class UserTaskExecutor(IBpmnTaskAccessor bpmnTaskAccessor) : IUserTaskExe
             userTask.name,
             userTask.assignee,
             instance.Id,
-            instance.DeploymentKey);
+            instance.DeploymentKey,
+            isCompleted:false);
 
         if (!string.IsNullOrEmpty(userTask.candidateUsers))
         {

@@ -17,6 +17,9 @@
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.8.0"/>
         <PackageReference Include="Microsoft.CodeAnalysis.Scripting" Version="4.8.0"/>
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+        <PackageReference Include="Quartz" Version="3.13.1" />
+        <PackageReference Include="Quartz.Extensions.DependencyInjection" Version="3.13.1" />
+        <PackageReference Include="Quartz.Extensions.Hosting" Version="3.13.1" />
     </ItemGroup>
     <ItemGroup>
         <Compile Remove="Executors\InclusiveGatewayExecutor.cs"/>

@@ -87,9 +87,9 @@ namespace Novin.Bpmn.Dashbaord.Accessors
                 name: task.Name,
                 assignee: task.Assignee,
                 processId: task.ProcessId,
-                deploymentKey: task.DeploymentKey);
+                deploymentKey: task.DeploymentKey,
+                isCompleted:task.IsCompleted);
 
-            customTask.IsCompleted = task.IsCompleted;
 
             if (!string.IsNullOrEmpty(task.CandidateByUsers))
             {

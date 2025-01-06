@@ -29,12 +29,20 @@ public class BpmnDefinitionsHandler
     {
         return GetProcess(processId).Items.OfType<BpmnStartEvent>().First();
     }
+    
+    public List<BpmnStartEvent> GetStartEventsForProcess(string processId)
+    {
+        return GetProcess(processId).Items.OfType<BpmnStartEvent>().ToList();
+    }
     public BpmnEndEvent GetEndEventForProcess(string processId)
     {
         return GetProcess(processId).Items.OfType<BpmnEndEvent>().First();
     }
 
-
+    public List<BpmnBoundaryEvent> GetAttachedEvents(string refId)
+    {
+        return GetFirstProcess().Items.OfType<BpmnBoundaryEvent>().Where(x=>x.attachedToRef.Name == refId).ToList();
+    }
     public BpmnFlowElement GetElementById(string id)
     {
         return GetFirstProcess().Items.First(x => x.id.Equals(id));

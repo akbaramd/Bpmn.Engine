@@ -8,9 +8,9 @@ namespace Novin.Bpmn.Executors;
 public class ServiceTaskExecutor : IServiceTaskExecutor
 {
 
-    public async Task ExecuteAsync(BpmnProcessNode processNode, BpmnProcessEngine processEngine)
+    public async Task ExecuteAsync(BpmnProcessNode processNode, BpmnProcessExecutor processExecutor)
     {
-        var definitionsHandler = new BpmnDefinitionsHandler(processEngine.Instance.Definition);
+        var definitionsHandler = new BpmnDefinitionsHandler(processExecutor.Instance.Definition);
         var serviceTask = definitionsHandler.GetElementById(processNode.ElementId) as BpmnServiceTask;
         if (serviceTask != null)
         {
@@ -23,7 +23,7 @@ public class ServiceTaskExecutor : IServiceTaskExecutor
             {
                 var handler = (IServiceTaskHandler) Activator.CreateInstance(types);
 
-                await handler?.HandleAsync(processEngine.Instance)!;
+                await handler?.HandleAsync(processExecutor.Instance)!;
                 Console.WriteLine($"Service task {processNode.ElementId} executed. Response: {serviceTask.implementation}");
             }
 

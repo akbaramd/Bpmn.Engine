@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_1lm6ajz" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.4.2" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.18.0">
-  <bpmn:process id="process" name="My Process" isExecutable="true" camunda:historyTimeToLive="180">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+ xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1lm6ajz" targetNamespace="http://bpmn.io/schema/bpmn" 
+ exporter="Camunda Modeler" exporterVersion="5.4.2" >
+  <bpmn:process id="process" name="My Process" isExecutable="true">
     <bpmn:startEvent id="StartEvent_1">
       <bpmn:outgoing>Flow_0ce4b6b</bpmn:outgoing>
     </bpmn:startEvent>
@@ -95,12 +98,24 @@ if(State.Variables.Index == 1){
       <bpmn:outgoing>Flow_0lqeugx</bpmn:outgoing>
       <bpmn:outgoing>Flow_08yfurs</bpmn:outgoing>
     </bpmn:inclusiveGateway>
+    <bpmn:userTask id="Activity_2_1_1">
+      <bpmn:incoming>Flow_172qrga</bpmn:incoming>
+      <bpmn:outgoing>Flow_0hkmhgu</bpmn:outgoing>
+    </bpmn:userTask>
     <bpmn:scriptTask id="Activity_2_1_22">
       <bpmn:incoming>Flow_0t0gyus</bpmn:incoming>
       <bpmn:outgoing>Flow_1hdcm9f</bpmn:outgoing>
       <bpmn:script>Console.WriteLine("Excute Activity_2_1_22");</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:sequenceFlow id="Flow_1hdcm9f" sourceRef="Activity_2_1_22" targetRef="Gateway_0cdih2j" />
+    <bpmn:userTask id="Activity_3">
+      <bpmn:incoming>Flow_0lqeugx</bpmn:incoming>
+      <bpmn:outgoing>Flow_174fdho</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Activity_2_1_2">
+      <bpmn:incoming>Flow_0ti3klk</bpmn:incoming>
+      <bpmn:outgoing>Flow_0t0gyus</bpmn:outgoing>
+    </bpmn:userTask>
     <bpmn:sequenceFlow id="Flow_033vwij" sourceRef="Gateway_11r4x65" targetRef="Event_1hqdd96">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">State.Variables.Index == 2</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
@@ -109,20 +124,6 @@ if(State.Variables.Index == 1){
       <bpmn:incoming>Flow_0ce4b6b</bpmn:incoming>
       <bpmn:outgoing>Flow_0xbnbfk</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:scriptTask id="Activity_2_1_1">
-      <bpmn:incoming>Flow_172qrga</bpmn:incoming>
-      <bpmn:outgoing>Flow_0hkmhgu</bpmn:outgoing>
-      <bpmn:script>Console.WriteLine("Excute Activity_2_1_1");</bpmn:script>
-    </bpmn:scriptTask>
-    <bpmn:scriptTask id="Activity_2_1_2">
-      <bpmn:incoming>Flow_0ti3klk</bpmn:incoming>
-      <bpmn:outgoing>Flow_0t0gyus</bpmn:outgoing>
-      <bpmn:script>Console.WriteLine("Excute Activity_2_1_2");</bpmn:script>
-    </bpmn:scriptTask>
-    <bpmn:userTask id="Activity_3">
-      <bpmn:incoming>Flow_0lqeugx</bpmn:incoming>
-      <bpmn:outgoing>Flow_174fdho</bpmn:outgoing>
-    </bpmn:userTask>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="process">
@@ -162,20 +163,20 @@ if(State.Variables.Index == 1){
       <bpmndi:BPMNShape id="Gateway_0irs42d_di" bpmnElement="Gateway_inclusive2">
         <dc:Bounds x="1235" y="325" width="50" height="50" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0dporbg_di" bpmnElement="Activity_2_1_1">
+        <dc:Bounds x="930" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BPMNShape_1sb2vox" bpmnElement="Activity_2_1_22">
         <dc:Bounds x="1060" y="190" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1cqn4bq_di" bpmnElement="Activity_3">
         <dc:Bounds x="1400" y="310" width="100" height="80" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0yqg6pi_di" bpmnElement="Activity_2_1_2">
+        <dc:Bounds x="930" y="190" width="100" height="80" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_1psevxl_di" bpmnElement="Activity_1">
         <dc:Bounds x="290" y="310" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0bb6wcz_di" bpmnElement="Activity_2_1_1">
-        <dc:Bounds x="930" y="80" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1m8l7sr_di" bpmnElement="Activity_2_1_2">
-        <dc:Bounds x="930" y="190" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_0ce4b6b_di" bpmnElement="Flow_0ce4b6b">
         <di:waypoint x="215" y="350" />
