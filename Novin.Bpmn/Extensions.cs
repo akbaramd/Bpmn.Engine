@@ -14,7 +14,7 @@ namespace Novin.Bpmn.Blazor
         {
             services.AddScoped<BpmnEngine>();
             services.AddScoped<ProcessStateManager>();
-            // services.AddScoped<BpmnProcessExecutor>();
+            services.AddScoped<BpmnProcessExecutor>();
             
             services.AddScoped<ScriptHandler>();
             services.AddScoped<IServiceTaskExecutor,ServiceTaskExecutor>();

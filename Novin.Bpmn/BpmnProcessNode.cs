@@ -16,7 +16,7 @@ public class BpmnProcessNode
         get
         {
             // Only executable if not expired, instances are executable, and it is interruptible.
-            return !IsExpired && Instances.Any(x => x.isExecutable) && IsInterruptible;
+            return  Instances.Any(x => x.isExecutable);
         }
     } // Determines if the node has executable instances.
     public bool CanBeContinue => ( UserTask == null || UserTask.IsCompleted); // Checks if the node can proceed further.
@@ -83,7 +83,25 @@ public class BpmnProcessNode
 
     public void AddInstance(string sourceElementId, Guid sourceNodeId, Guid targetNodeId, bool isExecutable)
     {
-        Instances.Push((sourceElementId, sourceNodeId, targetNodeId, isExecutable));
+        // Check if an instance with the same sourceNodeId and targetNodeId already exists
+        var existingInstance = Instances.FirstOrDefault(instance => 
+            instance.sourceNodeId == sourceNodeId && instance.targetNodeId == targetNodeId);
+
+        if (existingInstance != default)
+        {
+            // Update the existing instance's properties
+            Instances = new Stack<(string sourceElementId, Guid sourceNodeId, Guid targetNodeId, bool isExecutable)>(
+                Instances.Select(instance =>
+                    instance.Equals(existingInstance)
+                        ? (existingInstance.sourceElementId, existingInstance.sourceNodeId, targetNodeId, isExecutable)
+                        : instance)
+            );
+        }
+        else
+        {
+            // Add a new instance if none exists
+            Instances.Push((sourceElementId, sourceNodeId, targetNodeId, isExecutable));
+        }
     }
 
     public void AddMerge(string sourceElementId, Guid sourceNodeId, bool isExecutable)

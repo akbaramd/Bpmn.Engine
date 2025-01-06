@@ -19,7 +19,7 @@ namespace Novin.Bpmn.Dashbaord.Controllers.Forms
         {
             var task = DbContext.Tasks.First(x=>x.Id == taskId);
             var process = 
-                await ProcessEngine.CreateProcessAsync(task.ProcessId);
+                await ProcessEngine.CreateProcessExecutorAsync(task.ProcessId);
             return View(new AddNumberToVariableModel()
             {
                 Index = process.Instance.Variables.Index,
@@ -33,7 +33,7 @@ namespace Novin.Bpmn.Dashbaord.Controllers.Forms
             if (ModelState.IsValid)
             {
                 var task = DbContext.Tasks.First(x=>x.Id == model.TaskId);
-                var process = await ProcessEngine.CreateProcessAsync(task.ProcessId);
+                var process = await ProcessEngine.CreateProcessExecutorAsync(task.ProcessId);
                 
                 process.Instance.Variables.Index = model.Index;
                 

@@ -43,7 +43,7 @@ namespace Novin.Bpmn.Dashbaord.Controllers
             var task = await _context.Tasks.FindAsync(taskId);
             if (task != null)
             {
-                await _engine.CompleteTaskAsync(task.Id);
+                await _engine.CompleteUserTaskAsync(task.Id);
                 _context.Update(task);
                 await _context.SaveChangesAsync();
                 

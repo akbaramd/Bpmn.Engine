@@ -41,10 +41,11 @@ export function initializeModeler(definitionKey) {
 }
 
 export function initializeViewer(url, details) {
+    
     const viewer = new BpmnViewer({
         container: '#canvas'
     });
-
+    console.log(details)
     fetch(url)
         .then(response => response.text())
         .then(async bpmnXML => {

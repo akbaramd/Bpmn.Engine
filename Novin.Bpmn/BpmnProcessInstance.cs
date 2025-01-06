@@ -74,12 +74,10 @@ public class BpmnProcessInstance
     // Retrieve paths and flows executed in the process instance.
     public List<BpmnNodeState> GetExecutedPathsWithFlows()
     {
-        Console.WriteLine("Retrieving executed paths and flows");
         var executedPaths = new Dictionary<string, BpmnNodeState>();
 
         foreach (var node in NodeStack)
         {
-            Console.WriteLine($"Processing node {node.ElementId}");
             // Record the current node state.
             executedPaths[node.ElementId] = new BpmnNodeState
             {
@@ -95,20 +93,22 @@ public class BpmnProcessInstance
 
             foreach (var transition in transitions)
             {
-                Console.WriteLine($"Recording transition {transition.ElementId}");
                 if (executedPaths.TryGetValue(transition.ElementId, out var existingTransitionState))
                     existingTransitionState.Count++;
                 else
+                {
+                    var startNode = NodeStack.First(x => x.Id.Equals(transition.SourceNodeId));
                     executedPaths[transition.ElementId] = new BpmnNodeState
                     {
                         ElementId = transition.ElementId,
-                        IsActive = node.IsExecutable,
-                        IsPending = false,
+                        IsActive = node.IsExecutable && startNode.IsExecutable,
+                        IsPending = PendingQueue.Any(x => x.Id.Equals(node.Id)),
                         Count = 1
                     };
+                }
             }
         }
-
+        
         return executedPaths.Values.ToList();
     }
 

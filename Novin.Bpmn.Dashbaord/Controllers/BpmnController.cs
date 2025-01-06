@@ -40,7 +40,7 @@ namespace Novin.Bpmn.Dashbaord.Controllers
                 }
 
                 // Deploy the BPMN definition
-                _engine.DeployDefinition(filePath, file.FileName);
+                _engine.DeployProcessDefinition(filePath, file.FileName);
             }
 
             return RedirectToAction("Index");
@@ -106,7 +106,7 @@ namespace Novin.Bpmn.Dashbaord.Controllers
 
         public async Task<IActionResult> Execute(string fileName)
         {
-            var processEngine = await _engine.CreateProcessAsync(fileName);
+            var processEngine = await _engine.CreateProcessExecutorAsync(fileName);
             var state = await processEngine.StartProcess();
             return RedirectToAction("ProcessDetail", new { id = state.Id });
         }

@@ -28,7 +28,7 @@ public abstract class BaseBpmnController: Controller
     
     protected async Task<IActionResult> CompleteTaskAndRedirect(Guid taskId, dynamic? variables = null)
     {
-        var res = await ProcessEngine.CompleteTaskAsync(taskId,variables);
+        var res = await ProcessEngine.CompleteUserTaskAsync(taskId,variables);
         
         // Check for new tasks after the current process is completed
 

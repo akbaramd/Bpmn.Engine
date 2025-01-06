@@ -3,168 +3,148 @@ using Novin.Bpmn.Core;
 using Novin.Bpmn.Executors.Abstracts;
 using Novin.Bpmn.Handlers;
 using Novin.Bpmn.Models;
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Novin.Bpmn
 {
     public class BpmnEngine
     {
-        private readonly IBpmnTaskAccessor _bpmnTaskAccessor;
-        private readonly IBpmnDefinitionAccessor _bpmnDefinitionAccessor;
-        private readonly IBpmnProcessAccessor _bpmnProcessAccessor;
-
-        private readonly IScriptTaskExecutor _scriptTaskExecutor;
-        private readonly IUserTaskExecutor _userTaskExecutor;
-        private readonly ITimerHandler _boundaryEventHandler;
-        private readonly IServiceTaskExecutor _serviceTaskExecutor;
+        private readonly IBpmnTaskAccessor _taskAccessor;
+        private readonly IBpmnDefinitionAccessor _definitionAccessor;
+        private readonly IBpmnProcessAccessor _processAccessor;
+        private readonly IServiceProvider _serviceProvider;
 
         public BpmnEngine(
-            IBpmnTaskAccessor bpmnTaskAccessor,
-            IBpmnDefinitionAccessor bpmnDefinitionAccessor,
-            IBpmnProcessAccessor bpmnProcessAccessor,
-            IScriptTaskExecutor scriptTaskExecutor,
-            IUserTaskExecutor userTaskExecutor,
-            ITimerHandler boundaryEventHandler,
-            IServiceTaskExecutor serviceTaskExecutor)
+            IBpmnTaskAccessor taskAccessor,
+            IBpmnDefinitionAccessor definitionAccessor,
+            IBpmnProcessAccessor processAccessor,
+            IServiceProvider serviceProvider)
         {
-            _bpmnTaskAccessor = bpmnTaskAccessor ?? throw new ArgumentNullException(nameof(bpmnTaskAccessor));
-            _bpmnDefinitionAccessor = bpmnDefinitionAccessor ?? throw new ArgumentNullException(nameof(bpmnDefinitionAccessor));
-            _bpmnProcessAccessor = bpmnProcessAccessor ?? throw new ArgumentNullException(nameof(bpmnProcessAccessor));
-            _scriptTaskExecutor = scriptTaskExecutor ?? throw new ArgumentNullException(nameof(scriptTaskExecutor));
-            _userTaskExecutor = userTaskExecutor ?? throw new ArgumentNullException(nameof(userTaskExecutor));
-            _boundaryEventHandler = boundaryEventHandler;
-            _serviceTaskExecutor = serviceTaskExecutor ?? throw new ArgumentNullException(nameof(serviceTaskExecutor));
+            _taskAccessor = taskAccessor ?? throw new ArgumentNullException(nameof(taskAccessor));
+            _definitionAccessor = definitionAccessor ?? throw new ArgumentNullException(nameof(definitionAccessor));
+            _processAccessor = processAccessor ?? throw new ArgumentNullException(nameof(processAccessor));
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         }
 
-        public void DeployDefinition(string path, string deploymentKey)
+        public void DeployProcessDefinition(string filePath, string deploymentKey)
         {
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-                throw new FileNotFoundException($"Definition file not found: {path}");
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+                throw new FileNotFoundException($"Process definition file not found: {filePath}");
 
             if (string.IsNullOrWhiteSpace(deploymentKey))
                 throw new ArgumentException("Deployment key cannot be null or empty", nameof(deploymentKey));
 
-            var definitionXml = File.ReadAllText(path);
-            _bpmnDefinitionAccessor.StoreDefinition(definitionXml, deploymentKey);
-            Console.WriteLine($"Deployed definition for key: {deploymentKey}");
+            var definitionXml = File.ReadAllText(filePath);
+            _definitionAccessor.StoreDefinition(definitionXml, deploymentKey);
+            Console.WriteLine($"Successfully deployed process definition with key: {deploymentKey}");
         }
 
-        public async Task<BpmnProcessExecutor> CreateProcessAsync(string deploymentKey, CancellationToken cancellationToken = default)
+        public async Task<BpmnProcessExecutor> CreateProcessExecutorAsync(string deploymentKey, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(deploymentKey))
                 throw new ArgumentException("Deployment key cannot be null or empty", nameof(deploymentKey));
 
-            var novinDefinition = _bpmnDefinitionAccessor.GetDefinitionByDeploymentKey(deploymentKey);
-            if (novinDefinition == null)
-                throw new KeyNotFoundException($"Definition not found for deployment key: {deploymentKey}");
+            var processDefinition = _definitionAccessor.GetDefinitionByDeploymentKey(deploymentKey);
+            if (processDefinition == null)
+                throw new KeyNotFoundException($"Process definition not found for key: {deploymentKey}");
 
-            return new BpmnProcessExecutor(
-                novinDefinition.Content,
-                deploymentKey,
-                _bpmnTaskAccessor,
-                _bpmnProcessAccessor,
-                _scriptTaskExecutor,
-                _userTaskExecutor,
-                _serviceTaskExecutor,_boundaryEventHandler);
+            var executor = _serviceProvider.GetService(typeof(BpmnProcessExecutor)) as BpmnProcessExecutor;
+            if (executor == null)
+                throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
+
+            executor.Initialize(processDefinition.DeploymentKey, processDefinition.Content);
+
+            return executor;
         }
 
-        public async Task<BpmnProcessExecutor> CreateProcessAsync(Guid processId, CancellationToken cancellationToken = default)
+        public async Task<BpmnProcessExecutor> CreateProcessExecutorAsync(Guid processId, CancellationToken cancellationToken = default)
         {
             if (processId == Guid.Empty)
                 throw new ArgumentException("Process ID cannot be empty", nameof(processId));
 
-            var processState = _bpmnProcessAccessor.GetProcessState(processId);
+            var processState = _processAccessor.GetProcessState(processId);
             if (processState == null)
-                throw new KeyNotFoundException($"Process state not found for process ID: {processId}");
+                throw new KeyNotFoundException($"Process state not found for ID: {processId}");
 
-            return new BpmnProcessExecutor(
-                processState,
-                _bpmnTaskAccessor,
-                _bpmnProcessAccessor,
-                _scriptTaskExecutor,
-                _userTaskExecutor,
-                _serviceTaskExecutor,_boundaryEventHandler);
+            var executor = _serviceProvider.GetService(typeof(BpmnProcessExecutor)) as BpmnProcessExecutor;
+            if (executor == null)
+                throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
+
+            executor.Initialize(processState);
+
+            return executor;
         }
 
-        public async Task<BpmnProcessInstance> CompleteTaskAsync(Guid taskId, dynamic? variables = null, CancellationToken cancellationToken = default)
+        public async Task<BpmnProcessInstance> CompleteUserTaskAsync(Guid taskId, dynamic? variables = null, CancellationToken cancellationToken = default)
         {
             if (taskId == Guid.Empty)
                 throw new ArgumentException("Task ID cannot be empty", nameof(taskId));
 
-            var task = await _bpmnTaskAccessor.RetrieveTask(taskId).ConfigureAwait(false);
+            var task = await _taskAccessor.RetrieveTask(taskId).ConfigureAwait(false);
             if (task == null)
-                throw new KeyNotFoundException($"Task with ID {taskId} not found");
+                throw new KeyNotFoundException($"Task not found for ID: {taskId}");
 
-            var processState = _bpmnProcessAccessor.GetProcessState(task.ProcessId);
+            var processState = _processAccessor.GetProcessState(task.ProcessId);
             if (processState == null)
-                throw new KeyNotFoundException($"Process state for ID {task.ProcessId} not found");
+                throw new KeyNotFoundException($"Process state not found for ID: {task.ProcessId}");
 
-            var processEngine = new BpmnProcessExecutor(
-                processState,
-                _bpmnTaskAccessor,
-                _bpmnProcessAccessor,
-                _scriptTaskExecutor,
-                _userTaskExecutor,
-                _serviceTaskExecutor,_boundaryEventHandler);
+            var executor = _serviceProvider.GetService(typeof(BpmnProcessExecutor)) as BpmnProcessExecutor;
+            if (executor == null)
+                throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
+
+            executor.Initialize(processState);
 
             if (variables != null)
-                processEngine.Instance.Variables = variables;
+                executor.Instance.Variables = variables;
 
-            await processEngine.CompleteUserTask(taskId).ConfigureAwait(false);
-            return await processEngine.StartProcess().ConfigureAwait(false);
+            await executor.CompleteUserTask(taskId).ConfigureAwait(false);
+            return await executor.StartProcess().ConfigureAwait(false);
         }
-        
-        
-     
-
 
         public async Task<BpmnProcessInstance> GetProcessInstanceAsync(Guid instanceId)
         {
-   
+            var processState = _processAccessor.GetProcessState(instanceId);
+            if (processState == null)
+                throw new KeyNotFoundException($"Process instance not found for ID: {instanceId}");
 
-            var processInstance =  _bpmnProcessAccessor.GetProcessState(instanceId);
-            if (processInstance == null)
-                throw new KeyNotFoundException($"ProcessInstance not found for ID: {instanceId}");
-
-            return processInstance;
+            return processState;
         }
 
-        public BpmnProcessExecutor GetExecutor(BpmnProcessInstance instance)
+        public BpmnProcessExecutor GetExecutorForInstance(BpmnProcessInstance instance)
         {
             if (instance == null)
                 throw new ArgumentNullException(nameof(instance));
 
-            return new BpmnProcessExecutor(
-                instance,
-                _bpmnTaskAccessor,
-                _bpmnProcessAccessor,
-                _scriptTaskExecutor,
-                _userTaskExecutor,
-                _serviceTaskExecutor,
-                _boundaryEventHandler);
+            var executor = _serviceProvider.GetService(typeof(BpmnProcessExecutor)) as BpmnProcessExecutor;
+            if (executor == null)
+                throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
+
+            executor.Initialize(instance);
+
+            return executor;
         }
 
-        // Method to resume process execution from a paused state
         public async Task<BpmnProcessInstance> ResumeProcessAsync(Guid processId, CancellationToken cancellationToken = default)
         {
             if (processId == Guid.Empty)
                 throw new ArgumentException("Process ID cannot be empty", nameof(processId));
 
-            var processState = _bpmnProcessAccessor.GetProcessState(processId);
+            var processState = _processAccessor.GetProcessState(processId);
             if (processState == null)
-                throw new KeyNotFoundException($"Process state for ID {processId} not found");
+                throw new KeyNotFoundException($"Process state not found for ID: {processId}");
 
-            Console.WriteLine($"Resuming process execution for process ID {processId}");
+            Console.WriteLine($"Resuming process execution for ID: {processId}");
 
-            var processEngine = new BpmnProcessExecutor(
-                processState,
-                _bpmnTaskAccessor,
-                _bpmnProcessAccessor,
-                _scriptTaskExecutor,
-                _userTaskExecutor,
-                _serviceTaskExecutor,
-                _boundaryEventHandler);
+            var executor = _serviceProvider.GetService(typeof(BpmnProcessExecutor)) as BpmnProcessExecutor;
+            if (executor == null)
+                throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
 
-            return await processEngine.StartProcess().ConfigureAwait(false);
+            executor.Initialize(processState);
+
+            return await executor.StartProcess().ConfigureAwait(false);
         }
     }
 }

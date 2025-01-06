@@ -1,11 +1,6 @@
 ﻿using Novin.Bpmn;
 using Novin.Bpmn.Models;
 using Quartz;
-
-
-using Novin.Bpmn;
-using Novin.Bpmn.Models;
-using Quartz;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
@@ -43,7 +38,7 @@ public class TimerHandler : ITimerHandler
 
             var job = JobBuilder.Create<TimerJob>()
                 .WithIdentity(jobKey)
-                .UsingJobData("ProcessId", processNode.Id)
+                .UsingJobData("ProcessId", processNode.Id.ToString())
                 .UsingJobData("InstanceId", processExecutor.Instance.Id.ToString())
                 .UsingJobData("IsInterrupting", isInterrupting)
                 .Build();
@@ -55,24 +50,22 @@ public class TimerHandler : ITimerHandler
                 .StartAt(DateTimeOffset.Now.AddMilliseconds(duration))
                 .Build();
 
-          
-
             await scheduler.ScheduleJob(job, trigger);
         }
     }
 
-    public  async Task CancelTimer( BpmnProcessNode processNode)
+
+    public async Task CancelTimer(BpmnProcessNode processNode)
     {
-        
         var scheduler = await _schedulerFactory.GetScheduler();
-        var trigger = new TriggerKey($"TimerTrigger-{processNode.Id}");
-        if (await scheduler.CheckExists(trigger))
+        var triggerKey = new TriggerKey($"TimerTrigger-{processNode.Id}");
+        if (await scheduler.CheckExists(triggerKey))
         {
-            await scheduler.UnscheduleJob(trigger);
+            await scheduler.UnscheduleJob(triggerKey);
+            Console.WriteLine($"Timer for ProcessNodeId {processNode.Id} has been canceled.");
         }
-    
-           
     }
+
     private int CalculateTimerDuration(BpmnTimerEventDefinition timerEventDefinition)
     {
         if (!string.IsNullOrEmpty(timerEventDefinition.GetTimeDuration()) &&
@@ -86,8 +79,6 @@ public class TimerHandler : ITimerHandler
     }
 }
 
-
-
 public class TimerJob : IJob
 {
     private readonly BpmnEngine _bpmnEngine;
@@ -100,43 +91,42 @@ public class TimerJob : IJob
     public async Task Execute(IJobExecutionContext context)
     {
         var boundaryEvent = context.JobDetail.JobDataMap.GetValueOrDefault("BoundaryEvent") as BpmnBoundaryEvent;
-        var processNodeId = context.JobDetail.JobDataMap.GetGuidValue("ProcessId");
-        var instanceId = context.JobDetail.JobDataMap.GetGuidValue("InstanceId");
-        var isInterrupting = context.JobDetail.JobDataMap.GetBooleanValue("IsInterrupting");
+        var processNodeId = Guid.Parse(context.JobDetail.JobDataMap.GetString("ProcessId"));
+        var instanceId = Guid.Parse(context.JobDetail.JobDataMap.GetString("InstanceId"));
+        var isInterrupting = context.JobDetail.JobDataMap.GetBoolean("IsInterrupting");
 
         Console.WriteLine($"Executing Timer Job for ProcessNodeId: {processNodeId}. IsInterrupting: {isInterrupting}");
 
         try
         {
-            // Reload the process instance using BpmnEngine
             var instance = await _bpmnEngine.GetProcessInstanceAsync(instanceId);
             var processNode = instance.NodeStack.FirstOrDefault(x => x.Id == processNodeId);
 
-            if (processNode != null && (!processNode.UserTask?.IsCompleted ?? true))
+            if (processNode == null)
             {
-                if (isInterrupting)
-                {
-                    Console.WriteLine($"Interrupting Timer expired for ProcessNodeId: {processNodeId}. Resuming execution...");
-                }
-                else
-                {
-                    Console.WriteLine($"Non-Interrupting Timer expired for ProcessNodeId: {processNodeId}. Resuming execution...");
-                }
+                Console.WriteLine($"ProcessNodeId {processNodeId} not found in instance {instanceId}.");
+                return;
+            }
 
-                // Get the executor for the process instance
-                var executor = _bpmnEngine.GetExecutor(instance);
+            var executor = _bpmnEngine.GetExecutorForInstance(instance);
 
-              
-                var newNode = executor.CreateNewNode(boundaryEvent, Guid.NewGuid(), true, processNode);
-                Console.WriteLine($"Created new node {newNode.ElementId} from ProcessNodeId: {processNodeId}.");
-
-                await executor.FindNextNodes(newNode);
-                await executor.StartProcess();
+            if (isInterrupting)
+            {
+                // Handle interrupting boundary event
+                processNode.Expire(); // Mark the activity node as non-executable
+                var boundaryNode = executor.CreateNewNode(boundaryEvent, Guid.NewGuid(), true, processNode);
+                await executor.FindNextNodes(boundaryNode);
+                Console.WriteLine($"Interrupting Boundary Node {boundaryNode.ElementId} created and added to queue.");
             }
             else
             {
-                Console.WriteLine($"ProcessNodeId {processNodeId} has already completed its activity.");
+                // Handle non-interrupting boundary event
+                var boundaryNode = executor.CreateNewNode(boundaryEvent, Guid.NewGuid(), true, processNode);
+                executor.EnqueueNext(boundaryNode);
+                Console.WriteLine($"Non-Interrupting Boundary Node {boundaryNode.ElementId} created and added to queue.");
             }
+
+            await executor.StartProcess();
         }
         catch (Exception ex)
         {
