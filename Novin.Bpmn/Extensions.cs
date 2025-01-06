@@ -13,6 +13,9 @@ namespace Novin.Bpmn.Blazor
         public static IServiceCollection AddBpmnEngine(this IServiceCollection services)
         {
             services.AddScoped<BpmnEngine>();
+            services.AddScoped<ProcessStateManager>();
+            // services.AddScoped<BpmnProcessExecutor>();
+            
             services.AddScoped<ScriptHandler>();
             services.AddScoped<IServiceTaskExecutor,ServiceTaskExecutor>();
             services.AddScoped<IUserTaskExecutor,UserTaskExecutor>();

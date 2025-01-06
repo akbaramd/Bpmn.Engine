@@ -116,7 +116,6 @@ public class TimerJob : IJob
             {
                 if (isInterrupting)
                 {
-                    processNode.Expire();
                     Console.WriteLine($"Interrupting Timer expired for ProcessNodeId: {processNodeId}. Resuming execution...");
                 }
                 else

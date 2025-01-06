@@ -11,13 +11,20 @@ public class BpmnProcessNode
     public Guid Id { get; set; } // Unique identifier for this node instance.
     public bool IsExpired { get;  set; } // Indicates if the node has been processed and expired.
     public DateTime? ExpiredAt { get;  set; } // Timestamp when the node was marked as expired.
-    public bool IsExecutable => Instances.Any(x => x.isExecutable); // Determines if the node has executable instances.
-    public bool CanBeContinue => IsExpired == false && ( UserTask == null || UserTask.IsCompleted); // Checks if the node can proceed further.
+    public bool IsExecutable
+    {
+        get
+        {
+            // Only executable if not expired, instances are executable, and it is interruptible.
+            return !IsExpired && Instances.Any(x => x.isExecutable) && IsInterruptible;
+        }
+    } // Determines if the node has executable instances.
+    public bool CanBeContinue => ( UserTask == null || UserTask.IsCompleted); // Checks if the node can proceed further.
     public string? Details { get; set; } // Additional details or metadata about the node.
     public List<BpmnSequenceFlow> IncomingFlows { get; set; } = new(); // Incoming sequence flows to this node.
     public List<BpmnSequenceFlow> OutgoingFlows { get; set; } = new(); // Outgoing sequence flows from this node.
     public BpmnTask? UserTask { get;  set; } // User task associated with this node, if any.
-
+    public bool IsInterruptible { get; private set; } = true;
     // Stores exceptions encountered during the node's execution.
     public List<string> Exceptions { get; set; } = new();
 
@@ -43,12 +50,16 @@ public class BpmnProcessNode
         }
         UserTask = userTask;
     }
-
+    public void SetInterruptible(bool isInterruptible)
+    {
+        IsInterruptible = isInterruptible;
+    }
     public void Expire()
     {
         IsExpired = true;
         ExpiredAt = DateTime.UtcNow;
     }
+ 
 
     public void AddIncomingFlow(BpmnSequenceFlow flow)
     {
