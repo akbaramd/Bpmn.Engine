@@ -5,7 +5,11 @@
         Task ExecuteAsync(BpmnProcessNode processNode, BpmnProcessEngine processEngine);
     }
 
-    public interface ITaskExecutor : IExecutor
+    public interface IScriptTaskExecutor : IExecutor
+    {
+    }
+    
+    public interface IServiceTaskExecutor : IExecutor
     {
     }
 

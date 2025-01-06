@@ -4,7 +4,7 @@ using Novin.Bpmn.Models;
 
 namespace Novin.Bpmn.Executors
 {
-    public class ScriptTaskExecutor : ITaskExecutor
+    public class ScriptTaskExecutor : IScriptTaskExecutor
     {
         private readonly ScriptHandler _scriptHandler = new();
 

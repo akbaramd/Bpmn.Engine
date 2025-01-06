@@ -5,7 +5,7 @@ using Novin.Bpmn.Models;
 
 namespace Novin.Bpmn.Executors;
 
-public class ServiceTaskExecutor : IExecutor
+public class ServiceTaskExecutor : IServiceTaskExecutor
 {
 
     public async Task ExecuteAsync(BpmnProcessNode processNode, BpmnProcessEngine processEngine)
