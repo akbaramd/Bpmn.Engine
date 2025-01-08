@@ -42,7 +42,7 @@ namespace Novin.Bpmn
             Console.WriteLine($"Successfully deployed process definition with key: {deploymentKey}");
         }
 
-        public async Task<BpmnProcessExecutor> CreateProcessExecutorAsync(string deploymentKey, CancellationToken cancellationToken = default)
+        public async Task<BpmnV2ProcessExecutor> CreateProcessExecutorAsync(string deploymentKey, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(deploymentKey))
                 throw new ArgumentException("Deployment key cannot be null or empty", nameof(deploymentKey));
@@ -51,16 +51,16 @@ namespace Novin.Bpmn
             if (processDefinition == null)
                 throw new KeyNotFoundException($"Process definition not found for key: {deploymentKey}");
 
-            var executor = _serviceProvider.GetService(typeof(BpmnProcessExecutor)) as BpmnProcessExecutor;
+            var executor = _serviceProvider.GetService(typeof(BpmnV2ProcessExecutor)) as BpmnV2ProcessExecutor;
             if (executor == null)
                 throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
 
             executor.Initialize(processDefinition.DeploymentKey, processDefinition.Content);
-
+                
             return executor;
         }
 
-        public async Task<BpmnProcessExecutor> CreateProcessExecutorAsync(Guid processId, CancellationToken cancellationToken = default)
+        public async Task<BpmnV2ProcessExecutor> CreateProcessExecutorAsync(Guid processId, CancellationToken cancellationToken = default)
         {
             if (processId == Guid.Empty)
                 throw new ArgumentException("Process ID cannot be empty", nameof(processId));
@@ -69,7 +69,7 @@ namespace Novin.Bpmn
             if (processState == null)
                 throw new KeyNotFoundException($"Process state not found for ID: {processId}");
 
-            var executor = _serviceProvider.GetService(typeof(BpmnProcessExecutor)) as BpmnProcessExecutor;
+            var executor = _serviceProvider.GetService(typeof(BpmnV2ProcessExecutor)) as BpmnV2ProcessExecutor;
             if (executor == null)
                 throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
 
@@ -78,7 +78,7 @@ namespace Novin.Bpmn
             return executor;
         }
 
-        public async Task<BpmnProcessInstance> CompleteUserTaskAsync(Guid taskId, dynamic? variables = null, CancellationToken cancellationToken = default)
+        public async Task<BpmnV2ProcessExecutor> CompleteUserTaskAsync(Guid taskId, dynamic? variables = null, CancellationToken cancellationToken = default)
         {
             if (taskId == Guid.Empty)
                 throw new ArgumentException("Task ID cannot be empty", nameof(taskId));
@@ -91,7 +91,7 @@ namespace Novin.Bpmn
             if (processState == null)
                 throw new KeyNotFoundException($"Process state not found for ID: {task.ProcessId}");
 
-            var executor = _serviceProvider.GetService(typeof(BpmnProcessExecutor)) as BpmnProcessExecutor;
+            var executor = _serviceProvider.GetService(typeof(BpmnV2ProcessExecutor)) as BpmnV2ProcessExecutor;
             if (executor == null)
                 throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
 
@@ -100,8 +100,9 @@ namespace Novin.Bpmn
             if (variables != null)
                 executor.Instance.Variables = variables;
 
-            await executor.CompleteUserTask(taskId).ConfigureAwait(false);
-            return await executor.StartProcess().ConfigureAwait(false);
+            // await executor.CompleteUserTask(taskId).ConfigureAwait(false);
+             await executor.StartProcessAsync();
+             return executor;
         }
 
         public async Task<BpmnProcessInstance> GetProcessInstanceAsync(Guid instanceId)
@@ -113,12 +114,12 @@ namespace Novin.Bpmn
             return processState;
         }
 
-        public BpmnProcessExecutor GetExecutorForInstance(BpmnProcessInstance instance)
+        public BpmnV2ProcessExecutor GetExecutorForInstance(BpmnProcessInstance instance)
         {
             if (instance == null)
                 throw new ArgumentNullException(nameof(instance));
 
-            var executor = _serviceProvider.GetService(typeof(BpmnProcessExecutor)) as BpmnProcessExecutor;
+            var executor = _serviceProvider.GetService(typeof(BpmnV2ProcessExecutor)) as BpmnV2ProcessExecutor;
             if (executor == null)
                 throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
 
@@ -138,13 +139,13 @@ namespace Novin.Bpmn
 
             Console.WriteLine($"Resuming process execution for ID: {processId}");
 
-            var executor = _serviceProvider.GetService(typeof(BpmnProcessExecutor)) as BpmnProcessExecutor;
+            var executor = _serviceProvider.GetService(typeof(BpmnV2ProcessExecutor)) as BpmnV2ProcessExecutor;
             if (executor == null)
                 throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
 
             executor.Initialize(processState);
 
-            return await executor.StartProcess().ConfigureAwait(false);
+            return await executor.StartProcessAsync(cancellationToken: cancellationToken);
         }
     }
 }

@@ -37,15 +37,10 @@ namespace Novin.Bpmn.Core
 
         public async Task ExecuteScriptAsync(string scriptContent, object globals)
         {
-            try
-            {
+           
                 await CSharpScript.RunAsync(scriptContent, _scriptOptions, globals);
-            }
-            catch (CompilationErrorException e)
-            {
-                Console.WriteLine($"Error executing script: {string.Join(Environment.NewLine, e.Diagnostics)}");
-                throw;
-            }
+          
+           
         }
 
         public async Task<bool> EvaluateConditionAsync(string condition, object globals)

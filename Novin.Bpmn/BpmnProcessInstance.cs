@@ -11,26 +11,23 @@ namespace Novin.Bpmn;
 public class BpmnProcessInstance
 {
     // Constructor initializes a new process instance with the given definition and process element ID.
-    public BpmnProcessInstance(string definition, string processElementId)
+    public BpmnProcessInstance(string definition)
     {
         Console.WriteLine("Initializing BpmnProcessInstance with definition and processElementId");
         Id = Guid.NewGuid(); // Assign a unique identifier to the instance.
-        ProcessElementId = processElementId; // The ID of the process element this instance corresponds to.
         DefinitionXml = definition; // The BPMN XML definition for this process instance.
+      
     }
 
     public Guid Id { get; set; } // Unique ID of the process instance.
     public string ProcessElementId { get; set; } // ID of the process element being executed.
 
     [JsonIgnore] // Exclude from JSON serialization to avoid redundancy.
-    public BpmnDefinitions Definition
-    {
-        get
-        {
-            Console.WriteLine("Deserializing definition from XML");
-            return BpmnDefinitionSerializer.Deserialize(DefinitionXml);
-        }
-    }
+    public BpmnDefinitions Definition => BpmnDefinitionSerializer.Deserialize(DefinitionXml);
+
+
+    [JsonIgnore] // Exclude from JSON serialization to avoid redundancy.
+    public BpmnDefinitionsHandler DefinitionsHandler => new(Definition);
 
     public string DefinitionXml { get; set; } // BPMN XML definition.
     public string DeploymentKey { get; set; } // Deployment key for identifying this instance.
@@ -62,6 +59,53 @@ public class BpmnProcessInstance
     {
         Console.WriteLine("Restoring process instance from saved state");
         return JsonConvert.DeserializeObject<BpmnProcessInstance>(savedState);
+    }
+    public BpmnProcessNode GetOrCreateNode(string elementId,  bool isExecutable, BpmnProcessNode sourceNode = null, BpmnSequenceFlow flow = null)
+    {
+        lock (NodeStack)
+        {
+            Guid nodeId = Guid.NewGuid();
+            var element = DefinitionsHandler.GetElementById(elementId);
+            // Check if the node already exists in the stack
+            var existingNode = NodeStack.FirstOrDefault(x => x.ElementId.Equals(element.id) && !x.IsExpired);
+
+            var newNode = new BpmnProcessNode(
+                element.id,
+                nodeId,
+                DefinitionsHandler.GetIncomingSequenceFlows(element),
+                DefinitionsHandler.GetOutgoingSequenceFlows(element)
+            );
+            var node = existingNode ?? newNode;
+            node.IsActive = isExecutable;
+            if (existingNode == null)
+            {
+                NodeStack.Push(node);
+            }
+
+            // Update node instance and transitions
+            if (sourceNode != null)
+            {
+                if (flow != null && isExecutable)
+                {
+                    TransitionStack.Push(new BpmnNodeTransition
+                    {
+                        Id = Guid.NewGuid(),
+                        ElementId = flow.id,
+                        TransitionTime = DateTime.Now,
+                        SourceNodeId = sourceNode.Id,
+                        TargetNodeId = node.Id
+                    });
+                }
+
+                node.AddInstance(sourceNode.ElementId, sourceNode.Id, node.Id, isExecutable);
+            }
+            else
+            {
+                node.AddInstance("", Guid.Empty, nodeId, isExecutable);
+            }
+
+            return node;
+        }
     }
 
     // Save the current state of the process instance to a JSON string.
@@ -101,7 +145,7 @@ public class BpmnProcessInstance
                     executedPaths[transition.ElementId] = new BpmnNodeState
                     {
                         ElementId = transition.ElementId,
-                        IsActive = node.IsExecutable && startNode.IsExecutable,
+                        IsActive = true,
                         IsPending = PendingQueue.Any(x => x.Id.Equals(node.Id)),
                         Count = 1
                     };
@@ -153,6 +197,7 @@ public class BpmnProcessInstance
     {
         Console.WriteLine("Updating definition XML");
         DefinitionXml = definitionXml;
+        ProcessElementId = DefinitionsHandler.GetFirstProcess().id; // The ID of the process element this instance corresponds to.
     }
 
     // Check if the process instance is fresh (no nodes or transitions).

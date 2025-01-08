@@ -45,7 +45,7 @@ namespace Novin.Bpmn
         {
             DefinitionsHandler = new BpmnDefinitionsHandler(deploymentXml);
             Router = new BpmnRouter(DefinitionsHandler);
-            Instance = new BpmnProcessInstance(deploymentXml, DefinitionsHandler.GetFirstProcess().id);
+            Instance = new BpmnProcessInstance(deploymentXml);
 
             Instance.SetDeploymentKey(deploymentKey);
             Instance.SetDefinitionXml(deploymentXml);

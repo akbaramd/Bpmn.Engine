@@ -10,7 +10,7 @@ public class BpmnDefinitionsHandler
     {
         Definitions = definitions;
     }
-    public BpmnDefinitionsHandler(string definitions)
+    public BpmnDefinitionsHandler(string definitions)   
     {
         Definitions = BpmnDefinitionSerializer.Deserialize(
             definitions);

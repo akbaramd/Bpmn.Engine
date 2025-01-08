@@ -1,244 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.4.2">
-  <bpmn:process id="process_1" isExecutable="true">
-    <bpmn:startEvent id="startEvent_1" name="Start">
-      <bpmn:outgoing>flow_1</bpmn:outgoing>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_169z4a1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.30.0" modeler:executionPlatform="Camunda Cloud" modeler:executionPlatformVersion="8.6.0">
+  <bpmn:process id="Process_19xmgpm" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1">
+      <bpmn:outgoing>Flow_12yvw0f</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:sequenceFlow id="flow_1" sourceRef="startEvent_1" targetRef="scriptTask_1" />
-    <bpmn:scriptTask id="scriptTask_1" name="Script Task 1" scriptFormat="text/csharp">
-      <bpmn:incoming>flow_1</bpmn:incoming>
-      <bpmn:outgoing>flow_2</bpmn:outgoing>
-      <bpmn:script>
-                    Instance.Variables.Parameter = "Value Assigned in Script Task 1";
-                </bpmn:script>
-    </bpmn:scriptTask>
-    <bpmn:sequenceFlow id="flow_2" sourceRef="scriptTask_1" targetRef="exclusiveGateway_1" />
-    <bpmn:exclusiveGateway id="exclusiveGateway_1" name="Exclusive Gateway">
-      <bpmn:incoming>flow_2</bpmn:incoming>
-      <bpmn:outgoing>flow_3</bpmn:outgoing>
-      <bpmn:outgoing>flow_4</bpmn:outgoing>
-    </bpmn:exclusiveGateway>
-    <bpmn:sequenceFlow id="flow_3" name="Parameter == &#39;Value Assigned in Script Task 1&#39;" sourceRef="exclusiveGateway_1" targetRef="userTask_1">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.Parameter == "Value Assigned in Script Task 1"</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="flow_4" name="Parameter != &#39;Value Assigned in Script Task 1&#39;" sourceRef="exclusiveGateway_1" targetRef="userTask_2">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.Parameter != "Value Assigned in Script Task 1"</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-    <bpmn:userTask id="userTask_1" name="User Task 1">
-      <bpmn:incoming>flow_3</bpmn:incoming>
-      <bpmn:outgoing>flow_5</bpmn:outgoing>
-    </bpmn:userTask>
-    <bpmn:userTask id="userTask_2" name="User Task 2">
-      <bpmn:incoming>flow_4</bpmn:incoming>
-      <bpmn:outgoing>flow_6</bpmn:outgoing>
-    </bpmn:userTask>
-    <bpmn:sequenceFlow id="flow_5" sourceRef="userTask_1" targetRef="parallelGateway_1" />
-    <bpmn:sequenceFlow id="flow_6" sourceRef="userTask_2" targetRef="parallelGateway_1" />
-    <bpmn:parallelGateway id="parallelGateway_1" name="Parallel Gateway">
-      <bpmn:incoming>flow_5</bpmn:incoming>
-      <bpmn:incoming>flow_6</bpmn:incoming>
-      <bpmn:outgoing>flow_7</bpmn:outgoing>
-      <bpmn:outgoing>flow_8</bpmn:outgoing>
-    </bpmn:parallelGateway>
-    <bpmn:sequenceFlow id="flow_7" sourceRef="parallelGateway_1" targetRef="scriptTask_2" />
-    <bpmn:sequenceFlow id="flow_8" sourceRef="parallelGateway_1" targetRef="userTask_3" />
-    <bpmn:scriptTask id="scriptTask_2" name="Script Task 2" scriptFormat="text/csharp">
-      <bpmn:incoming>flow_7</bpmn:incoming>
-      <bpmn:outgoing>flow_9</bpmn:outgoing>
-      <bpmn:script>
-                    Instance.Variables.Parameter = "Value Changed in Script Task 2";
-                </bpmn:script>
-    </bpmn:scriptTask>
-    <bpmn:userTask id="userTask_3" name="User Task 3">
-      <bpmn:incoming>flow_8</bpmn:incoming>
-      <bpmn:outgoing>flow_10</bpmn:outgoing>
-    </bpmn:userTask>
-    <bpmn:sequenceFlow id="flow_9" sourceRef="scriptTask_2" targetRef="inclusiveGateway_1" />
-    <bpmn:sequenceFlow id="flow_10" sourceRef="userTask_3" targetRef="inclusiveGateway_1" />
-    <bpmn:inclusiveGateway id="inclusiveGateway_1" name="Inclusive Gateway">
-      <bpmn:incoming>flow_9</bpmn:incoming>
-      <bpmn:incoming>flow_10</bpmn:incoming>
-      <bpmn:outgoing>flow_11</bpmn:outgoing>
-    </bpmn:inclusiveGateway>
-    <bpmn:sequenceFlow id="flow_11" sourceRef="inclusiveGateway_1" targetRef="exclusiveGateway_2" />
-    <bpmn:exclusiveGateway id="exclusiveGateway_2" name="Exclusive Gateway 2">
-      <bpmn:incoming>flow_11</bpmn:incoming>
-      <bpmn:outgoing>flow_12</bpmn:outgoing>
-      <bpmn:outgoing>flow_13</bpmn:outgoing>
-    </bpmn:exclusiveGateway>
-    <bpmn:sequenceFlow id="flow_12" name="Parameter == &#39;Value Changed in Script Task 2&#39;" sourceRef="exclusiveGateway_2" targetRef="scriptTask_3">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.Parameter == "Value Changed in Script Task 2"</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="flow_13" name="Parameter != &#39;Value Changed in Script Task 2&#39;" sourceRef="exclusiveGateway_2" targetRef="scriptTask_4">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.Parameter != "Value Changed in Script Task 2"</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-    <bpmn:scriptTask id="scriptTask_3" name="Script Task 3" scriptFormat="text/csharp">
-      <bpmn:incoming>flow_12</bpmn:incoming>
-      <bpmn:outgoing>flow_14</bpmn:outgoing>
-      <bpmn:script>
-                    Instance.Variables.Parameter = "Final Value in Script Task 3";
-                </bpmn:script>
-    </bpmn:scriptTask>
-    <bpmn:scriptTask id="scriptTask_4" name="Script Task 4" scriptFormat="text/csharp">
-      <bpmn:incoming>flow_13</bpmn:incoming>
-      <bpmn:outgoing>flow_15</bpmn:outgoing>
-      <bpmn:script>
-                    Instance.Variables.Parameter = "Alternate Final Value in Script Task 4";
-                </bpmn:script>
-    </bpmn:scriptTask>
-    <bpmn:sequenceFlow id="flow_14" sourceRef="scriptTask_3" targetRef="endEvent_1" />
-    <bpmn:sequenceFlow id="flow_15" sourceRef="scriptTask_4" targetRef="endEvent_1" />
-    <bpmn:endEvent id="endEvent_1" name="End">
-      <bpmn:incoming>flow_14</bpmn:incoming>
-      <bpmn:incoming>flow_15</bpmn:incoming>
+    <bpmn:sequenceFlow id="Flow_12yvw0f" sourceRef="StartEvent_1" targetRef="Activity_1rn8mqi" />
+    <bpmn:task id="Activity_1rn8mqi">
+      <bpmn:incoming>Flow_12yvw0f</bpmn:incoming>
+      <bpmn:outgoing>Flow_01guian</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="Event_1vnh2fs">
+      <bpmn:incoming>Flow_01guian</bpmn:incoming>
     </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01guian" sourceRef="Activity_1rn8mqi" targetRef="Event_1vnh2fs" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
-    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="process_1">
-      <bpmndi:BPMNShape id="startEvent_1_di" bpmnElement="startEvent_1">
-        <dc:Bounds x="173" y="262" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="179" y="298" width="25" height="14" />
-        </bpmndi:BPMNLabel>
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_19xmgpm">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="182" y="102" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="parallelGateway_1_di" bpmnElement="parallelGateway_1">
-        <dc:Bounds x="560" y="262" width="50" height="50" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="466" y="280" width="84" height="14" />
-        </bpmndi:BPMNLabel>
+      <bpmndi:BPMNShape id="Activity_130plxd_di" bpmnElement="Activity_1rn8mqi">
+        <dc:Bounds x="340" y="80" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="inclusiveGateway_1_di" bpmnElement="inclusiveGateway_1">
-        <dc:Bounds x="770" y="262" width="50" height="50" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="670" y="280" width="90" height="14" />
-        </bpmndi:BPMNLabel>
+      <bpmndi:BPMNShape id="Event_1vnh2fs_di" bpmnElement="Event_1vnh2fs">
+        <dc:Bounds x="562" y="102" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="exclusiveGateway_2_di" bpmnElement="exclusiveGateway_2" isMarkerVisible="true">
-        <dc:Bounds x="880" y="262" width="50" height="50" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="816.5" y="273.5" width="53" height="27" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="userTask_2_di" bpmnElement="userTask_2">
-        <dc:Bounds x="470" y="430" width="80" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="userTask_1_di" bpmnElement="userTask_1">
-        <dc:Bounds x="490" y="160" width="80" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="userTask_3_di" bpmnElement="userTask_3">
-        <dc:Bounds x="699" y="430" width="80" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="scriptTask_2_di" bpmnElement="scriptTask_2">
-        <dc:Bounds x="640" y="160" width="80" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="exclusiveGateway_1_di" bpmnElement="exclusiveGateway_1" isMarkerVisible="true">
-        <dc:Bounds x="375" y="255" width="50" height="50" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="377" y="305" width="47" height="27" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="scriptTask_1_di" bpmnElement="scriptTask_1">
-        <dc:Bounds x="250" y="220" width="80" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="scriptTask_3_di" bpmnElement="scriptTask_3">
-        <dc:Bounds x="1130" y="78" width="80" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="endEvent_1_di" bpmnElement="endEvent_1">
-        <dc:Bounds x="1152" y="292" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="1160" y="328" width="20" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="scriptTask_4_di" bpmnElement="scriptTask_4">
-        <dc:Bounds x="1120" y="410" width="80" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="flow_1_di" bpmnElement="flow_1">
-        <di:waypoint x="209" y="280" />
-        <di:waypoint x="230" y="280" />
-        <di:waypoint x="230" y="258" />
-        <di:waypoint x="250" y="258" />
+      <bpmndi:BPMNEdge id="Flow_12yvw0f_di" bpmnElement="Flow_12yvw0f">
+        <di:waypoint x="218" y="120" />
+        <di:waypoint x="340" y="120" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_5_di" bpmnElement="flow_5">
-        <di:waypoint x="570" y="181" />
-        <di:waypoint x="585" y="181" />
-        <di:waypoint x="585" y="262" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_6_di" bpmnElement="flow_6">
-        <di:waypoint x="550" y="470" />
-        <di:waypoint x="568" y="470" />
-        <di:waypoint x="568" y="295" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_7_di" bpmnElement="flow_7">
-        <di:waypoint x="585" y="262" />
-        <di:waypoint x="585" y="192" />
-        <di:waypoint x="640" y="192" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_8_di" bpmnElement="flow_8">
-        <di:waypoint x="585" y="312" />
-        <di:waypoint x="585" y="508" />
-        <di:waypoint x="703" y="508" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_9_di" bpmnElement="flow_9">
-        <di:waypoint x="720" y="181" />
-        <di:waypoint x="795" y="181" />
-        <di:waypoint x="795" y="262" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_10_di" bpmnElement="flow_10">
-        <di:waypoint x="779" y="470" />
-        <di:waypoint x="795" y="470" />
-        <di:waypoint x="795" y="312" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_11_di" bpmnElement="flow_11">
-        <di:waypoint x="820" y="280" />
-        <di:waypoint x="880" y="280" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_12_di" bpmnElement="flow_12">
-        <di:waypoint x="905" y="262" />
-        <di:waypoint x="905" y="126" />
-        <di:waypoint x="1130" y="126" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="975" y="101" width="89" height="40" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_13_di" bpmnElement="flow_13">
-        <di:waypoint x="905" y="312" />
-        <di:waypoint x="905" y="481" />
-        <di:waypoint x="1120" y="481" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="960" y="457" width="89" height="40" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_4_di" bpmnElement="flow_4">
-        <di:waypoint x="429" y="280" />
-        <di:waypoint x="429" y="470" />
-        <di:waypoint x="470" y="470" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="403" y="447" width="89" height="40" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_3_di" bpmnElement="flow_3">
-        <di:waypoint x="400" y="253" />
-        <di:waypoint x="400" y="208" />
-        <di:waypoint x="490" y="208" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="401" y="183" width="89" height="40" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_2_di" bpmnElement="flow_2">
-        <di:waypoint x="330" y="258" />
-        <di:waypoint x="353" y="258" />
-        <di:waypoint x="353" y="273" />
-        <di:waypoint x="382" y="273" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_14_di" bpmnElement="flow_14">
-        <di:waypoint x="1170" y="158" />
-        <di:waypoint x="1170" y="292" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_15_di" bpmnElement="flow_15">
-        <di:waypoint x="1199" y="416" />
-        <di:waypoint x="1199" y="354" />
-        <di:waypoint x="1164" y="354" />
-        <di:waypoint x="1164" y="327" />
+      <bpmndi:BPMNEdge id="Flow_01guian_di" bpmnElement="Flow_01guian">
+        <di:waypoint x="440" y="120" />
+        <di:waypoint x="562" y="120" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

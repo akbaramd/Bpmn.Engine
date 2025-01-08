@@ -16,10 +16,10 @@ public class BpmnProcessNode
         get
         {
             // Only executable if not expired, instances are executable, and it is interruptible.
-            return  Instances.Any(x => x.isExecutable);
+            return  Instances.Any(x => x.isExecutable) && IsActive;
         }
     } // Determines if the node has executable instances.
-    public bool CanBeContinue => ( UserTask == null || UserTask.IsCompleted); // Checks if the node can proceed further.
+    public bool CanBeContinue => ( UserTask == null || UserTask.IsCompleted)  && !IsExpired; // Checks if the node can proceed further.
     public string? Details { get; set; } // Additional details or metadata about the node.
     public List<BpmnSequenceFlow> IncomingFlows { get; set; } = new(); // Incoming sequence flows to this node.
     public List<BpmnSequenceFlow> OutgoingFlows { get; set; } = new(); // Outgoing sequence flows from this node.
@@ -27,6 +27,7 @@ public class BpmnProcessNode
     public bool IsInterruptible { get; private set; } = true;
     // Stores exceptions encountered during the node's execution.
     public List<string> Exceptions { get; set; } = new();
+    public bool IsActive { get; internal set; } = false; // Indicates if the node is active.
 
     // Tracks merges that occurred during node processing.
     public Stack<(string sourceElementId, Guid sourceNodeId, bool isExecutable)> Merges { get; set; } = new();
@@ -58,6 +59,36 @@ public class BpmnProcessNode
     {
         IsExpired = true;
         ExpiredAt = DateTime.UtcNow;
+   
+    }
+    public void Activate()
+    {
+        // Mark the node as active
+        IsActive = true;
+
+       
+        Console.WriteLine($"Node {ElementId} (ID: {Id}) is now active.");
+    }
+    
+    public void DeActivate()
+    {
+        // Mark the node as active
+        IsActive = false;
+
+       
+        Console.WriteLine($"Node {ElementId} (ID: {Id}) is now deactive.");
+    }
+    private void MakeNodeNonExecutable()
+    {
+        // روش ۱: از طریق Instances، همه‌ی (sourceElementId, sourceNodeId, targetNodeId, isExecutable) را 
+        // به isExecutable=false ست کنید:
+        var updated = new Stack<(string, Guid, Guid, bool)>();
+        foreach (var inst in Instances)
+        {
+            // همان دیتا ولی آخرین مقدار را isExecutable=false
+            updated.Push((inst.sourceElementId, inst.sourceNodeId, inst.targetNodeId, false));
+        }
+        Instances = updated;
     }
  
 

@@ -107,7 +107,8 @@ namespace Novin.Bpmn.Dashbaord.Controllers
         public async Task<IActionResult> Execute(string fileName)
         {
             var processEngine = await _engine.CreateProcessExecutorAsync(fileName);
-            var state = await processEngine.StartProcess();
+            var state = await processEngine.StartProcessAsync();
+            
             return RedirectToAction("ProcessDetail", new { id = state.Id });
         }
 

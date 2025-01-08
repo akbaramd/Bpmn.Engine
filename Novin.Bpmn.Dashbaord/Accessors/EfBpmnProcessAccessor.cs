@@ -31,7 +31,7 @@ namespace Novin.Bpmn.Dashbaord.Accessors
             {
                 var newProcess = new Process
                 {
-                    Content = JsonConvert.SerializeObject(processState),
+                    Content = JsonConvert.SerializeObject(processState.SaveState()),
                     Id = processId,
                     DefinitionId = definition.Id
                 };
