@@ -1,13 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using Novin.Bpmn.Abstractions;
-using Novin.Bpmn.Core;
-using Novin.Bpmn.Models;
-using Novin.Bpmn.Handlers;
-using Novin.Bpmn.V2.Handlers;
+﻿using Novin.Bpmn.Models;
+using Novin.Bpmn.V2.Abstractions;
+using Novin.Bpmn.V2.Handlers.Gateways;
 
-namespace Novin.Bpmn
+namespace Novin.Bpmn.V2
 {
     public class BpmnV2Router
     {

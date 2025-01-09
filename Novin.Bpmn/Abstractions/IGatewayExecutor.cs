@@ -1,4 +1,4 @@
-﻿namespace Novin.Bpmn.Executors.Abstracts;
+﻿namespace Novin.Bpmn.Abstractions;
 
 public interface IGatewayExecutor : IExecutor
 {

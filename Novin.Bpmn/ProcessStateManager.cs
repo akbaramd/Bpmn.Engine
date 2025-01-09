@@ -1,5 +1,6 @@
-﻿using Novin.Bpmn;
-using Novin.Bpmn.Abstractions;
+﻿using Novin.Bpmn.Abstractions;
+
+namespace Novin.Bpmn;
 
 public class ProcessStateManager
 {

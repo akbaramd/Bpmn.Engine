@@ -1,6 +1,6 @@
 ﻿using Novin.Bpmn.Models;
 
-namespace Novin.Bpmn.Abstractions
+namespace Novin.Bpmn.V2.Abstractions
 {
     /// <summary>
     /// Represents a boundary (or inbound) event that can be attached to a BPMN node.

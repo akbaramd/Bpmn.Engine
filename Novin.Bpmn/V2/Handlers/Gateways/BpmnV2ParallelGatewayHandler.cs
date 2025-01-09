@@ -1,6 +1,6 @@
-﻿using Novin.Bpmn.Abstractions;
+﻿using Novin.Bpmn.V2.Abstractions;
 
-namespace Novin.Bpmn.V2.Handlers
+namespace Novin.Bpmn.V2.Handlers.Gateways
 {
     public class BpmnV2ParallelGatewayHandler : IBpmnV2GatewayHandler
     {

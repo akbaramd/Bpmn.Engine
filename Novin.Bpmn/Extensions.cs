@@ -1,13 +1,13 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Novin.Bpmn.Abstractions;
+﻿using Novin.Bpmn.Abstractions;
 using Novin.Bpmn.Core;
 using Novin.Bpmn.Executors;
-using Novin.Bpmn.Executors.Abstracts;
-using Novin.Bpmn.Handlers;
-using Novin.Bpmn.V2.Handlers;
+using Novin.Bpmn.V2;
+using Novin.Bpmn.V2.Abstractions;
+using Novin.Bpmn.V2.Handlers.Gateways;
+using Novin.Bpmn.V2.Handlers.Tasks;
 using Quartz;
 
-namespace Novin.Bpmn.Blazor
+namespace Novin.Bpmn
 {
     public static class BpmnEngineExtensions
     {

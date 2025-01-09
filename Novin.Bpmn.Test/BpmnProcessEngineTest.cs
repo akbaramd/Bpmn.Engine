@@ -1,57 +1,48 @@
 ﻿using System;
 using System.IO;
-using System.Threading;
 using System.Threading.Tasks;
 using Novin.Bpmn;
 using Novin.Bpmn.Core;
-using Novin.Bpmn.Executors;
-using Novin.Bpmn.Handlers;
-using Novin.Bpmn.V2.Handlers;
+using Novin.Bpmn.Models;
 using Xunit;
 
-public class BpmnProcessEngineTest
+namespace Novin.Bpmn.Test
 {
-    private readonly string _bpmnFilePath =
-        "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\simple_inclusive.bpmn";
-
-    [Fact]
-    public async Task TestBpmnEngineStepByStepExecution()
+    public class BpmnV3ProcessInstanceTest
     {
-        var scriptHandler = new ScriptHandler();
-        // Load BPMN definition XML
-        var definitionXml = File.ReadAllText(_bpmnFilePath);
-        var definitionsHandler = new BpmnDefinitionsHandler(definitionXml);
+        private readonly string _bpmnFilePath =
+            "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\simple_inclusive.bpmn";
 
-        // Initialize necessary components
-        var router = new BpmnV2Router(
-            new BpmnV2ExclusiveGatewayHandler(scriptHandler),
-            new BpmnV2InclusiveGatewayHandler(scriptHandler),
-            new BpmnV2ParallelGatewayHandler()
-        );
-        var taskHandler = new Bpmn2TaskHandler(
-            new Bpmn2ScriptTaskHandler());
-        var boundaryEventHandler = new BpmnV2BoundaryEventHandler();
-
-        // Create the BPMN process instance and executor
-        var engine = new BpmnV2ProcessExecutor(router, taskHandler, boundaryEventHandler,new InMemoryBpmnProcessAccessor());
-        engine.Initialize("test",definitionXml);
-
-        // Create a CancellationTokenSource and pass its token
-        using var cts = new CancellationTokenSource();
-        var cancellationToken = cts.Token;
-
-        try
+        [Fact]
+        public async Task TestBpmnV3InstanceExecution()
         {
-            // Final step
-            await engine.StartProcessAsync(false, cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            Console.WriteLine("Process was canceled.");
-        }
+            // Load BPMN definition XML
+            var definitionXml = await File.ReadAllTextAsync(_bpmnFilePath);
+            var processElementId = "process"; // Replace with the actual process ID from your BPMN
 
-        
-        // Ensure the file exists
-        Assert.True(File.Exists(_bpmnFilePath));
+            // Initialize the process instance
+            var processInstance = new BpmnV3ProcessInstance(processElementId, definitionXml);
+
+            var executor = new BpmnV3ProcessExecutor(processInstance);
+            await executor.StartProcessAsync();
+            
+            
+            // Simulate user task completion
+            var waitingTokens = processInstance.GetWaitingTokens();
+            foreach (var token in waitingTokens)
+            {
+                Console.WriteLine($"Completing user task for token {token.Id} at {token.CurrentElementId}");
+                await executor.CompleteUserTaskAsync(token.Id);
+            }
+            // Ensure the file exists
+            Assert.True(File.Exists(_bpmnFilePath));
+
+            // Additional assertions based on expected token behavior
+            Assert.All(processInstance.Tokens, token => 
+            {
+                Assert.True(token.Status == TokenStatus.Completed || token.Status == TokenStatus.Expired, 
+                            $"Token {token.Id} did not reach a valid terminal state.");
+            });
+        }
     }
 }

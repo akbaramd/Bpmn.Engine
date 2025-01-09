@@ -1,13 +1,8 @@
-﻿using Novin.Bpmn.Abstractions;
-using Novin.Bpmn.Core;
-using Novin.Bpmn.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using Novin.Bpmn.Models;
+using Novin.Bpmn.V2.Abstractions;
+using ErrorEventHandler = Novin.Bpmn.V2.Handlers.Events.ErrorEventHandler;
 
-namespace Novin.Bpmn.Handlers
+namespace Novin.Bpmn.V2
 {
     public class BpmnV2BoundaryEventHandler
     {

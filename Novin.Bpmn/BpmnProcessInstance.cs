@@ -96,14 +96,13 @@ public class BpmnProcessInstance
                         TargetNodeId = node.Id
                     });
                 }
-
                 node.AddInstance(sourceNode.ElementId, sourceNode.Id, node.Id, isExecutable);
             }
             else
             {
                 node.AddInstance("", Guid.Empty, nodeId, isExecutable);
             }
-
+            
             return node;
         }
     }

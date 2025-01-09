@@ -1,4 +1,4 @@
-﻿namespace Novin.Bpmn.Abstractions;
+﻿namespace Novin.Bpmn.V2.Abstractions;
 
 public interface IBpmnV2GatewayHandler
 {

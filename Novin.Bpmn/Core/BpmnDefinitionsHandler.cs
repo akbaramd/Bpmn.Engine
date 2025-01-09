@@ -53,10 +53,38 @@ public class BpmnDefinitionsHandler
         return GetFirstProcess().Items.OfType<BpmnSequenceFlow>().Where(x => x.sourceRef.Equals(flowElement.id))
             .ToList();
     }
+    
+    public List<BpmnSequenceFlow> GetOutgoingSequenceFlows(string refId)
+    {
+        return GetFirstProcess().Items.OfType<BpmnSequenceFlow>().Where(x => x.sourceRef.Equals(refId))
+            .ToList();
+    }
+    
+    public List<BpmnSequenceFlow> GetIncomingSequenceFlows(string refId)
+    {
+        return GetFirstProcess().Items.OfType<BpmnSequenceFlow>().Where(x => x.targetRef.Equals(refId))
+            .ToList();
+    }
 
     public List<BpmnSequenceFlow> GetIncomingSequenceFlows(BpmnFlowElement flowElement)
     {
         return GetFirstProcess().Items.OfType<BpmnSequenceFlow>().Where(x => x.targetRef.Equals(flowElement.id))
             .ToList();
+    }
+
+    public async Task<bool> EvaluateCondition(BpmnSequenceFlow flow, BpmnV3Token token,BpmnV3ProcessInstance processInstance)
+    {
+       
+        
+     
+        if (!string.IsNullOrWhiteSpace(flow.conditionExpression?.Text.ToString()))
+        {
+            var script = new ScriptHandler();
+            var globals = new BpmnV3ScriptGlobals { Instance = processInstance };
+            var expression = string.Join(" ", flow.conditionExpression.Text);
+            return await script.EvaluateConditionAsync(expression, globals);
+        }
+
+        return true;
     }
 }

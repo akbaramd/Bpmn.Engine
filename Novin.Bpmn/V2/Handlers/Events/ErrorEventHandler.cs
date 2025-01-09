@@ -1,10 +1,7 @@
-﻿using Novin.Bpmn.Abstractions;
-using Novin.Bpmn.Models;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using Novin.Bpmn.Models;
+using Novin.Bpmn.V2.Abstractions;
 
-namespace Novin.Bpmn.Handlers
+namespace Novin.Bpmn.V2.Handlers.Events
 {
     /// <summary>
     /// Handles error boundary events in a BPMN process.

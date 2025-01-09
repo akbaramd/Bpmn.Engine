@@ -1,5 +1,6 @@
-﻿using Novin.Bpmn;
-using Novin.Bpmn.Models;
+﻿using Novin.Bpmn.Models;
+
+namespace Novin.Bpmn.Abstractions;
 
 public interface ITimerHandler
 {

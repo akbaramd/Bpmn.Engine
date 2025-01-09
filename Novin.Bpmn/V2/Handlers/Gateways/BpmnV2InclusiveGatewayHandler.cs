@@ -1,7 +1,7 @@
-﻿using Novin.Bpmn.Abstractions;
-using Novin.Bpmn.Core;
+﻿using Novin.Bpmn.Core;
+using Novin.Bpmn.V2.Abstractions;
 
-namespace Novin.Bpmn.V2.Handlers
+namespace Novin.Bpmn.V2.Handlers.Gateways
 {
     public class BpmnV2InclusiveGatewayHandler : IBpmnV2GatewayHandler
     {

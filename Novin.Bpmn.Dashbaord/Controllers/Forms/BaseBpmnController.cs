@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Novin.Bpmn.Abstractions;
 using Novin.Bpmn.Dashbaord.Data;
 
-namespace Novin.Bpmn.Dashbaord.Controllers;
+namespace Novin.Bpmn.Dashbaord.Controllers.Forms;
 
 public abstract class BaseBpmnController: Controller
 {
