@@ -93,6 +93,14 @@ namespace Novin.Bpmn
                 Timestamp = DateTime.UtcNow
             });
         }
+
+        public void SetExecutable(bool? isExecutable)
+        {
+            if (isExecutable.HasValue)
+            {
+                IsExecutable = isExecutable.Value;
+            }
+        }
     }
 
     public enum TokenStatus

@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Novin.Bpmn;
 using Novin.Bpmn.Core;
 using Novin.Bpmn.Models;
+using Novin.Bpmn.V3;
 
 public class BpmnV3ProcessInstance
 {
@@ -15,6 +16,7 @@ public class BpmnV3ProcessInstance
     // BPMN XML definition
     public string DefinitionXml { get; private set; }
 
+    public readonly Dictionary<Guid, List<BaseEvent>> TokenEvents = new();
     // List of tokens
     public List<BpmnV3Token> Tokens { get; private set; } = new List<BpmnV3Token>();
 
@@ -49,9 +51,38 @@ public class BpmnV3ProcessInstance
         return token;
     }
 
-    // Moves a token to the next element based on routing logic
-    public async Task MoveToken(BpmnV3Token token)
+    public void AddEventToToken(Guid tokenId, BaseEvent bpmnEvent)
     {
+        if (!TokenEvents.ContainsKey(tokenId))
+        {
+            TokenEvents[tokenId] = new List<BaseEvent>();
+        }
+        TokenEvents[tokenId].Add(bpmnEvent);
+
+        
+        // Initialize the event
+        bpmnEvent.Initialize();
+    }
+    
+    public async Task TriggerEventsForToken(Guid tokenId)
+    {
+        if (TokenEvents.TryGetValue(tokenId, out var events))
+        {
+            foreach (var bpmnEvent in events)
+            {
+                await bpmnEvent.Trigger();
+            }
+        }
+        else
+        {
+            Console.WriteLine($"No events found for Token {tokenId}");
+        }
+    }
+    
+    // Moves a token to the next element based on routing logic
+    public async Task MoveToken(BpmnV3Token token,bool? isExecutable = null)
+    {
+        
         if (token.Status != TokenStatus.Active)
         {
             Console.WriteLine($"Token {token.Id} is not active and cannot be moved.");
@@ -60,28 +91,51 @@ public class BpmnV3ProcessInstance
 
         var currentElement = DefinitionsHandler.GetElementById(token.CurrentElementId);
 
+        // بررسی Boundary Event‌های متصل به نود
+      
+
+        // ادامه مدیریت توکن
         if (currentElement is BpmnGateway gateway)
         {
-            await HandleGateway(token, gateway);
+            await HandleGateway(token, gateway,isExecutable);
         }
         else
         {
-            HandleNormalFlow(token, currentElement);
+            HandleNormalFlow(token, currentElement,isExecutable);
+        }
+
+        if (TokenEvents.TryGetValue(token.Id,out var list))
+        {
+            list.Clear();
         }
     }
 
-    private async Task HandleGateway(BpmnV3Token token, BpmnGateway gateway)
+    public async Task TriggerSpecificEvent<T>(Guid nodeId) where T : BaseEvent
+    {
+        if (TokenEvents.TryGetValue(nodeId, out var events))
+        {
+            foreach (var bpmnEvent in events.OfType<T>())
+            {
+                await bpmnEvent.Trigger();
+            }
+        }
+        else
+        {
+            Console.WriteLine($"No events of type {typeof(T).Name} found for Node {nodeId}");
+        }
+    }
+    private async Task HandleGateway(BpmnV3Token token, BpmnGateway gateway, bool? isExecutable)
     {
         switch (gateway)
         {
             case BpmnExclusiveGateway:
-                HandleExclusiveGateway(token, gateway);
+                HandleExclusiveGateway(token, gateway,isExecutable);
                 break;
             case BpmnParallelGateway:
-                HandleParallelGateway(token, gateway);
+                HandleParallelGateway(token, gateway,isExecutable);
                 break;
             case BpmnInclusiveGateway:
-                await HandleInclusiveGateway(token, gateway);
+                await HandleInclusiveGateway(token, gateway,isExecutable);
                 break;
             default:
                 Console.WriteLine($"Unsupported gateway type: {gateway.GetType().Name}");
@@ -89,7 +143,7 @@ public class BpmnV3ProcessInstance
         }
     }
 
-    private void HandleExclusiveGateway(BpmnV3Token token, BpmnGateway gateway)
+    private void HandleExclusiveGateway(BpmnV3Token token, BpmnGateway gateway, bool? isExecutable)
     {
         var outgoingFlows = DefinitionsHandler.GetOutgoingSequenceFlows(gateway);
         var selectedFlow = outgoingFlows.FirstOrDefault(flow =>
@@ -104,8 +158,47 @@ public class BpmnV3ProcessInstance
             token.Expire();
         }
     }
+    private async Task<bool> HandleBoundaryEvent(BpmnBoundaryEvent boundaryEvent, BpmnV3Token token)
+    {
+        foreach (var eventDefinition in boundaryEvent.Items)
+        {
+            if (eventDefinition is BpmnErrorEventDefinition errorEventDefinition)
+            {
+                Console.WriteLine($"Handling error event on boundary of element {boundaryEvent.attachedToRef.Name}");
 
-    private void HandleParallelGateway(BpmnV3Token token, BpmnGateway gateway)
+                // انتقال توکن به مسیر مرتبط با Error Event
+                var outgoingFlows = DefinitionsHandler.GetOutgoingSequenceFlows(boundaryEvent);
+                if (outgoingFlows.Any())
+                {
+                    var flow = outgoingFlows.First(); // مسیر جدید
+                    token.MoveTo(flow.targetRef, flow.id);
+                    return true; // مدیریت Event کامل شد
+                }
+                else
+                {
+                    Console.WriteLine($"Error event on {boundaryEvent.id} has no outgoing flows.");
+                }
+            }
+            else if (eventDefinition is BpmnTimerEventDefinition timerEventDefinition)
+            {
+                // مدیریت Timer Event
+                Console.WriteLine($"Waiting for timer event {boundaryEvent.id}...");
+                // await HandleTimerEvent(timerEventDefinition, boundaryEvent, token);
+                return true;
+            }
+            else if (eventDefinition is BpmnSignalEventDefinition signalEventDefinition)
+            {
+                // مدیریت Signal Event
+                Console.WriteLine($"Waiting for signal event {boundaryEvent.id}...");
+                // await HandleSignalEvent(signalEventDefinition, boundaryEvent, token);
+                return true;
+            }
+        }
+
+        return false; // هیچ Boundary Event‌ای اجرا نشد
+    }
+
+    private void HandleParallelGateway(BpmnV3Token token, BpmnGateway gateway, bool? isExecutable)
     {
         token.SetPendingToMerge();
 
@@ -141,7 +234,7 @@ public class BpmnV3ProcessInstance
         }
     }
 
-    private async Task HandleInclusiveGateway(BpmnV3Token token, BpmnGateway gateway)
+    private async Task HandleInclusiveGateway(BpmnV3Token token, BpmnGateway gateway, bool? isExecutable)
     {
         token.SetPendingToMerge();
 
@@ -191,7 +284,7 @@ public class BpmnV3ProcessInstance
         return Tokens.Where(t => t.Status == TokenStatus.Waiting).ToList();
     }
 
-    private void HandleNormalFlow(BpmnV3Token token, BpmnFlowElement element)
+    private void HandleNormalFlow(BpmnV3Token token, BpmnFlowElement element, bool? isExecutable)
     {
         var outgoingFlows = DefinitionsHandler.GetOutgoingSequenceFlows(element);
 
@@ -210,6 +303,7 @@ public class BpmnV3ProcessInstance
         {
             foreach (var flow in outgoingFlows)
             {
+                token.SetExecutable(isExecutable);
                 token.MoveTo(flow.targetRef, flow.id);
             }
         }

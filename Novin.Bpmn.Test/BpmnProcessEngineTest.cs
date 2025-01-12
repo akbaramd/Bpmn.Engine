@@ -10,8 +10,8 @@ namespace Novin.Bpmn.Test
 {
     public class BpmnV3ProcessInstanceTest
     {
-        private readonly string _bpmnFilePath =
-            "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\simple_inclusive.bpmn";
+        private readonly string _bpmnFilePath = "D:\\Projects\\Bpmn.Engine\\Novin.Bpmn.Test\\Bpmn\\simple_inclusive.bpmn";
+        // private readonly string _bpmnFilePath = "C:\\Users\\ahmadi.UR-NEZAM\\RiderProjects\\BpmnEngine\\Novin.Bpmn.Test\\Bpmn\\simple_inclusive.bpmn";
 
         [Fact]
         public async Task TestBpmnV3InstanceExecution()
@@ -22,10 +22,8 @@ namespace Novin.Bpmn.Test
 
             // Initialize the process instance
             var processInstance = new BpmnV3ProcessInstance(processElementId, definitionXml);
-
             var executor = new BpmnV3ProcessExecutor(processInstance);
             await executor.StartProcessAsync();
-            
             
             // Simulate user task completion
             var waitingTokens = processInstance.GetWaitingTokens();
