@@ -2,7 +2,9 @@
 using Novin.Bpmn.Core;
 using Novin.Bpmn.Models;
 using Novin.Bpmn.V3;
+using Novin.Bpmn.V3.Events;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Xml;
@@ -11,11 +13,15 @@ public class BpmnV3ProcessExecutor
 {
     private readonly BpmnV3ProcessInstance _processInstance;
     private readonly ScriptHandler _scriptHandler;
+    private readonly Dictionary<Type, IBpmnEventHandler> _eventHandlers = new Dictionary<Type, IBpmnEventHandler>();
 
     public BpmnV3ProcessExecutor(BpmnV3ProcessInstance processInstance)
     {
         _processInstance = processInstance;
         _scriptHandler = new ScriptHandler();
+
+        // Register event handlers
+        RegisterEventHandlers();
 
         if (!_processInstance.Tokens.Any())
         {
@@ -29,6 +35,25 @@ public class BpmnV3ProcessExecutor
             var startEventId = startEvent.id;
             _processInstance.CreateToken(startEventId);
         }
+    }
+
+    // Register all event handlers
+    private void RegisterEventHandlers()
+    {
+        // Register error event handler
+        var errorHandler = new Novin.Bpmn.V3.Events.ErrorEventHandler(_processInstance);
+        _eventHandlers[typeof(BpmnErrorEventDefinition)] = errorHandler;
+        
+        // Register timer event handler
+        var timerHandler = new TimerEventHandler(_processInstance);
+        _eventHandlers[typeof(BpmnTimerEventDefinition)] = timerHandler;
+        
+        // Register legacy adapter for backward compatibility
+        var legacyAdapter = new LegacyEventAdapter(_processInstance);
+        _eventHandlers[typeof(BpmnSignalEventDefinition)] = legacyAdapter; // Support for other event types
+        
+        // Initialize all handlers
+        Task.WhenAll(_eventHandlers.Values.Select(h => h.Initialize())).GetAwaiter().GetResult();
     }
 
     // متد اجرای وظیفه اسکریپت
@@ -94,24 +119,21 @@ public class BpmnV3ProcessExecutor
                     // Initialize and store boundary events in the dictionary
                     foreach (var boundaryEvent in attachedEvents)
                     {
-                        // Add events to the dictionary if not already added
-                        if (!_processInstance.TokenEvents.ContainsKey(token.Id))
-                        {
-                            _processInstance.TokenEvents[token.Id] = new List<BaseEvent>();
-                        }
-
                         foreach (var eventDefinition in boundaryEvent.Items)
                         {
-                            BaseEvent bpmnEvent = eventDefinition switch
+                            // Determine if the event is interrupting
+                            bool isInterrupting = boundaryEvent.cancelActivity == null || boundaryEvent.cancelActivity;
+                            
+                            // Find the appropriate handler for this event type
+                            if (_eventHandlers.TryGetValue(eventDefinition.GetType(), out var handler))
                             {
-                                BpmnErrorEventDefinition errorEvent => new ErrorEvent(boundaryEvent, errorEvent, token),
-                                _ => null // Add support for other event types as needed
-                            };
-
-                            if (bpmnEvent != null && !_processInstance.TokenEvents[token.Id]
-                                    .Any(e => e.Event.id == bpmnEvent.Event.id))
+                                // Register the event with the handler
+                                await handler.RegisterEvent(eventDefinition, boundaryEvent, token, isInterrupting);
+                                Console.WriteLine($"Registered event {eventDefinition.GetType().Name} for element {token.CurrentElementId}");
+                            }
+                            else
                             {
-                                _processInstance.AddEventToToken(token.Id, bpmnEvent);
+                                Console.WriteLine($"No handler found for event type {eventDefinition.GetType().Name}");
                             }
                         }
                     }
@@ -156,28 +178,43 @@ public class BpmnV3ProcessExecutor
                     {
                         // انتشار خطای خاص BPMN به هندلرهای خطا
                         Console.WriteLine($"BPMN Error: {e.Message}, Error Code: {e.ErrorCode}");
-                        await _processInstance.TriggerSpecificEvent<ErrorEvent>(token.Id);
+                        
+                        // Try to trigger error events for this token
+                        bool errorHandled = false;
+                        if (_eventHandlers.TryGetValue(typeof(BpmnErrorEventDefinition), out var errorHandler))
+                        {
+                            errorHandled = await errorHandler.TriggerEvents(token.Id);
+                            
+                            // If error was handled specifically by ErrorEventHandler, try to match error code
+                            if (!errorHandled && errorHandler is Novin.Bpmn.V3.Events.ErrorEventHandler typedErrorHandler)
+                            {
+                                errorHandled = await typedErrorHandler.TriggerEventsForErrorCode(token.Id, e.ErrorCode);
+                            }
+                        }
+                        
+                        if (!errorHandled)
+                        {
+                            // Re-throw if no error event handler could handle it
+                            throw;
+                        }
                     }
                     catch (Exception e)
                     {
-                        // مدیریت سایر خطاها
+                        // General exception handling - try to trigger error events as a fallback
                         Console.WriteLine($"Error during token execution: {e.Message}");
                         Console.WriteLine(e.StackTrace);
-                        await _processInstance.TriggerSpecificEvent<ErrorEvent>(token.Id);
-                    }
-
-                    if (_processInstance.TokenEvents.TryGetValue(token.Id, out var events) && events.Any())
-                    {
-                        foreach (var @event in events.Where(x=>!x.InDepended || (x.InDepended && x.IsTriggered)))
+                        
+                        bool errorHandled = false;
+                        if (_eventHandlers.TryGetValue(typeof(BpmnErrorEventDefinition), out var errorHandler))
                         {
-                             _processInstance.CreateToken(@event.BoundaryEvent.id);
+                            errorHandled = await errorHandler.TriggerEvents(token.Id);
                         }
                         
-                        if (events.Any(x => x.InDepended && x.IsTriggered))
+                        if (!errorHandled)
                         {
-                            await _processInstance.MoveToken(token, false);
+                            // Re-throw if no error event handler could handle it
+                            throw;
                         }
-                        break;
                     }
 
                     await _processInstance.MoveToken(token);
@@ -191,6 +228,17 @@ public class BpmnV3ProcessExecutor
         {
             Console.WriteLine($"Error during process execution: {ex.Message}");
             throw;
+        }
+        finally
+        {
+            // Cancel any remaining events
+            foreach (var handler in _eventHandlers.Values)
+            {
+                foreach (var token in _processInstance.Tokens)
+                {
+                    await handler.CancelEvents(token.Id);
+                }
+            }
         }
     }
 
@@ -246,5 +294,22 @@ public class BpmnV3ProcessExecutor
         status += $"توکن‌های منقضی شده: {map.ExpiredTokens.Count}\n";
         
         return status;
+    }
+}
+
+// Exception class for BPMN execution errors
+public class BpmnExecutionException : Exception
+{
+    public string ErrorCode { get; }
+    
+    public BpmnExecutionException(string message, string errorCode = null) : base(message)
+    {
+        ErrorCode = errorCode ?? "UNKNOWN_ERROR";
+    }
+    
+    public BpmnExecutionException(string message, Exception innerException, string errorCode = null) 
+        : base(message, innerException)
+    {
+        ErrorCode = errorCode ?? "UNKNOWN_ERROR";
     }
 }

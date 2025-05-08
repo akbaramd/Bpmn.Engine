@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_1lm6ajz" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.30.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.18.0">
+  <bpmn:process id="process" name="My Process" isExecutable="true" camunda:historyTimeToLive="180">
+    <bpmn:startEvent id="event_start" name="event_start">
+      <bpmn:outgoing>Flow_0ce4b6b</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_0ce4b6b" sourceRef="event_start" targetRef="Gateway_parallel" />
+    <bpmn:scriptTask id="Activity_2" name="Activity_2">
+      <bpmn:incoming>Flow_0xbnbfk</bpmn:incoming>
+      <bpmn:outgoing>Flow_0v4rtfo</bpmn:outgoing>
+      <bpmn:script>Console.WriteLine($"Execute Activity_2 - This runs after Activity_1");
+await Task.Delay(500);</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="Flow_0xbnbfk" sourceRef="Activity_1" targetRef="Activity_2" />
+    <bpmn:endEvent id="event_end" name="event_end">
+      <bpmn:incoming>Flow_0v4rtfo</bpmn:incoming>
+      <bpmn:incoming>Flow_0pw4rsv</bpmn:incoming>
+      <bpmn:incoming>Flow_1pfnvoe</bpmn:incoming>
+      <bpmn:incoming>Flow_timer_noninterrupting</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_0v4rtfo" sourceRef="Activity_2" targetRef="event_end" />
+    <bpmn:scriptTask id="Activity_1" name="Activity_1">
+      <bpmn:incoming>Flow_08jh2rk</bpmn:incoming>
+      <bpmn:outgoing>Flow_0xbnbfk</bpmn:outgoing>
+      <bpmn:script>Console.WriteLine($"Execute Activity_1 - Long running task with interrupting timer");
+// Using Task.Delay instead of Thread.Sleep for better async behavior
+await Task.Delay(5000);</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="Flow_08jh2rk" sourceRef="Gateway_parallel" targetRef="Activity_1" />
+    <bpmn:parallelGateway id="Gateway_parallel" name="Parallel Gateway">
+      <bpmn:incoming>Flow_0ce4b6b</bpmn:incoming>
+      <bpmn:outgoing>Flow_08jh2rk</bpmn:outgoing>
+      <bpmn:outgoing>Flow_long_task</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="Activity_7" name="Activity_7">
+      <bpmn:incoming>Flow_1ssbaec</bpmn:incoming>
+      <bpmn:outgoing>Flow_0pw4rsv</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_0pw4rsv" sourceRef="Activity_7" targetRef="event_end" />
+    <!-- Interrupting timer event -->
+    <bpmn:boundaryEvent id="Event_timer_interrupting" attachedToRef="Activity_1">
+      <bpmn:outgoing>Flow_1pfnvoe</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_1">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT2S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_1pfnvoe" sourceRef="Event_timer_interrupting" targetRef="event_end" />
+    
+    <!-- Non-interrupting timer event -->
+    <bpmn:boundaryEvent id="Event_timer_noninterrupting" cancelActivity="false" attachedToRef="Activity_1">
+      <bpmn:outgoing>Flow_timer_noninterrupting</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_2">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT1S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_timer_noninterrupting" sourceRef="Event_timer_noninterrupting" targetRef="event_end" />
+    
+    <!-- Long running task with non-interrupting timer -->
+    <bpmn:scriptTask id="Activity_long_task" name="Long Task">
+      <bpmn:incoming>Flow_long_task</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_gateway</bpmn:outgoing>
+      <bpmn:script>Console.WriteLine($"Execute Long Task with non-interrupting timer");
+// Long running task that will have a non-interrupting timer
+await Task.Delay(8000);</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="Flow_long_task" sourceRef="Gateway_parallel" targetRef="Activity_long_task" />
+    
+    <!-- Non-interrupting timer event on long task -->
+    <bpmn:boundaryEvent id="Event_timer_noninterrupting_2" cancelActivity="false" attachedToRef="Activity_long_task">
+      <bpmn:outgoing>Flow_timer_notify</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_3">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT3S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    
+    <!-- Task triggered by non-interrupting timer -->
+    <bpmn:scriptTask id="Activity_notify" name="Notification Task">
+      <bpmn:incoming>Flow_timer_notify</bpmn:incoming>
+      <bpmn:outgoing>Flow_notify_complete</bpmn:outgoing>
+      <bpmn:script>Console.WriteLine($"Execute Notification Task - Triggered by non-interrupting timer");
+await Task.Delay(500);</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="Flow_timer_notify" sourceRef="Event_timer_noninterrupting_2" targetRef="Activity_notify" />
+    
+    <!-- Join parallel flows -->
+    <bpmn:sequenceFlow id="Flow_to_gateway" sourceRef="Activity_long_task" targetRef="Gateway_join" />
+    <bpmn:sequenceFlow id="Flow_notify_complete" sourceRef="Activity_notify" targetRef="Gateway_join" />
+    
+    <bpmn:inclusiveGateway id="Gateway_join" name="Inclusive Join">
+      <bpmn:incoming>Flow_to_gateway</bpmn:incoming>
+      <bpmn:incoming>Flow_notify_complete</bpmn:incoming>
+      <bpmn:outgoing>Flow_1ssbaec</bpmn:outgoing>
+    </bpmn:inclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_1ssbaec" sourceRef="Gateway_join" targetRef="Activity_7" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="process">
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="event_start">
+        <dc:Bounds x="162" y="372" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="152" y="415" width="56" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_1acr3ju" bpmnElement="Activity_2">
+        <dc:Bounds x="550" y="470" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0y0784j_di" bpmnElement="event_end">
+        <dc:Bounds x="962" y="322" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="954" y="298" width="52" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0zvh2b8_di" bpmnElement="Activity_1">
+        <dc:Bounds x="380" y="470" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_parallel_di" bpmnElement="Gateway_parallel">
+        <dc:Bounds x="255" y="365" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="241" y="335" width="78" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1slp7s4_di" bpmnElement="Activity_7">
+        <dc:Bounds x="780" y="240" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_long_task_di" bpmnElement="Activity_long_task">
+        <dc:Bounds x="380" y="180" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_notify_di" bpmnElement="Activity_notify">
+        <dc:Bounds x="550" y="240" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_join_di" bpmnElement="Gateway_join">
+        <dc:Bounds x="685" y="195" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="676" y="171" width="68" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_timer_interrupting_di" bpmnElement="Event_timer_interrupting">
+        <dc:Bounds x="402" y="452" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_timer_noninterrupting_di" bpmnElement="Event_timer_noninterrupting">
+        <dc:Bounds x="402" y="532" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_timer_noninterrupting_2_di" bpmnElement="Event_timer_noninterrupting_2">
+        <dc:Bounds x="402" y="242" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_0ce4b6b_di" bpmnElement="Flow_0ce4b6b">
+        <di:waypoint x="198" y="390" />
+        <di:waypoint x="255" y="390" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0xbnbfk_di" bpmnElement="Flow_0xbnbfk">
+        <di:waypoint x="480" y="510" />
+        <di:waypoint x="550" y="510" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0v4rtfo_di" bpmnElement="Flow_0v4rtfo">
+        <di:waypoint x="650" y="510" />
+        <di:waypoint x="810" y="510" />
+        <di:waypoint x="810" y="433" />
+        <di:waypoint x="980" y="433" />
+        <di:waypoint x="980" y="358" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08jh2rk_di" bpmnElement="Flow_08jh2rk">
+        <di:waypoint x="280" y="415" />
+        <di:waypoint x="280" y="510" />
+        <di:waypoint x="380" y="510" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0pw4rsv_di" bpmnElement="Flow_0pw4rsv">
+        <di:waypoint x="880" y="280" />
+        <di:waypoint x="909" y="280" />
+        <di:waypoint x="909" y="340" />
+        <di:waypoint x="962" y="340" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1pfnvoe_di" bpmnElement="Flow_1pfnvoe">
+        <di:waypoint x="420" y="452" />
+        <di:waypoint x="420" y="360" />
+        <di:waypoint x="962" y="341" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_timer_noninterrupting_di" bpmnElement="Flow_timer_noninterrupting">
+        <di:waypoint x="420" y="568" />
+        <di:waypoint x="420" y="600" />
+        <di:waypoint x="980" y="600" />
+        <di:waypoint x="980" y="358" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_long_task_di" bpmnElement="Flow_long_task">
+        <di:waypoint x="280" y="365" />
+        <di:waypoint x="280" y="220" />
+        <di:waypoint x="380" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_timer_notify_di" bpmnElement="Flow_timer_notify">
+        <di:waypoint x="420" y="278" />
+        <di:waypoint x="420" y="320" />
+        <di:waypoint x="550" y="320" />
+        <di:waypoint x="550" y="280" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_to_gateway_di" bpmnElement="Flow_to_gateway">
+        <di:waypoint x="480" y="220" />
+        <di:waypoint x="685" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_notify_complete_di" bpmnElement="Flow_notify_complete">
+        <di:waypoint x="650" y="280" />
+        <di:waypoint x="660" y="280" />
+        <di:waypoint x="660" y="220" />
+        <di:waypoint x="685" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1ssbaec_di" bpmnElement="Flow_1ssbaec">
+        <di:waypoint x="735" y="220" />
+        <di:waypoint x="780" y="220" />
+        <di:waypoint x="780" y="240" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

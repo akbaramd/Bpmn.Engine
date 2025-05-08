@@ -33,6 +33,10 @@ public class BpmnV3ProcessInstance
     [JsonIgnore]
     public BpmnDefinitionsHandler DefinitionsHandler => new(Definition);
 
+    // افزودن قفل‌های مورد نیاز برای مدیریت همزمانی
+    private readonly object _gatewayLockObj = new object();
+    private readonly ConcurrentDictionary<string, object> _gatewayLocks = new ConcurrentDictionary<string, object>();
+
     public BpmnV3ProcessInstance(string processElementId, string definitionXml)
     {
         ProcessElementId = processElementId;
@@ -324,177 +328,337 @@ public class BpmnV3ProcessInstance
 
     private void HandleParallelGateway(BpmnV3Token token, BpmnGateway gateway, bool? isExecutable)
     {
+        // ایجاد یا دریافت قفل منحصر به فرد برای این گیت‌وی
+        var gatewayLock = _gatewayLocks.GetOrAdd(gateway.id, _ => new object());
+        
+        // قبل از هر کاری، توکن را وارد حالت انتظار می‌کنیم
         token.SetPendingToMerge();
 
         var incomingFlows = DefinitionsHandler.GetIncomingSequenceFlows(gateway);
         
-        // If there's only one incoming flow, we don't need to wait for merge
+        // اگر فقط یک مسیر ورودی داریم، نیازی به ادغام نیست
         if (incomingFlows.Count <= 1)
         {
-            // Process incoming token directly without waiting
+            Console.WriteLine($"Parallel gateway {gateway.id} has only one incoming flow, no need to merge");
+            // قفل نمی‌خواهیم چون نیازی به بررسی شرایط ادغام نیست
             ProcessParallelGatewayOutgoingFlows(token, gateway, isExecutable);
             return;
         }
         
-        var tokensAtGateway = Tokens
-            .Where(t => t.CurrentElementId == gateway.id && t.Status == TokenStatus.PendingToMerge).ToList();
-
-        if (tokensAtGateway.Count == incomingFlows.Count)
+        // قفل کردن پردازش این گیت‌وی تا زمانی که ارزیابی کامل شود
+        BpmnV3Token parentTokenToUse = null;
+        bool shouldContinue = false;
+        bool anyIncomingTokenExecutable = false;
+        bool parentIsExecutable = false;
+        
+        lock (gatewayLock)
         {
-            // بررسی آیا حداقل یکی از توکن‌های ورودی فعال است
-            bool anyIncomingTokenExecutable = tokensAtGateway.Any(t => t.IsExecutable);
+            Console.WriteLine($"Evaluating parallel gateway {gateway.id} with token {token.Id}");
             
-            foreach (var t in tokensAtGateway)
+            // یافتن توکن‌های منتظر در گیت‌وی
+            var tokensAtGateway = Tokens
+                .Where(t => t.CurrentElementId == gateway.id && t.Status == TokenStatus.PendingToMerge)
+                .ToList();
+            
+            Console.WriteLine($"Found {tokensAtGateway.Count} tokens at gateway {gateway.id} out of {incomingFlows.Count} required");
+
+            if (tokensAtGateway.Count == incomingFlows.Count)
             {
-                t.Complete();
+                // بررسی آیا حداقل یکی از توکن‌های ورودی فعال است
+                anyIncomingTokenExecutable = tokensAtGateway.Any(t => t.IsExecutable);
+                Console.WriteLine($"All tokens arrived at parallel gateway {gateway.id}, any executable: {anyIncomingTokenExecutable}");
+                
+                // تکمیل همه توکن‌های حاضر
+                foreach (var t in tokensAtGateway)
+                {
+                    t.Complete();
+                    Console.WriteLine($"Completed token {t.Id} in gateway {gateway.id}");
+                }
+
+                // یافتن توکن والد
+                parentTokenToUse = token.ParentTokenId != null
+                    ? Tokens.FirstOrDefault(t => t.Id == token.ParentTokenId)
+                    : token;
+                    
+                if (parentTokenToUse != null)
+                {
+                    // فعال‌سازی توکن والد
+                    parentTokenToUse.Reactivate();
+                    Console.WriteLine($"Reactivated parent token {parentTokenToUse.Id} in gateway {gateway.id}");
+                    
+                    // اگر نود ورودی فعال است، isExecutable باید true باشد
+                    // در غیر این صورت، از مقدار پارامتر ورودی یا توکن والد استفاده می‌شود
+                    parentIsExecutable = anyIncomingTokenExecutable || (isExecutable ?? parentTokenToUse.IsExecutable);
+                    shouldContinue = true;
+                }
+                else
+                {
+                    // اگر توکن والد یافت نشد، از توکن فعلی استفاده می‌کنیم
+                    Console.WriteLine($"No parent token found, using current token {token.Id}");
+                    parentTokenToUse = token;
+                    parentIsExecutable = anyIncomingTokenExecutable || (isExecutable ?? token.IsExecutable);
+                    shouldContinue = true;
+                }
             }
-
-            var parentToken = token.ParentTokenId != null
-                ? Tokens.FirstOrDefault(t => t.Id == token.ParentTokenId)
-                : token;
-                
-            if (parentToken != null)
+            else
             {
-                parentToken.Reactivate();
-                
-                // اگر نود ورودی فعال است، isExecutable باید true باشد
-                // در غیر این صورت، از مقدار پارامتر ورودی یا توکن والد استفاده می‌شود
-                bool parentIsExecutable = anyIncomingTokenExecutable || (isExecutable ?? parentToken.IsExecutable);
-
-                ProcessParallelGatewayOutgoingFlows(parentToken, gateway, parentIsExecutable);
+                Console.WriteLine($"Waiting for more tokens to merge at parallel gateway {gateway.id}. Current: {tokensAtGateway.Count}, Required: {incomingFlows.Count}");
+                shouldContinue = false;
             }
         }
-        else
+        
+        // خارج از بلاک قفل، پردازش مسیرهای خروجی را انجام می‌دهیم
+        if (shouldContinue && parentTokenToUse != null)
         {
-            Console.WriteLine($"Waiting for more tokens to merge at parallel gateway {gateway.id}");
+            ProcessParallelGatewayOutgoingFlows(parentTokenToUse, gateway, parentIsExecutable);
         }
     }
 
-    // Extract common processing logic to a separate method
+    // بهبود متد پردازش مسیرهای خروجی برای گیت‌وی Parallel
     private void ProcessParallelGatewayOutgoingFlows(BpmnV3Token token, BpmnGateway gateway, bool? isExecutable)
     {
+        if (token == null)
+        {
+            Console.WriteLine("Warning: Null token passed to ProcessParallelGatewayOutgoingFlows");
+            return;
+        }
+        
         // Check if token is executable
         bool tokenIsExecutable = isExecutable ?? token.IsExecutable;
         
         var outgoingFlows = DefinitionsHandler.GetOutgoingSequenceFlows(gateway);
+        Console.WriteLine($"Processing {outgoingFlows.Count} outgoing flows for parallel gateway {gateway.id}");
+        
         foreach (var flow in outgoingFlows)
         {
             // جدید: ثبت استفاده از فلو
             TrackFlowExecution(flow.id, token.Id, Guid.Empty, tokenIsExecutable);
+            Console.WriteLine($"Creating token for flow {flow.id}, executable: {tokenIsExecutable}");
             
             if (tokenIsExecutable)
             {
-                var newToken = CreateToken(flow.targetRef, flow.id);
-                newToken.ParentTokenId = token.Id;
+                // قفل کردن ایجاد توکن جدید برای جلوگیری از رقابت بین رشته‌ها
+                lock (_gatewayLockObj)
+                {
+                    var newToken = CreateToken(flow.targetRef, flow.id);
+                    newToken.ParentTokenId = token.Id;
+                    Console.WriteLine($"Created executable token {newToken.Id} to {flow.targetRef}");
+                }
             }
             else
             {
-                var inactiveToken = CreateUnExecutableToken(flow.targetRef, flow.id);
-                inactiveToken.ParentTokenId = token.Id;
+                // ایجاد توکن غیرفعال (برای ردیابی و نمایش)
+                lock (_gatewayLockObj)
+                {
+                    var inactiveToken = CreateUnExecutableToken(flow.targetRef, flow.id);
+                    inactiveToken.ParentTokenId = token.Id;
+                    Console.WriteLine($"Created non-executable token {inactiveToken.Id} to {flow.targetRef}");
+                }
             }
         }
     }
 
     private async Task HandleInclusiveGateway(BpmnV3Token token, BpmnGateway gateway, bool? isExecutable)
     {
+        // ایجاد یا دریافت قفل منحصر به فرد برای این گیت‌وی
+        var gatewayLock = _gatewayLocks.GetOrAdd(gateway.id, _ => new object());
+        
         token.SetPendingToMerge();
-
+        
         var incomingFlows = DefinitionsHandler.GetIncomingSequenceFlows(gateway);
         
-        // If there's only one incoming flow, we don't need to wait for merge
         if (incomingFlows.Count <= 1)
         {
-            // Process incoming token directly without waiting
-            ProcessInclusiveGatewayOutgoingFlows(token, gateway, isExecutable);
+            Console.WriteLine($"Inclusive gateway {gateway.id} has only one incoming flow, no need to merge.");
+            await ProcessInclusiveGatewayOutgoingFlows(token, gateway, isExecutable);
             return;
         }
         
-        // در استاندارد BPMN، گیت‌وی Inclusive باید منتظر تمام توکن‌های فعال باشد که ممکن است از مسیرهای ورودی برسند
-        // ابتدا، شناسایی مسیرهای ورودی فعال بر اساس شرایط
-        var activeIncomingFlows = new HashSet<string>();
+        BpmnV3Token parentTokenToUse = null;
+        bool shouldContinue = false;
+        bool anyIncomingTokenExecutable = false;
         
-        // یافتن توکن‌های منتظر در گیت‌وی
-        var tokensAtGateway = Tokens
-            .Where(t => t.CurrentElementId == gateway.id && t.Status == TokenStatus.PendingToMerge).ToList();
-        
-        // بررسی اینکه آیا تمام توکن‌های مورد انتظار رسیده‌اند
-        bool allExpectedTokensArrived = true;
-        
-        // بررسی آیا حداقل یکی از توکن‌های ورودی فعال است
-        bool anyIncomingTokenExecutable = tokensAtGateway.Any(t => t.IsExecutable);
-        
-        // مسیرهای ورودی که توکن‌های آنها به گیت‌وی رسیده‌اند
-        var receivedFlows = tokensAtGateway
-            .Where(t => t.History.Count >= 2)
-            .Select(t => t.History[t.History.Count - 2].FlowId)
-            .ToHashSet();
-        
-        // شناسایی مسیرهای ورودی که فعال هستند (شرط آنها برقرار است)
-        foreach (var flow in incomingFlows)
+        lock (gatewayLock)
         {
-            if (receivedFlows.Contains(flow.id))
-            {
-                activeIncomingFlows.Add(flow.id);
-            }
-        }
-        
-        // تایید اینکه تمام مسیرهای فعال توکن دریافت کرده‌اند
-        if (activeIncomingFlows.Count == tokensAtGateway.Count)
-        {
-            foreach (var t in tokensAtGateway)
-            {
-                t.Complete();
-            }
-
-            ProcessInclusiveGatewayOutgoingFlows(token, gateway, isExecutable);
-        }
-        else
-        {
-            Console.WriteLine($"Waiting for more tokens to merge at inclusive gateway {gateway.id}");
-        }
-    }
-
-    // Extract common processing logic to a separate method
-    private async Task ProcessInclusiveGatewayOutgoingFlows(BpmnV3Token token, BpmnGateway gateway, bool? isExecutable)
-    {
-        var parentToken = token.ParentTokenId != null
-            ? Tokens.FirstOrDefault(t => t.Id == token.ParentTokenId)
-            : token;
-
-        if (parentToken != null)
-        {
-            // بررسی آیا حداقل یکی از توکن‌های ورودی فعال است
-            bool isTokenExecutable = isExecutable ?? token.IsExecutable;
+            Console.WriteLine($"Evaluating inclusive gateway {gateway.id} with token {token.Id}");
             
-            // اطمینان از فعال بودن توکن والد اگر حداقل یک توکن ورودی فعال باشد
-            if (isTokenExecutable && !parentToken.IsExecutable)
-            {
-                parentToken.Executable();
-            }
+            var tokensAtGateway = Tokens
+                .Where(t => t.CurrentElementId == gateway.id && t.Status == TokenStatus.PendingToMerge)
+                .ToList();
             
-            var outgoingFlows = DefinitionsHandler.GetOutgoingSequenceFlows(gateway);
+            var definedIncomingFlowIds = incomingFlows.Select(f => f.id).ToHashSet();
 
-            // بررسی مسیرهای خروجی و ایجاد توکن‌های جدید
-            foreach (var flow in outgoingFlows)
+            var expectedActiveIncomingFlows = new HashSet<string>();
+            foreach (var flowId in definedIncomingFlowIds)
             {
-                // شرط‌ها فقط وقتی ارزیابی می‌شوند که حداقل یک توکن ورودی فعال باشد
-                bool flowConditionMet = await DefinitionsHandler.EvaluateCondition(flow, parentToken, this);
-                
-                // فلو وقتی فعال است که هم شرط آن برقرار باشد و هم حداقل یک توکن ورودی فعال باشد
-                bool flowExecutable = flowConditionMet && isTokenExecutable;
-                
-                // ثبت استفاده از فلو
-                TrackFlowExecution(flow.id, parentToken.Id, Guid.Empty, flowExecutable);
-                
-                if (flowExecutable)
+                if (ExecutedFlows.TryGetValue(flowId, out var flowInfo) && flowInfo.IsActive)
                 {
-                    var newToken = CreateToken(flow.targetRef, flow.id);
-                    newToken.ParentTokenId = parentToken.Id;
+                    expectedActiveIncomingFlows.Add(flowId);
+                }
+            }
+
+            if (expectedActiveIncomingFlows.Count == 0)
+            {
+                Console.WriteLine($"Inclusive gateway {gateway.id}: No expected active incoming flows found based on ExecutedFlows. Gateway will not activate.");
+                shouldContinue = false;
+            }
+            else
+            {
+                // Get the flow IDs from token history
+                // Each active token has a flow that brought it to the gateway
+                var arrivedActiveFlows = new HashSet<string>();
+                
+                foreach (var t in tokensAtGateway)
+                {
+                    // Look for the flow ID in ExecutedFlows that targeted this gateway and had this token
+                    var flowsLeadingToGateway = ExecutedFlows.Values
+                        .Where(f => f.IsActive && f.TargetTokenIds.Contains(t.Id))
+                        .Select(f => f.FlowId)
+                        .Where(fid => expectedActiveIncomingFlows.Contains(fid))
+                        .ToList();
+                    
+                    if (flowsLeadingToGateway.Count > 0)
+                    {
+                        foreach (var flowId in flowsLeadingToGateway)
+                        {
+                            arrivedActiveFlows.Add(flowId);
+                        }
+                    }
+                }
+
+                var arrivedCount = arrivedActiveFlows.Count;
+                var expectedCount = expectedActiveIncomingFlows.Count;
+
+                Console.WriteLine($"Inclusive Gateway {gateway.id}: Tokens at gateway: {tokensAtGateway.Count}. Expected active flow IDs: [{string.Join(", ", expectedActiveIncomingFlows)}]. Arrived active flow IDs: [{string.Join(", ", arrivedActiveFlows)}]. Counts - Arrived: {arrivedCount}, Expected: {expectedCount}.");
+ 
+                if (arrivedCount == expectedCount)
+                {
+                    Console.WriteLine($"All {expectedCount} expected active tokens arrived at inclusive gateway {gateway.id}. Proceeding with merge.");
+                    
+                    // Any executable token?
+                    anyIncomingTokenExecutable = tokensAtGateway.Any(t => t.IsExecutable);
+                    
+                    // Get all tokens that came from the arrived flows
+                    var tokensToComplete = new List<BpmnV3Token>();
+                    foreach (var t in tokensAtGateway)
+                    {
+                        var flowsForToken = ExecutedFlows.Values
+                            .Where(f => f.TargetTokenIds.Contains(t.Id))
+                            .Select(f => f.FlowId);
+                            
+                        if (flowsForToken.Any(fid => arrivedActiveFlows.Contains(fid)))
+                        {
+                            tokensToComplete.Add(t);
+                        }
+                    }
+                    
+                    // Complete all tokens that contributed to the merge
+                    foreach (var t in tokensToComplete)
+                    {
+                        t.Complete();
+                        Console.WriteLine($"Completed token {t.Id} in gateway {gateway.id}");
+                    }
+                    
+                    // Find the token to carry forward (parent or current)
+                    parentTokenToUse = token.ParentTokenId != null 
+                        ? Tokens.FirstOrDefault(t => t.Id == token.ParentTokenId) 
+                        : token; 
+                    
+                    if (parentTokenToUse != null)
+                    {
+                        if (parentTokenToUse.Status == TokenStatus.Completed || parentTokenToUse.Status == TokenStatus.PendingToMerge)
+                        {
+                            parentTokenToUse.Reactivate();
+                        }
+                        Console.WriteLine($"Using token {parentTokenToUse.Id} to proceed from gateway {gateway.id}. Any incoming executable: {anyIncomingTokenExecutable}");
+                        shouldContinue = true;
+                    }
+                    else 
+                    {
+                        Console.WriteLine($"Error: Could not determine a token to proceed from inclusive gateway {gateway.id}. Fallback to current token {token.Id}");
+                        parentTokenToUse = token; 
+                        if(parentTokenToUse.Status != TokenStatus.Active) parentTokenToUse.Reactivate();
+                        shouldContinue = true;
+                    }
                 }
                 else
                 {
+                    Console.WriteLine($"Waiting for more tokens at inclusive gateway {gateway.id}. Expected: {expectedCount}, Arrived distinct flows: {arrivedCount}");
+                    shouldContinue = false;
+                }
+            }
+        }
+        
+        if (shouldContinue && parentTokenToUse != null)
+        {
+            await ProcessInclusiveGatewayOutgoingFlows(parentTokenToUse, gateway, anyIncomingTokenExecutable);
+        }
+    }
+
+    // بهبود متد پردازش مسیرهای خروجی برای گیت‌وی Inclusive
+    private async Task ProcessInclusiveGatewayOutgoingFlows(BpmnV3Token token, BpmnGateway gateway, bool? isExecutable)
+    {
+        if (token == null)
+        {
+            Console.WriteLine("Warning: Null token passed to ProcessInclusiveGatewayOutgoingFlows");
+            return;
+        }
+
+        // بررسی آیا حداقل یکی از توکن‌های ورودی فعال است
+        bool isTokenExecutable = isExecutable ?? token.IsExecutable;
+        
+        // اطمینان از فعال بودن توکن اگر حداقل یک توکن ورودی فعال باشد
+        if (isTokenExecutable && !token.IsExecutable)
+        {
+            token.Executable();
+            Console.WriteLine($"Set token {token.Id} as executable");
+        }
+        
+        var outgoingFlows = DefinitionsHandler.GetOutgoingSequenceFlows(gateway);
+        Console.WriteLine($"Processing {outgoingFlows.Count} outgoing flows for inclusive gateway {gateway.id}");
+
+        // بررسی مسیرهای خروجی و ایجاد توکن‌های جدید
+        // ایجاد لیستی برای ذخیره تمام وظایف ارزیابی شرط، برای اجرای موازی
+        var conditionTasks = new List<(BpmnSequenceFlow Flow, Task<bool> EvaluationTask)>();
+        
+        // آماده‌سازی ارزیابی‌های شرط به صورت موازی
+        foreach (var flow in outgoingFlows)
+        {
+            var evaluationTask = DefinitionsHandler.EvaluateCondition(flow, token, this);
+            conditionTasks.Add((flow, evaluationTask));
+        }
+        
+        // منتظر اتمام همه ارزیابی‌ها می‌مانیم
+        await Task.WhenAll(conditionTasks.Select(t => t.EvaluationTask));
+        
+        // ایجاد توکن‌های جدید بر اساس نتایج ارزیابی
+        foreach (var (flow, evaluationTask) in conditionTasks)
+        {
+            bool flowConditionMet = evaluationTask.Result;
+            bool flowExecutable = flowConditionMet && isTokenExecutable;
+            
+            // ثبت استفاده از فلو
+            TrackFlowExecution(flow.id, token.Id, Guid.Empty, flowExecutable);
+            Console.WriteLine($"Evaluating flow {flow.id} with condition met: {flowConditionMet}, executable: {flowExecutable}");
+            
+            if (flowExecutable)
+            {
+                // قفل کردن ایجاد توکن جدید برای جلوگیری از رقابت بین رشته‌ها
+                lock (_gatewayLockObj)
+                {
+                    var newToken = CreateToken(flow.targetRef, flow.id);
+                    newToken.ParentTokenId = token.Id;
+                    Console.WriteLine($"Created executable token {newToken.Id} to {flow.targetRef}");
+                }
+            }
+            else
+            {
+                // ایجاد توکن غیرفعال (برای ردیابی و نمایش)
+                lock (_gatewayLockObj)
+                {
                     var inactiveToken = CreateUnExecutableToken(flow.targetRef, flow.id);
-                    inactiveToken.ParentTokenId = parentToken.Id;
+                    inactiveToken.ParentTokenId = token.Id;
+                    Console.WriteLine($"Created non-executable token {inactiveToken.Id} to {flow.targetRef}");
                 }
             }
         }

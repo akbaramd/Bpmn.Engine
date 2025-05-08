@@ -15,12 +15,13 @@
     <bpmn:endEvent id="event_end" name="event_end">
       <bpmn:incoming>Flow_0v4rtfo</bpmn:incoming>
       <bpmn:incoming>Flow_0pw4rsv</bpmn:incoming>
+      <bpmn:incoming>Flow_1pfnvoe</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="Flow_0v4rtfo" sourceRef="Activity_2" targetRef="event_end" />
     <bpmn:scriptTask id="Activity_1" name="Activity_1">
       <bpmn:incoming>Flow_08jh2rk</bpmn:incoming>
       <bpmn:outgoing>Flow_0xbnbfk</bpmn:outgoing>
-      <bpmn:script>//Console.WriteLine($"Excute Activity_1");
+      <bpmn:script>Console.WriteLine($"Excute Activity_1");
 throw new InvalidOperationException("No handler found f");</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:sequenceFlow id="Flow_08jh2rk" sourceRef="Gateway_10de7g6" targetRef="Activity_1">
@@ -75,6 +76,11 @@ throw new InvalidOperationException("No handler found f");</bpmn:script>
       <bpmn:incoming>Flow_0gbszky</bpmn:incoming>
       <bpmn:outgoing>Flow_0x8gn6e</bpmn:outgoing>
     </bpmn:task>
+    <bpmn:boundaryEvent id="Event_1x4oeal" attachedToRef="Activity_1">
+      <bpmn:outgoing>Flow_1pfnvoe</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="ErrorEventDefinition_0h4vo3z" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_1pfnvoe" sourceRef="Event_1x4oeal" targetRef="event_end" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="process">
@@ -121,6 +127,9 @@ throw new InvalidOperationException("No handler found f");</bpmn:script>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_06ln87d_di" bpmnElement="Activity_4">
         <dc:Bounds x="590" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1j6ucp1_di" bpmnElement="Event_1x4oeal">
+        <dc:Bounds x="402" y="452" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_0ce4b6b_di" bpmnElement="Flow_0ce4b6b">
         <di:waypoint x="198" y="390" />
@@ -181,6 +190,11 @@ throw new InvalidOperationException("No handler found f");</bpmn:script>
         <di:waypoint x="909" y="280" />
         <di:waypoint x="909" y="340" />
         <di:waypoint x="962" y="340" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1pfnvoe_di" bpmnElement="Flow_1pfnvoe">
+        <di:waypoint x="420" y="452" />
+        <di:waypoint x="420" y="360" />
+        <di:waypoint x="962" y="341" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
