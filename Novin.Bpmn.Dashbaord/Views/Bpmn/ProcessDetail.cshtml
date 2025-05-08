@@ -1,41 +1,55 @@
 ﻿@using System.Text.Json
 @using Newtonsoft.Json
 @using JsonSerializer = System.Text.Json.JsonSerializer
-@model Novin.Bpmn.BpmnProcessInstance
+@using Novin.Bpmn.Dashbaord.Models
+@model ProcessDetailViewModel
 <style>
     .highlight {
         stroke: green !important;
         stroke-width: 3px !important;
         fill: none !important; /* Ensure that only the border is colored if necessary */
     }
+    
+    .user-task {
+        stroke: #4682B4 !important; /* Steel blue */
+        stroke-width: 3px !important;
+    }
+    
+    .completed-node {
+        stroke: #228B22 !important; /* Forest green */
+        stroke-width: 2px !important;
+    }
+    
+    .active-flow {
+        stroke: #FF8C00 !important; /* Dark orange */
+        stroke-width: 2px !important;
+    }
+    
+    .waiting-token {
+        stroke: #BA55D3 !important; /* Medium orchid */
+        stroke-width: 3px !important;
+    }
 </style>
 <div class="container mt-4">
-    <h1 class="mb-4">BPMN State Details</h1>
+    <h1 class="mb-4">BPMN Process Execution Details</h1>
 
     <div class="row">
         <div class="col-md-4">
             <div class="card mb-4">
                 <div class="card-header">
-                    Basic Information
+                    Process Information
                 </div>
                 <div class="card-body">
                     <table class="table">
                         <tr>
-                            <th>ID</th>
-                            <td>@Model.Id</td>
-                        </tr>
-                        <tr>
                             <th>Process ID</th>
-                            <td>@Model.ProcessElementId</td>
+                            <td>@Model.Process.Id</td>
                         </tr>
                         <tr>
-                            <th>Is Paused</th>
-                            <td>@Model.IsPaused</td>
+                            <th>Definition</th>
+                            <td>@Model.Process.Definition.DefinationKey</td>
                         </tr>
-                        <tr>
-                            <th>Is Stopped</th>
-                            <td>@Model.IsStopped</td>
-                        </tr>
+                       
                     </table>
                 </div>
             </div>
@@ -43,18 +57,28 @@
                 <div class="card-header">
                     Variables
                 </div>
-                <div class="card-body">
-                    <pre>@JsonSerializer.Serialize(Model.Variables, new JsonSerializerOptions { WriteIndented = true })</pre>
+                <div class="card-body small">
+                    <pre class="small">@JsonSerializer.Serialize(Model.Variables, new JsonSerializerOptions { WriteIndented = true })</pre>
                 </div>
             </div>
         </div>
 
         <div class="col-md-8">
-            <div class="card mb-3" style="height: 100%">
+            <div class="card mb-3" style="height: 500px">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Process Diagram</span>
+                    <div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="showVirtualNodes" checked>
+                            <label class="form-check-label" for="showVirtualNodes">Show traversal-only paths</label>
+                        </div>
+                    </div>
+                </div>
                 <div style="height: 100%" id="canvas"></div>
             </div>
         </div>
     </div>
+    
     <div class="row">
         <div class="col-md-12">
             <div class="card mb-4">
@@ -65,66 +89,27 @@
                     <table class="table">
                         <thead>
                         <tr>
-                            <th>Task ID</th>
-                            <th>Task Name</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        @foreach (var task in Model.NodeStack.Where(x=>x.UserTask is not null && !x.UserTask.IsCompleted).Select(x => x.UserTask))
-                        {
-                        <tr>
-                            <td>@task.TaskId</td>
-                            <td>@task.Name</td>
-                            <td>
-                                <a href="/user-task/@task.TaskId" type="submit" class="btn btn-success">Complete</a>
-                            </td>
-                        </tr>
-                        }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-12">
-            <div class="card mb-4">
-                <div class="card-header">
-                    Node Details
-                </div>
-                <div class="card-body">
-                    <table class="table">
-                        <thead>
-                        <tr>
-                            <th>Node ID</th>
+                            <th>Token ID</th>
                             <th>Element ID</th>
-                            <th>Instances</th>
-                            <th>Incoming Flows</th>
-                            <th>Outgoing Flows</th>
+                            <th>Status</th>
+                            <th>Actions</th>
                         </tr>
                         </thead>
                         <tbody>
-                        @foreach (var node in Model.NodeStack)
+                        @foreach (var token in Model.WaitingTokens)
                         {
-                        <tr>
-                            <td>@node.Id</td>
-                            <td>@node.ElementId</td>
-                            <td>
-                                <p>Is Expired: @node.IsExpired</p>
-                                <p>ExpiredAt: @node.ExpiredAt</p>
-                            </td>
-                            <td>
-                                @foreach (var flow in node.IncomingFlows)
-                                {
-                                <p>@flow.id</p>
-                                }
-                            </td>
-                            <td>
-                                @foreach (var flow in node.OutgoingFlows)
-                                {
-                                <p>@flow.id</p>
-                                }
-                            </td>
-                        </tr>
+                            <tr>
+                                <td>@token.Id</td>
+                                <td>@token.CurrentElementId</td>
+                                <td>@token.Status</td>
+                                <td>
+                                    <form method="post" action="@Url.Action("CompleteTask", "Bpmn")">
+                                        <input type="hidden" name="processId" value="@Model.Process.Id" />
+                                        <input type="hidden" name="tokenId" value="@token.Id" />
+                                        <button type="submit" class="btn btn-success">Complete Task</button>
+                                    </form>
+                                </td>
+                            </tr>
                         }
                         </tbody>
                     </table>
@@ -132,24 +117,31 @@
             </div>
         </div>
     </div>
+    
     <div class="row">
         <div class="col-md-6">
             <div class="card mb-4">
                 <div class="card-header">
-                    Node Queue
+                    Executed Nodes
                 </div>
                 <div class="card-body">
-                    <table class="table">
+                    <table class="table table-sm">
                         <thead>
                         <tr>
                             <th>Node ID</th>
+                            <th>Execution Count</th>
+                            <th>Status</th>
+                            <th>Last Execution</th>
                         </tr>
                         </thead>
                         <tbody>
-                        @foreach (var node in Model.NextQueue)
+                        @foreach (var node in Model.ExecutedNodes)
                         {
                             <tr>
-                                <td>@node.Id</td>
+                                <td>@node.NodeId</td>
+                                <td>@node.ExecutionCount</td>
+                                <td>@(node.IsActive ? "Active" : "Inactive")</td>
+                                <td>@node.LastExecutionTime.ToString("HH:mm:ss")</td>
                             </tr>
                         }
                         </tbody>
@@ -161,22 +153,26 @@
         <div class="col-md-6">
             <div class="card mb-4">
                 <div class="card-header">
-                    Nodes
+                    Executed Flows
                 </div>
                 <div class="card-body">
-                    <table class="table">
+                    <table class="table table-sm">
                         <thead>
                         <tr>
-                            <th>Node ID</th>
-                            <th>Element ID</th>
+                            <th>Flow ID</th>
+                            <th>Execution Count</th>
+                            <th>Status</th>
+                            <th>Last Execution</th>
                         </tr>
                         </thead>
                         <tbody>
-                        @foreach (var node in Model.NodeStack)
+                        @foreach (var flow in Model.ExecutedFlows)
                         {
                             <tr>
-                                <td>@node.Id</td>
-                                <td>@node.ElementId</td>
+                                <td>@flow.FlowId</td>
+                                <td>@flow.ExecutionCount</td>
+                                <td>@(flow.IsActive ? "Active" : "Inactive")</td>
+                                <td>@flow.LastExecutionTime.ToString("HH:mm:ss")</td>
                             </tr>
                         }
                         </tbody>
@@ -185,14 +181,90 @@
             </div>
         </div>
     </div>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    Active Tokens
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <thead>
+                        <tr>
+                            <th>Token ID</th>
+                            <th>Current Element</th>
+                            <th>Executable</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var token in Model.ActiveTokens)
+                        {
+                            <tr>
+                                <td>@token.Id</td>
+                                <td>@token.CurrentElementId</td>
+                                <td>@token.IsExecutable</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
- 
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    Completed Tokens
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <thead>
+                        <tr>
+                            <th>Token ID</th>
+                            <th>Current Element</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var token in Model.CompletedTokens)
+                        {
+                            <tr>
+                                <td>@token.Id</td>
+                                <td>@token.CurrentElementId</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script src="~/js/bundle.js"></script>
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        const paths = @Html.Raw(JsonConvert.SerializeObject(Model.GetExecutedPathsWithFlows()));
-        bpmn.initializeViewer(`/api/bpmn/content/process/@Model.Id`, paths);
+        // ایجاد ساختار داده برای نمایش در BPMN viewer
+        const executionMap = {
+            nodes: @Html.Raw(JsonConvert.SerializeObject(Model.ExecutedNodes)),
+            flows: @Html.Raw(JsonConvert.SerializeObject(Model.ExecutedFlows)), 
+            activeTokens: @Html.Raw(JsonConvert.SerializeObject(Model.ActiveTokens)),
+            waitingTokens: @Html.Raw(JsonConvert.SerializeObject(Model.WaitingTokens)),
+            completedTokens: @Html.Raw(JsonConvert.SerializeObject(Model.CompletedTokens))
+        };
+        
+        // فراخوانی viewer با اطلاعات نقشه اجرای فرآیند
+        bpmn.initializeViewer(`/api/bpmn/content/process/@Model.Process.Id`, executionMap);
+        
+        // کد جدید: افزودن گوش دهنده برای تغییر وضعیت نمایش نودها
+        document.getElementById('showVirtualNodes').addEventListener('change', function(e) {
+            // ارسال درخواست API برای دریافت نقشه با/بدون نودهای مجازی
+            fetch(`/api/bpmn/execution-map/@Model.Process.Id?includeVirtual=${e.target.checked}`)
+                .then(response => response.json())
+                .then(data => {
+                    // به‌روزرسانی viewer با داده‌های جدید
+                    bpmn.updateExecutionMap(data);
+                });
+        });
     });
 </script>

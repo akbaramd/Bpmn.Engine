@@ -145870,11 +145870,11 @@ function initializeModeler(definitionKey) {
     return console.error('Error loading BPMN diagram', err);
   });
 }
-function initializeViewer(url, details) {
+function initializeViewer(url, executionMap) {
   var viewer = new bpmn_js_lib_Viewer__WEBPACK_IMPORTED_MODULE_4__["default"]({
     container: '#canvas'
   });
-  console.log(details);
+  console.log('Execution Map:', executionMap);
   fetch(url).then(function (response) {
     return response.text();
   }).then( /*#__PURE__*/function () {
@@ -145890,91 +145890,122 @@ function initializeViewer(url, details) {
             canvas = viewer.get('canvas');
             elementRegistry = viewer.get('elementRegistry');
             canvas.zoom('fit-viewport');
-            console.log(canvas);
-            console.log(elementRegistry);
-            details.filter(function (x) {
-              return x.IsActive;
-            }).forEach(function (node) {
-              var id = node.ElementId;
-              var element = elementRegistry.get(id);
-              console.log(element);
-              if (element) {
-                canvas.addMarker(id, 'highlight');
-                console.log("Element found and highlighted: ".concat(id));
-                var color = "blue";
-                var gfx = elementRegistry.getGraphics(id);
-                var paths = gfx.querySelectorAll('path');
-                paths.forEach(function (path) {
-                  path.style.stroke = color;
-                });
-                var rects = gfx.querySelectorAll('rect');
-                rects.forEach(function (path) {
-                  path.style.stroke = color;
-                });
-                var polygon = gfx.querySelectorAll('polygon');
-                polygon.forEach(function (path) {
-                  path.style.stroke = color;
-                });
-                var circle = gfx.querySelectorAll('circle');
-                circle.forEach(function (path) {
-                  path.style.stroke = color;
-                });
-              } else {
-                console.warn("Element not found: ".concat(id));
-              }
-            });
-            details.filter(function (x) {
-              return x.IsPending;
-            }).forEach(function (node) {
-              var id = node.ElementId;
-              var element = elementRegistry.get(id);
-              if (element) {
-                var color = "green";
-                var gfx = elementRegistry.getGraphics(id);
-                var paths = gfx.querySelectorAll('path');
-                paths.forEach(function (path) {
-                  path.style.stroke = color;
-                });
-                var rects = gfx.querySelectorAll('rect');
-                rects.forEach(function (path) {
-                  path.style.stroke = color;
-                });
-                var polygon = gfx.querySelectorAll('polygon');
-                polygon.forEach(function (path) {
-                  path.style.stroke = color;
-                });
-                var circle = gfx.querySelectorAll('circle');
-                circle.forEach(function (path) {
-                  path.style.stroke = color;
-                });
 
-                // Add the title attribute for the popover
-                gfx.setAttribute('title', "Task ID: ".concat(node.ElementId));
-                gfx.setAttribute('data-toggle', 'popover');
-                console.log(node);
-                if (node.UserTask) {
-                  gfx.setAttribute('data-content', "Task ID: ".concat(node.UserTask.TaskId));
+            // اگر ساختار قدیمی باشد (برای سازگاری با کد قبلی)
+            if (!Array.isArray(executionMap)) {
+              _context.next = 9;
+              break;
+            }
+            handleLegacyFormat(executionMap, canvas, elementRegistry);
+            return _context.abrupt("return");
+          case 9:
+            // رنگ‌آمیزی نودهای اجرا شده
+            if (executionMap.nodes) {
+              executionMap.nodes.forEach(function (node) {
+                var id = node.NodeId;
+                var element = elementRegistry.get(id);
+                if (element) {
+                  if (node.IsActive) {
+                    canvas.addMarker(id, 'highlight');
+                    var gfx = elementRegistry.getGraphics(id);
+                    applyColorToElement(gfx, node.IsActive ? "#228B22" : "#666666", 2);
+
+                    // اضافه کردن tooltip برای نمایش اطلاعات بیشتر
+                    gfx.setAttribute('title', "Node: ".concat(id));
+                    gfx.setAttribute('data-toggle', 'tooltip');
+                    gfx.setAttribute('data-placement', 'top');
+                    gfx.setAttribute('data-html', 'true');
+                    gfx.setAttribute('data-content', "Execution count: ".concat(node.ExecutionCount, "<br>\n                                     Last execution: ").concat(new Date(node.LastExecutionTime).toLocaleTimeString()));
+                  }
+                } else {
+                  console.warn("Element not found: ".concat(id));
                 }
-              } else {
-                console.warn("Element not found: ".concat(id));
-              }
-            });
+              });
+            }
 
-            // Initialize Bootstrap popover after DOM is updated
-            $('[data-toggle="popover"]').popover({
-              trigger: 'hover'
-            });
-            _context.next = 16;
+            // رنگ‌آمیزی فلوهای اجرا شده
+            if (executionMap.flows) {
+              executionMap.flows.forEach(function (flow) {
+                var id = flow.FlowId;
+                var element = elementRegistry.get(id);
+                if (element) {
+                  if (flow.IsActive) {
+                    canvas.addMarker(id, 'active-flow');
+                    var gfx = elementRegistry.getGraphics(id);
+                    applyColorToElement(gfx, "#FF8C00", 2);
+
+                    // اضافه کردن tooltip برای نمایش اطلاعات بیشتر
+                    gfx.setAttribute('title', "Flow: ".concat(id));
+                    gfx.setAttribute('data-toggle', 'tooltip');
+                    gfx.setAttribute('data-placement', 'top');
+                    gfx.setAttribute('data-html', 'true');
+                    gfx.setAttribute('data-content', "Execution count: ".concat(flow.ExecutionCount, "<br>\n                                     Last execution: ").concat(new Date(flow.LastExecutionTime).toLocaleTimeString()));
+                  }
+                } else {
+                  console.warn("Flow not found: ".concat(id));
+                }
+              });
+            }
+
+            // رنگ‌آمیزی توکن‌های در حالت انتظار
+            if (executionMap.waitingTokens) {
+              executionMap.waitingTokens.forEach(function (token) {
+                var id = token.CurrentElementId;
+                var element = elementRegistry.get(id);
+                if (element) {
+                  canvas.addMarker(id, 'waiting-token');
+                  var gfx = elementRegistry.getGraphics(id);
+                  applyColorToElement(gfx, "#BA55D3", 3);
+
+                  // اضافه کردن tooltip برای نمایش اطلاعات بیشتر
+                  gfx.setAttribute('title', "Waiting Task: ".concat(id));
+                  gfx.setAttribute('data-toggle', 'tooltip');
+                  gfx.setAttribute('data-placement', 'top');
+                  gfx.setAttribute('data-html', 'true');
+                  gfx.setAttribute('data-content', "Token ID: ".concat(token.Id));
+                } else {
+                  console.warn("Element for waiting token not found: ".concat(id));
+                }
+              });
+            }
+
+            // رنگ‌آمیزی توکن‌های فعال
+            if (executionMap.activeTokens) {
+              executionMap.activeTokens.forEach(function (token) {
+                var id = token.CurrentElementId;
+                var element = elementRegistry.get(id);
+                if (element) {
+                  canvas.addMarker(id, token.IsExecutable ? 'highlight' : 'inactive');
+                  var gfx = elementRegistry.getGraphics(id);
+                  applyColorToElement(gfx, token.IsExecutable ? "#1E90FF" : "#A9A9A9", token.IsExecutable ? 3 : 1);
+
+                  // اضافه کردن tooltip برای نمایش اطلاعات بیشتر
+                  gfx.setAttribute('title', "Active Token: ".concat(id));
+                  gfx.setAttribute('data-toggle', 'tooltip');
+                  gfx.setAttribute('data-placement', 'top');
+                  gfx.setAttribute('data-html', 'true');
+                  gfx.setAttribute('data-content', "Token ID: ".concat(token.Id, "<br>Executable: ").concat(token.IsExecutable));
+                } else {
+                  console.warn("Element for active token not found: ".concat(id));
+                }
+              });
+            }
+
+            // Initialize Bootstrap tooltips after DOM is updated
+            if (typeof $ !== 'undefined') {
+              $('[data-toggle="tooltip"]').tooltip();
+            }
+            _context.next = 19;
             break;
-          case 13:
-            _context.prev = 13;
-            _context.t0 = _context["catch"](0);
-            console.log(_context.t0);
           case 16:
+            _context.prev = 16;
+            _context.t0 = _context["catch"](0);
+            console.error('Error rendering BPMN diagram:', _context.t0);
+          case 19:
           case "end":
             return _context.stop();
         }
-      }, _callee, null, [[0, 13]]);
+      }, _callee, null, [[0, 16]]);
     }));
     return function (_x) {
       return _ref.apply(this, arguments);
@@ -145982,6 +146013,66 @@ function initializeViewer(url, details) {
   }())["catch"](function (err) {
     return console.error('Error loading BPMN diagram', err);
   });
+}
+
+// تابع کمکی برای اعمال رنگ به المان‌های مختلف
+function applyColorToElement(gfx, color, strokeWidth) {
+  if (!gfx) return;
+
+  // اعمال رنگ به انواع مختلف المان‌ها
+  var selectors = ['path', 'rect', 'polygon', 'circle', 'polyline'];
+  selectors.forEach(function (selector) {
+    var elements = gfx.querySelectorAll(selector);
+    elements.forEach(function (element) {
+      element.style.stroke = color;
+      if (strokeWidth) {
+        element.style.strokeWidth = strokeWidth + 'px';
+      }
+    });
+  });
+}
+
+// برای سازگاری با فرمت قدیمی
+function handleLegacyFormat(details, canvas, elementRegistry) {
+  details.filter(function (x) {
+    return x.IsActive;
+  }).forEach(function (node) {
+    var id = node.ElementId;
+    var element = elementRegistry.get(id);
+    if (element) {
+      canvas.addMarker(id, 'highlight');
+      var gfx = elementRegistry.getGraphics(id);
+      applyColorToElement(gfx, "blue", 2);
+    } else {
+      console.warn("Element not found: ".concat(id));
+    }
+  });
+  details.filter(function (x) {
+    return x.IsPending;
+  }).forEach(function (node) {
+    var id = node.ElementId;
+    var element = elementRegistry.get(id);
+    if (element) {
+      var gfx = elementRegistry.getGraphics(id);
+      applyColorToElement(gfx, "green", 2);
+
+      // Add the title attribute for the tooltip
+      gfx.setAttribute('title', "Task ID: ".concat(node.ElementId));
+      gfx.setAttribute('data-toggle', 'popover');
+      if (node.UserTask) {
+        gfx.setAttribute('data-content', "Task ID: ".concat(node.UserTask.TaskId));
+      }
+    } else {
+      console.warn("Element not found: ".concat(id));
+    }
+  });
+
+  // Initialize Bootstrap popover after DOM is updated
+  if (typeof $ !== 'undefined') {
+    $('[data-toggle="popover"]').popover({
+      trigger: 'hover'
+    });
+  }
 }
 function exportDiagram() {
   return _exportDiagram.apply(this, arguments);

@@ -5,7 +5,9 @@ using Novin.Bpmn.Abstractions;
 using Novin.Bpmn.Core;
 using Novin.Bpmn.Dashbaord;
 using Novin.Bpmn.Dashbaord.Accessors;
+using Novin.Bpmn.Dashbaord.Controllers;
 using Novin.Bpmn.Dashbaord.Data;
+using Novin.Bpmn.Dashbaord.Services;
 using Novin.Bpmn.Executors;
 using Novin.Bpmn.Handlers;
 
@@ -27,6 +29,10 @@ builder.Services.AddBpmnEngine();
 builder.Services.AddTransient<IBpmnTaskAccessor, EfBpmnTasksAccessor>();
 builder.Services.AddTransient<IBpmnDefinitionAccessor, EfBpmnDefinitionsAccessor>();
 builder.Services.AddTransient<IBpmnProcessAccessor, EfBpmnProcessAccessor>();
+
+// ثبت سرویس BpmnV3EngineFactory
+builder.Services.AddScoped<IBpmnV3EngineFactory, BpmnV3EngineFactory>();
+
 var app = builder.Build();
 
 

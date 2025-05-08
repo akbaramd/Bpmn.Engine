@@ -46,5 +46,9 @@
         <UpToDateCheckInput Remove="Pages\EmptyLayout.razor"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="V3\Events\" />
+    </ItemGroup>
+
 
 </Project>
