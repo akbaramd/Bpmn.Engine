@@ -3,6 +3,7 @@ using Novin.Bpmn.Core;
 using Novin.Bpmn.Models;
 using Novin.Bpmn.V3;
 using Novin.Bpmn.V3.Events;
+using Novin.Bpmn.V3.Handlers.Gateways;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,11 +15,15 @@ public class BpmnV3ProcessExecutor
     private readonly BpmnV3ProcessInstance _processInstance;
     private readonly ScriptHandler _scriptHandler;
     private readonly Dictionary<Type, IBpmnEventHandler> _eventHandlers = new Dictionary<Type, IBpmnEventHandler>();
+    private readonly BpmnV3GatewayRouter _gatewayRouter;
 
-    public BpmnV3ProcessExecutor(BpmnV3ProcessInstance processInstance)
+    public BpmnV3ProcessExecutor(BpmnV3ProcessInstance processInstance, BpmnV3GatewayRouter gatewayRouter = null)
     {
         _processInstance = processInstance;
         _scriptHandler = new ScriptHandler();
+        
+        // Initialize gateway router
+        _gatewayRouter = gatewayRouter ?? InitializeDefaultGatewayRouter();
 
         // Register event handlers
         RegisterEventHandlers();
@@ -35,6 +40,16 @@ public class BpmnV3ProcessExecutor
             var startEventId = startEvent.id;
             _processInstance.CreateToken(startEventId);
         }
+    }
+    
+    // Create a default gateway router when none is provided
+    private BpmnV3GatewayRouter InitializeDefaultGatewayRouter()
+    {
+        return new BpmnV3GatewayRouter(
+            new BpmnV3ExclusiveGatewayHandler(_scriptHandler),
+            new BpmnV3InclusiveGatewayHandler(_scriptHandler),
+            new BpmnV3ParallelGatewayHandler()
+        );
     }
 
     // Register all event handlers
@@ -54,6 +69,13 @@ public class BpmnV3ProcessExecutor
         
         // Initialize all handlers
         Task.WhenAll(_eventHandlers.Values.Select(h => h.Initialize())).GetAwaiter().GetResult();
+    }
+
+    // Handle gateways using the dual token strategy
+    private async Task<List<BpmnV3Token>> HandleGatewayAsync(BpmnGateway gateway, BpmnV3Token token)
+    {
+        Console.WriteLine($"Handling gateway {gateway.id} with token {token.Id}");
+        return await _gatewayRouter.RouteTokenAsync(gateway, token, _processInstance);
     }
 
     // متد اجرای وظیفه اسکریپت
@@ -103,11 +125,36 @@ public class BpmnV3ProcessExecutor
         // Process tokens in a loop
         try
         {
-            while (_processInstance.Tokens.Any(t => t.Status == TokenStatus.Active))
+            // محدودیت تعداد تکرارها برای جلوگیری از حلقه بی‌نهایت
+            int maxIterations = 100; // محدودیت منطقی برای تعداد تکرارها
+            int iterations = 0;
+
+            while (_processInstance.Tokens.Any(t => t.Status == TokenStatus.Active) && iterations < maxIterations)
             {
-                // Handle active tokens
-                foreach (var token in _processInstance.Tokens.Where(t => t.Status == TokenStatus.Active).ToList())
+                iterations++;
+                
+                // ایجاد یک کپی از توکن‌های فعال برای جلوگیری از تغییر در حین حلقه
+                var activeTokens = _processInstance.Tokens
+                    .Where(t => t.Status == TokenStatus.Active)
+                    .ToList();
+                    
+                if (!activeTokens.Any())
                 {
+                    Console.WriteLine("No active tokens found. Execution completed.");
+                    break;
+                }
+
+                Console.WriteLine($"Processing iteration {iterations} with {activeTokens.Count} active tokens");
+
+                // Handle active tokens
+                foreach (var token in activeTokens)
+                {
+                    if (token.Status != TokenStatus.Active)
+                    {
+                        Console.WriteLine($"Token {token.Id} is no longer active, skipping processing.");
+                        continue;
+                    }
+
                     if (token.IsExecutable)
                     {
                         Console.WriteLine(
@@ -173,6 +220,20 @@ public class BpmnV3ProcessExecutor
                                 throw new BpmnExecutionException($"Error event triggered: {errorEvent.id}", errorCode);
                             }
                         }
+                        else if (currentElement is BpmnGateway gateway)
+                        {
+                            // Process gateway using dual token strategy
+                            var newTokens = await HandleGatewayAsync(gateway, token);
+                            
+                            // Add new tokens to the process instance
+                            foreach (var newToken in newTokens)
+                            {
+                                _processInstance.AddToken(newToken);
+                            }
+                            
+                            // Skip automatic advancement since gateway was explicitly handled
+                            continue;
+                        }
                     }
                     catch (BpmnExecutionException e)
                     {
@@ -217,11 +278,105 @@ public class BpmnV3ProcessExecutor
                         }
                     }
 
-                    await _processInstance.MoveToken(token);
+                    // Only move tokens that were not handled by a gateway
+                    if (!((_processInstance.DefinitionsHandler.GetElementById(token.CurrentElementId)) is BpmnGateway))
+                    {
+                        await _processInstance.MoveToken(token);
+                    }
+                }
+                
+                // Check for tokens that are pending to merge in gateways
+                var gatewayTokens = _processInstance.Tokens
+                    .Where(t => t.Status == TokenStatus.PendingToMerge)
+                    .ToList();
+                
+                if (gatewayTokens.Any())
+                {
+                    Console.WriteLine($"Found {gatewayTokens.Count} tokens pending for merge in gateways");
+                    
+                    // Group tokens by gateway to check if any can merge
+                    var tokensByGateway = gatewayTokens
+                        .GroupBy(t => t.CurrentElementId)
+                        .ToDictionary(g => g.Key, g => g.ToList());
+                    
+                    // Check each gateway if it can merge and process if possible
+                    foreach (var entry in tokensByGateway)
+                    {
+                        var gatewayId = entry.Key;
+                        var tokensAtGateway = entry.Value;
+                        
+                        if (tokensAtGateway.Any())
+                        {
+                            var gateway = _processInstance.DefinitionsHandler.GetElementById(gatewayId) as BpmnGateway;
+                            
+                            if (gateway != null && _gatewayRouter.CanMerge(gateway, _processInstance))
+                            {
+                                Console.WriteLine($"Gateway {gatewayId} can merge, processing a token");
+                                
+                                // Just use the first token to trigger the merge
+                                var token = tokensAtGateway.First();
+                                var newTokens = await HandleGatewayAsync(gateway, token);
+                                
+                                // Add new tokens to the process instance
+                                foreach (var newToken in newTokens)
+                                {
+                                    _processInstance.AddToken(newToken);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // بررسی وضعیت اجرا - اگر هیچ توکن فعالی وجود ندارد ولی توکن‌های در انتظار وجود دارند
+                if (!_processInstance.Tokens.Any(t => t.Status == TokenStatus.Active) && 
+                    _processInstance.Tokens.Any(t => t.Status == TokenStatus.PendingToMerge))
+                {
+                    // بررسی وضعیت توکن‌های در انتظار ادغام در گیت‌وی‌ها
+                    Console.WriteLine("No active tokens, but pending merge tokens found. Checking gateway merge conditions...");
+                    
+                    // بررسی اینکه آیا شرایط ادغام در گیت‌وی تغییر کرده است یا خیر
+                    // اگر بیش از ۳ دور حلقه بدون تغییر در وضعیت گیت‌وی‌ها گذشته است، اجرا را متوقف می‌کنیم
+                    if (iterations > 3)
+                    {
+                        Console.WriteLine("Execution locked in gateway merge state. Stopping execution.");
+                        break;
+                    }
+                }
+                
+                // اگر چندین دور است که هیچ توکن فعالی وجود ندارد، اجرا را متوقف می‌کنیم
+                if (iterations > 5 && !activeTokens.Any())
+                {
+                    Console.WriteLine("Multiple iterations with no active tokens. Stopping execution.");
+                    break;
                 }
             }
-
-            Console.WriteLine("Process execution completed.");
+            
+            if (iterations >= maxIterations)
+            {
+                Console.WriteLine($"Execution stopped after reaching maximum iterations ({maxIterations}).");
+                
+                // یافتن توکن‌های باقی‌مانده در وضعیت‌های مختلف
+                var activeTokens = _processInstance.Tokens.Where(t => t.Status == TokenStatus.Active).ToList();
+                var pendingTokens = _processInstance.Tokens.Where(t => t.Status == TokenStatus.PendingToMerge).ToList();
+                var waitingTokens = _processInstance.Tokens.Where(t => t.Status == TokenStatus.Waiting).ToList();
+                
+                Console.WriteLine($"Remaining tokens - Active: {activeTokens.Count}, Pending: {pendingTokens.Count}, Waiting: {waitingTokens.Count}");
+                
+                foreach (var token in activeTokens)
+                {
+                    Console.WriteLine($"  Active token {token.Id} at {token.CurrentElementId}");
+                }
+                
+                foreach (var token in pendingTokens)
+                {
+                    Console.WriteLine($"  Pending token {token.Id} at {token.CurrentElementId}");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"Process execution completed after {iterations} iterations.");
+            }
+            
             return _processInstance;
         }
         catch (Exception ex)

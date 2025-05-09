@@ -70,12 +70,11 @@ export function initializeViewer(url, executionMap) {
                         
                         if (element) {
                             if (node.IsActive) {
-                                canvas.addMarker(id, 'highlight');
-                                
-                                const gfx = elementRegistry.getGraphics(id);
-                                applyColorToElement(gfx, node.IsActive ? "#228B22" : "#666666", 2);
+                                // Apply appropriate styling based on element type
+                                applyStylesToElement(canvas, elementRegistry, element, id, node);
                                 
                                 // اضافه کردن tooltip برای نمایش اطلاعات بیشتر
+                                const gfx = elementRegistry.getGraphics(id);
                                 gfx.setAttribute('title', `Node: ${id}`);
                                 gfx.setAttribute('data-toggle', 'tooltip');
                                 gfx.setAttribute('data-placement', 'top');
@@ -178,6 +177,44 @@ export function initializeViewer(url, executionMap) {
         .catch(err => console.error('Error loading BPMN diagram', err));
 }
 
+// Apply appropriate styles based on element type
+function applyStylesToElement(canvas, elementRegistry, element, id, node) {
+    // Get the element type to determine styling
+    const elementType = element.type;
+    const gfx = elementRegistry.getGraphics(id);
+    
+    if (elementType.includes('StartEvent')) {
+        canvas.addMarker(id, 'start-event');
+        applyColorToElement(gfx, "#228B22", 3);
+    } 
+    else if (elementType.includes('EndEvent')) {
+        canvas.addMarker(id, 'end-event');
+        applyColorToElement(gfx, "#8B0000", 3);
+    }
+    else if (elementType.includes('IntermediateThrowEvent') || elementType.includes('IntermediateCatchEvent')) {
+        canvas.addMarker(id, 'triggered-event');
+        applyColorToElement(gfx, "#FF8C00", 3);
+    }
+    else if (elementType.includes('BoundaryEvent')) {
+        canvas.addMarker(id, 'boundary-event');
+        applyColorToElement(gfx, "#6A5ACD", 3);
+    }
+    else if (elementType.includes('Task')) {
+        if (elementType.includes('UserTask')) {
+            canvas.addMarker(id, 'user-task');
+            applyColorToElement(gfx, "#4682B4", 3);
+        } else {
+            canvas.addMarker(id, 'highlight');
+            applyColorToElement(gfx, "#228B22", 2);
+        }
+    }
+    else {
+        // Default styling for other nodes
+        canvas.addMarker(id, 'highlight');
+        applyColorToElement(gfx, "#228B22", 2);
+    }
+}
+
 // تابع کمکی برای اعمال رنگ به المان‌های مختلف
 function applyColorToElement(gfx, color, strokeWidth) {
     if (!gfx) return;
@@ -260,4 +297,13 @@ export async function saveChanges(definitionKey) {
     } else {
         console.log('BPMN diagram saved successfully');
     }
+}
+
+// New function to handle updating the execution map
+export function updateExecutionMap(executionMap) {
+    const viewer = new BpmnViewer({
+        container: '#canvas'
+    });
+    
+    initializeViewer(`/api/bpmn/content/process/${executionMap.processId}`, executionMap);
 }

@@ -29,6 +29,31 @@
         stroke: #BA55D3 !important; /* Medium orchid */
         stroke-width: 3px !important;
     }
+    
+    /* New styles for events */
+    .start-event {
+        stroke: #228B22 !important; /* Forest green */
+        stroke-width: 3px !important;
+        fill: #E6F5E6 !important; /* Light green fill */
+    }
+    
+    .end-event {
+        stroke: #8B0000 !important; /* Dark red */
+        stroke-width: 3px !important;
+        fill: #FFE6E6 !important; /* Light red fill */
+    }
+    
+    .triggered-event {
+        stroke: #FF8C00 !important; /* Dark orange */
+        stroke-width: 3px !important;
+        fill: #FFEFD5 !important; /* Light orange fill */
+    }
+    
+    .boundary-event {
+        stroke: #6A5ACD !important; /* Slate blue */
+        stroke-width: 3px !important;
+        fill: #E6E6FA !important; /* Lavender fill */
+    }
 </style>
 <div class="container mt-4">
     <h1 class="mb-4">BPMN Process Execution Details</h1>
@@ -262,6 +287,8 @@
             fetch(`/api/bpmn/execution-map/@Model.Process.Id?includeVirtual=${e.target.checked}`)
                 .then(response => response.json())
                 .then(data => {
+                    // Add process ID to the data for updateExecutionMap function
+                    data.processId = '@Model.Process.Id';
                     // به‌روزرسانی viewer با داده‌های جدید
                     bpmn.updateExecutionMap(data);
                 });

@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<bpmn:definitions xmlns:bpmn='http://www.omg.org/spec/BPMN/20100524/MODEL' id='Definitions_1'>
+  <bpmn:process id='Process_1'>
+    <bpmn:startEvent id='StartEvent_1' />
+    <bpmn:sequenceFlow id='Flow_1' sourceRef='StartEvent_1' targetRef='ParallelGateway_1' />
+    <bpmn:parallelGateway id='ParallelGateway_1' />
+    <bpmn:sequenceFlow id='Flow_2' sourceRef='ParallelGateway_1' targetRef='Task_1' />
+    <bpmn:sequenceFlow id='Flow_3' sourceRef='ParallelGateway_1' targetRef='Task_2' />
+    <bpmn:sequenceFlow id='Flow_4' sourceRef='ParallelGateway_1' targetRef='Task_3' />
+    <bpmn:task id='Task_1' />
+    <bpmn:task id='Task_2' />
+    <bpmn:task id='Task_3' />
+    <bpmn:sequenceFlow id='Flow_5' sourceRef='Task_1' targetRef='ParallelGateway_2' />
+    <bpmn:sequenceFlow id='Flow_6' sourceRef='Task_2' targetRef='ParallelGateway_2' />
+    <bpmn:sequenceFlow id='Flow_7' sourceRef='Task_3' targetRef='ParallelGateway_2' />
+    <bpmn:parallelGateway id='ParallelGateway_2' />
+    <bpmn:sequenceFlow id='Flow_8' sourceRef='ParallelGateway_2' targetRef='EndEvent_1' />
+    <bpmn:endEvent id='EndEvent_1' />
+  </bpmn:process>
+</bpmn:definitions> 

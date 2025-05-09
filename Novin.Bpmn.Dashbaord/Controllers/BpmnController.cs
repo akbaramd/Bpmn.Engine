@@ -162,15 +162,87 @@ namespace Novin.Bpmn.Dashbaord.Controllers
                 // تلاش برای تبدیل به نسخه V3
                 var v3Instance = JsonConvert.DeserializeObject<BpmnV3ProcessInstance>(processContent);
                 
+                // Create a process executor to analyze the BPMN elements
+                var executor = new BpmnV3ProcessExecutor(v3Instance);
+                
+                // Extract all executed nodes to identify and categorize events
+                var executedNodes = v3Instance.GetExecutedNodes();
+                var definitionHandler = v3Instance.DefinitionsHandler;
+                
+                // Create lists for storing different event types
+                var startEvents = new List<EventNodeInfo>();
+                var endEvents = new List<EventNodeInfo>();
+                var triggeredEvents = new List<EventNodeInfo>();
+                var boundaryEvents = new List<EventNodeInfo>();
+                
+                // Scan executed nodes to find and categorize events
+                foreach (var node in executedNodes)
+                {
+                    var element = definitionHandler.GetElementById(node.NodeId);
+                    if (element == null) continue;
+                    
+                    // Check element type to categorize events
+                    if (element.GetType().Name.Contains("StartEvent"))
+                    {
+                        startEvents.Add(new EventNodeInfo
+                        {
+                            EventId = node.NodeId,
+                            EventType = "StartEvent",
+                            IsTriggered = true,
+                            TriggerTime = node.LastExecutionTime
+                        });
+                    }
+                    else if (element.GetType().Name.Contains("EndEvent"))
+                    {
+                        endEvents.Add(new EventNodeInfo
+                        {
+                            EventId = node.NodeId,
+                            EventType = "EndEvent",
+                            IsTriggered = true,
+                            TriggerTime = node.LastExecutionTime
+                        });
+                    }
+                    else if (element.GetType().Name.Contains("IntermediateCatchEvent") || 
+                             element.GetType().Name.Contains("IntermediateThrowEvent"))
+                    {
+                        triggeredEvents.Add(new EventNodeInfo
+                        {
+                            EventId = node.NodeId,
+                            EventType = element.GetType().Name,
+                            IsTriggered = true,
+                            TriggerTime = node.LastExecutionTime
+                        });
+                    }
+                    else if (element.GetType().Name.Contains("BoundaryEvent"))
+                    {
+                        // For boundary events, find the element they are attached to
+                        var boundaryEvent = element as Novin.Bpmn.Models.BpmnBoundaryEvent;
+                        var attachedToElementId = boundaryEvent?.attachedToRef?.Name;
+                        
+                        boundaryEvents.Add(new EventNodeInfo
+                        {
+                            EventId = node.NodeId,
+                            EventType = "BoundaryEvent",
+                            IsTriggered = true,
+                            TriggerTime = node.LastExecutionTime,
+                            AttachedToElementId = attachedToElementId
+                        });
+                    }
+                }
+                
                 // ایجاد مدل داده برای نمایش
                 var viewModel = new ProcessDetailViewModel
                 {
                     Process = process,
-                    ExecutedNodes = v3Instance.GetExecutedNodes(),
+                    ExecutedNodes = executedNodes,
                     ExecutedFlows = v3Instance.GetExecutedFlows(),
                     ActiveTokens = v3Instance.Tokens.Where(t => t.Status == TokenStatus.Active).ToList(),
                     WaitingTokens = v3Instance.Tokens.Where(t => t.Status == TokenStatus.Waiting).ToList(),
                     CompletedTokens = v3Instance.Tokens.Where(t => t.Status == TokenStatus.Completed).ToList(),
+                    StartEvents = startEvents,
+                    EndEvents = endEvents,
+                    TriggeredEvents = triggeredEvents,
+                    BoundaryEvents = boundaryEvents,
                     Variables = v3Instance.Variables
                 };
                 
@@ -268,7 +340,86 @@ namespace Novin.Bpmn.Dashbaord.Controllers
                 // دریافت نقشه اجرا با پارامتر مناسب
                 var executionMap = executor.GetExecutionMap(includeVirtual);
                 
-                return Json(executionMap);
+                // Add events to the execution map
+                var definitionHandler = v3Instance.DefinitionsHandler;
+                var executedNodes = v3Instance.GetExecutedNodes();
+                
+                // Create event lists
+                var startEvents = new List<EventNodeInfo>();
+                var endEvents = new List<EventNodeInfo>();
+                var triggeredEvents = new List<EventNodeInfo>();
+                var boundaryEvents = new List<EventNodeInfo>();
+                
+                // Categorize events
+                foreach (var node in executedNodes)
+                {
+                    var element = definitionHandler.GetElementById(node.NodeId);
+                    if (element == null) continue;
+                    
+                    if (element.GetType().Name.Contains("StartEvent"))
+                    {
+                        startEvents.Add(new EventNodeInfo
+                        {
+                            EventId = node.NodeId,
+                            EventType = "StartEvent",
+                            IsTriggered = true,
+                            TriggerTime = node.LastExecutionTime
+                        });
+                    }
+                    else if (element.GetType().Name.Contains("EndEvent"))
+                    {
+                        endEvents.Add(new EventNodeInfo
+                        {
+                            EventId = node.NodeId,
+                            EventType = "EndEvent",
+                            IsTriggered = true,
+                            TriggerTime = node.LastExecutionTime
+                        });
+                    }
+                    else if (element.GetType().Name.Contains("IntermediateCatchEvent") || 
+                             element.GetType().Name.Contains("IntermediateThrowEvent"))
+                    {
+                        triggeredEvents.Add(new EventNodeInfo
+                        {
+                            EventId = node.NodeId,
+                            EventType = element.GetType().Name,
+                            IsTriggered = true,
+                            TriggerTime = node.LastExecutionTime
+                        });
+                    }
+                    else if (element.GetType().Name.Contains("BoundaryEvent"))
+                    {
+                        var boundaryEvent = element as Novin.Bpmn.Models.BpmnBoundaryEvent;
+                        var attachedToElementId = boundaryEvent?.attachedToRef?.Name;
+                        
+                        boundaryEvents.Add(new EventNodeInfo
+                        {
+                            EventId = node.NodeId,
+                            EventType = "BoundaryEvent",
+                            IsTriggered = true,
+                            TriggerTime = node.LastExecutionTime,
+                            AttachedToElementId = attachedToElementId
+                        });
+                    }
+                }
+                
+                // Add event information to the execution map
+                var result = new
+                {
+                    executionMap.Nodes,
+                    executionMap.Flows,
+                    executionMap.ActiveTokens,
+                    executionMap.WaitingTokens,
+                    executionMap.CompletedTokens,
+                    executionMap.ExpiredTokens,
+                    executionMap.PendingTokens,
+                    StartEvents = startEvents,
+                    EndEvents = endEvents,
+                    TriggeredEvents = triggeredEvents,
+                    BoundaryEvents = boundaryEvents
+                };
+                
+                return Json(result);
             }
             catch (Exception ex)
             {

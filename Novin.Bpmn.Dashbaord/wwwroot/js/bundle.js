@@ -145827,7 +145827,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   exportDiagram: () => (/* binding */ exportDiagram),
 /* harmony export */   initializeModeler: () => (/* binding */ initializeModeler),
 /* harmony export */   initializeViewer: () => (/* binding */ initializeViewer),
-/* harmony export */   saveChanges: () => (/* binding */ saveChanges)
+/* harmony export */   saveChanges: () => (/* binding */ saveChanges),
+/* harmony export */   updateExecutionMap: () => (/* binding */ updateExecutionMap)
 /* harmony export */ });
 /* harmony import */ var bpmn_js_lib_Modeler__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! bpmn-js/lib/Modeler */ "./node_modules/bpmn-js/lib/Modeler.js");
 /* harmony import */ var bpmn_js_lib_Viewer__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! bpmn-js/lib/Viewer */ "./node_modules/bpmn-js/lib/Viewer.js");
@@ -145906,11 +145907,11 @@ function initializeViewer(url, executionMap) {
                 var element = elementRegistry.get(id);
                 if (element) {
                   if (node.IsActive) {
-                    canvas.addMarker(id, 'highlight');
-                    var gfx = elementRegistry.getGraphics(id);
-                    applyColorToElement(gfx, node.IsActive ? "#228B22" : "#666666", 2);
+                    // Apply appropriate styling based on element type
+                    applyStylesToElement(canvas, elementRegistry, element, id, node);
 
                     // اضافه کردن tooltip برای نمایش اطلاعات بیشتر
+                    var gfx = elementRegistry.getGraphics(id);
                     gfx.setAttribute('title', "Node: ".concat(id));
                     gfx.setAttribute('data-toggle', 'tooltip');
                     gfx.setAttribute('data-placement', 'top');
@@ -146015,6 +146016,38 @@ function initializeViewer(url, executionMap) {
   });
 }
 
+// Apply appropriate styles based on element type
+function applyStylesToElement(canvas, elementRegistry, element, id, node) {
+  // Get the element type to determine styling
+  var elementType = element.type;
+  var gfx = elementRegistry.getGraphics(id);
+  if (elementType.includes('StartEvent')) {
+    canvas.addMarker(id, 'start-event');
+    applyColorToElement(gfx, "#228B22", 3);
+  } else if (elementType.includes('EndEvent')) {
+    canvas.addMarker(id, 'end-event');
+    applyColorToElement(gfx, "#8B0000", 3);
+  } else if (elementType.includes('IntermediateThrowEvent') || elementType.includes('IntermediateCatchEvent')) {
+    canvas.addMarker(id, 'triggered-event');
+    applyColorToElement(gfx, "#FF8C00", 3);
+  } else if (elementType.includes('BoundaryEvent')) {
+    canvas.addMarker(id, 'boundary-event');
+    applyColorToElement(gfx, "#6A5ACD", 3);
+  } else if (elementType.includes('Task')) {
+    if (elementType.includes('UserTask')) {
+      canvas.addMarker(id, 'user-task');
+      applyColorToElement(gfx, "#4682B4", 3);
+    } else {
+      canvas.addMarker(id, 'highlight');
+      applyColorToElement(gfx, "#228B22", 2);
+    }
+  } else {
+    // Default styling for other nodes
+    canvas.addMarker(id, 'highlight');
+    applyColorToElement(gfx, "#228B22", 2);
+  }
+}
+
 // تابع کمکی برای اعمال رنگ به المان‌های مختلف
 function applyColorToElement(gfx, color, strokeWidth) {
   if (!gfx) return;
@@ -146101,6 +146134,8 @@ function _exportDiagram() {
 function saveChanges(_x2) {
   return _saveChanges.apply(this, arguments);
 }
+
+// New function to handle updating the execution map
 function _saveChanges() {
   _saveChanges = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee3(definitionKey) {
     var updatedXML, response;
@@ -146136,6 +146171,12 @@ function _saveChanges() {
     }, _callee3);
   }));
   return _saveChanges.apply(this, arguments);
+}
+function updateExecutionMap(executionMap) {
+  var viewer = new bpmn_js_lib_Viewer__WEBPACK_IMPORTED_MODULE_4__["default"]({
+    container: '#canvas'
+  });
+  initializeViewer("/api/bpmn/content/process/".concat(executionMap.processId), executionMap);
 }
 })();
 
