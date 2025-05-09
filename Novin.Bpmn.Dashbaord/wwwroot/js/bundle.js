@@ -145844,8 +145844,26 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
 
 
 
+
+// State variables
 var bpmnModeler;
+var currentViewer;
+
+// Constants
+var API_ENDPOINTS = {
+  DEFINITION_CONTENT: '/api/bpmn/content',
+  PROCESS_CONTENT: '/api/bpmn/content/process',
+  EXECUTION_MAP: '/api/bpmn/execution-map',
+  SAVE_DIAGRAM: '/api/bpmn/save'
+};
+
+/**
+ * Initialize BPMN Modeler (editor mode)
+ * @param {string} definitionKey - The BPMN definition key
+ */
 function initializeModeler(definitionKey) {
+  // Clear any existing viewer
+  resetViewerContainer();
   bpmnModeler = new bpmn_js_lib_Modeler__WEBPACK_IMPORTED_MODULE_3__["default"]({
     container: '#canvas',
     propertiesPanel: {
@@ -145856,169 +145874,224 @@ function initializeModeler(definitionKey) {
       magic: _Providers_descriptors_magic_json__WEBPACK_IMPORTED_MODULE_2__
     }
   });
-  fetch("/api/bpmn/content/".concat(definitionKey)).then(function (response) {
+  fetch("".concat(API_ENDPOINTS.DEFINITION_CONTENT, "/").concat(definitionKey)).then(function (response) {
+    if (!response.ok) {
+      throw new Error("Error loading definition: ".concat(response.statusText));
+    }
     return response.text();
   }).then(function (bpmnXML) {
-    console.log(bpmnXML);
     try {
       bpmnModeler.importXML(bpmnXML);
       var canvas = bpmnModeler.get('canvas');
       canvas.zoom('fit-viewport');
     } catch (e) {
-      console.log(e);
+      console.error('Error parsing BPMN XML:', e);
     }
   })["catch"](function (err) {
-    return console.error('Error loading BPMN diagram', err);
+    console.error('Error loading BPMN diagram:', err);
+    showErrorMessage('Failed to load BPMN diagram. Please try again later.');
   });
 }
-function initializeViewer(url, executionMap) {
-  var viewer = new bpmn_js_lib_Viewer__WEBPACK_IMPORTED_MODULE_4__["default"]({
+
+/**
+ * Initialize BPMN Viewer (view mode with execution information)
+ * @param {string} processId - The process instance ID
+ * @param {boolean} includeVirtual - Whether to include virtual nodes/flows
+ */
+function initializeViewer(processId) {
+  var includeVirtual = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
+  // Display loading state
+  showLoadingState();
+
+  // Clear any existing viewer
+  resetViewerContainer();
+  currentViewer = new bpmn_js_lib_Viewer__WEBPACK_IMPORTED_MODULE_4__["default"]({
     container: '#canvas'
   });
-  console.log('Execution Map:', executionMap);
-  fetch(url).then(function (response) {
-    return response.text();
-  }).then( /*#__PURE__*/function () {
-    var _ref = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee(bpmnXML) {
-      var canvas, elementRegistry;
-      return _regeneratorRuntime().wrap(function _callee$(_context) {
-        while (1) switch (_context.prev = _context.next) {
-          case 0:
-            _context.prev = 0;
-            _context.next = 3;
-            return viewer.importXML(bpmnXML);
-          case 3:
-            canvas = viewer.get('canvas');
-            elementRegistry = viewer.get('elementRegistry');
-            canvas.zoom('fit-viewport');
+  console.log("Initializing viewer for process ".concat(processId));
 
-            // اگر ساختار قدیمی باشد (برای سازگاری با کد قبلی)
-            if (!Array.isArray(executionMap)) {
-              _context.next = 9;
-              break;
-            }
-            handleLegacyFormat(executionMap, canvas, elementRegistry);
-            return _context.abrupt("return");
-          case 9:
-            // رنگ‌آمیزی نودهای اجرا شده
-            if (executionMap.nodes) {
-              executionMap.nodes.forEach(function (node) {
-                var id = node.NodeId;
-                var element = elementRegistry.get(id);
-                if (element) {
-                  if (node.IsActive) {
-                    // Apply appropriate styling based on element type
-                    applyStylesToElement(canvas, elementRegistry, element, id, node);
-
-                    // اضافه کردن tooltip برای نمایش اطلاعات بیشتر
-                    var gfx = elementRegistry.getGraphics(id);
-                    gfx.setAttribute('title', "Node: ".concat(id));
-                    gfx.setAttribute('data-toggle', 'tooltip');
-                    gfx.setAttribute('data-placement', 'top');
-                    gfx.setAttribute('data-html', 'true');
-                    gfx.setAttribute('data-content', "Execution count: ".concat(node.ExecutionCount, "<br>\n                                     Last execution: ").concat(new Date(node.LastExecutionTime).toLocaleTimeString()));
-                  }
-                } else {
-                  console.warn("Element not found: ".concat(id));
-                }
-              });
-            }
-
-            // رنگ‌آمیزی فلوهای اجرا شده
-            if (executionMap.flows) {
-              executionMap.flows.forEach(function (flow) {
-                var id = flow.FlowId;
-                var element = elementRegistry.get(id);
-                if (element) {
-                  if (flow.IsActive) {
-                    canvas.addMarker(id, 'active-flow');
-                    var gfx = elementRegistry.getGraphics(id);
-                    applyColorToElement(gfx, "#FF8C00", 2);
-
-                    // اضافه کردن tooltip برای نمایش اطلاعات بیشتر
-                    gfx.setAttribute('title', "Flow: ".concat(id));
-                    gfx.setAttribute('data-toggle', 'tooltip');
-                    gfx.setAttribute('data-placement', 'top');
-                    gfx.setAttribute('data-html', 'true');
-                    gfx.setAttribute('data-content', "Execution count: ".concat(flow.ExecutionCount, "<br>\n                                     Last execution: ").concat(new Date(flow.LastExecutionTime).toLocaleTimeString()));
-                  }
-                } else {
-                  console.warn("Flow not found: ".concat(id));
-                }
-              });
-            }
-
-            // رنگ‌آمیزی توکن‌های در حالت انتظار
-            if (executionMap.waitingTokens) {
-              executionMap.waitingTokens.forEach(function (token) {
-                var id = token.CurrentElementId;
-                var element = elementRegistry.get(id);
-                if (element) {
-                  canvas.addMarker(id, 'waiting-token');
-                  var gfx = elementRegistry.getGraphics(id);
-                  applyColorToElement(gfx, "#BA55D3", 3);
-
-                  // اضافه کردن tooltip برای نمایش اطلاعات بیشتر
-                  gfx.setAttribute('title', "Waiting Task: ".concat(id));
-                  gfx.setAttribute('data-toggle', 'tooltip');
-                  gfx.setAttribute('data-placement', 'top');
-                  gfx.setAttribute('data-html', 'true');
-                  gfx.setAttribute('data-content', "Token ID: ".concat(token.Id));
-                } else {
-                  console.warn("Element for waiting token not found: ".concat(id));
-                }
-              });
-            }
-
-            // رنگ‌آمیزی توکن‌های فعال
-            if (executionMap.activeTokens) {
-              executionMap.activeTokens.forEach(function (token) {
-                var id = token.CurrentElementId;
-                var element = elementRegistry.get(id);
-                if (element) {
-                  canvas.addMarker(id, token.IsExecutable ? 'highlight' : 'inactive');
-                  var gfx = elementRegistry.getGraphics(id);
-                  applyColorToElement(gfx, token.IsExecutable ? "#1E90FF" : "#A9A9A9", token.IsExecutable ? 3 : 1);
-
-                  // اضافه کردن tooltip برای نمایش اطلاعات بیشتر
-                  gfx.setAttribute('title', "Active Token: ".concat(id));
-                  gfx.setAttribute('data-toggle', 'tooltip');
-                  gfx.setAttribute('data-placement', 'top');
-                  gfx.setAttribute('data-html', 'true');
-                  gfx.setAttribute('data-content', "Token ID: ".concat(token.Id, "<br>Executable: ").concat(token.IsExecutable));
-                } else {
-                  console.warn("Element for active token not found: ".concat(id));
-                }
-              });
-            }
-
-            // Initialize Bootstrap tooltips after DOM is updated
-            if (typeof $ !== 'undefined') {
-              $('[data-toggle="tooltip"]').tooltip();
-            }
-            _context.next = 19;
-            break;
-          case 16:
-            _context.prev = 16;
-            _context.t0 = _context["catch"](0);
-            console.error('Error rendering BPMN diagram:', _context.t0);
-          case 19:
-          case "end":
-            return _context.stop();
-        }
-      }, _callee, null, [[0, 16]]);
-    }));
-    return function (_x) {
-      return _ref.apply(this, arguments);
-    };
-  }())["catch"](function (err) {
-    return console.error('Error loading BPMN diagram', err);
+  // Step 1: Fetch the BPMN XML definition for this process
+  fetchProcessDefinition(processId).then(function (bpmnXML) {
+    console.log('BPMN XML loaded successfully');
+    return importBpmnDefinition(bpmnXML);
+  }).then(function () {
+    console.log('BPMN model imported successfully, fetching execution map');
+    return fetchExecutionMapData(processId, includeVirtual);
+  }).then(function (executionMap) {
+    console.log('Execution map data received:', executionMap);
+    applyExecutionMapToViewer(executionMap);
+  })["catch"](function (error) {
+    console.error('Error in viewer initialization:', error);
+    showErrorMessage('Failed to initialize process viewer: ' + error.message);
+  })["finally"](function () {
+    hideLoadingState();
   });
 }
 
-// Apply appropriate styles based on element type
+/**
+ * Fetch the BPMN process definition XML
+ * @param {string} processId - The process instance ID
+ * @returns {Promise<string>} - The BPMN XML
+ */
+function fetchProcessDefinition(processId) {
+  console.log("Fetching process definition for ".concat(processId));
+  return fetch("".concat(API_ENDPOINTS.PROCESS_CONTENT, "/").concat(processId)).then(function (response) {
+    if (!response.ok) {
+      console.error('API response error:', response.status, response.statusText);
+      throw new Error("Error fetching process definition: ".concat(response.statusText));
+    }
+
+    // Check the content type of the response
+    var contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return response.json().then(function (data) {
+        return data.value || data;
+      });
+    } else {
+      // Not JSON, treat as plain text (XML)
+      return response.text();
+    }
+  }).then(function (data) {
+    console.log('Process definition data received');
+    return data;
+  });
+}
+
+/**
+ * Import BPMN XML definition into the viewer
+ * @param {string} bpmnXML - The BPMN XML definition
+ * @returns {Promise<void>}
+ */
+function importBpmnDefinition(bpmnXML) {
+  return currentViewer.importXML(bpmnXML).then(function () {
+    var canvas = currentViewer.get('canvas');
+    canvas.zoom('fit-viewport');
+  });
+}
+
+/**
+ * Fetch execution map data from API
+ * @param {string} processId - The process instance ID
+ * @param {boolean} includeVirtual - Whether to include virtual nodes/flows
+ * @returns {Promise<object>} - The execution map data
+ */
+function fetchExecutionMapData(processId) {
+  var includeVirtual = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
+  console.log("Fetching execution map for process ".concat(processId, ", includeVirtual=").concat(includeVirtual));
+  return fetch("".concat(API_ENDPOINTS.EXECUTION_MAP, "/").concat(processId, "?includeVirtual=").concat(includeVirtual)).then(function (response) {
+    if (!response.ok) {
+      console.error('API response error:', response.status, response.statusText);
+      throw new Error("Error fetching execution map: ".concat(response.statusText));
+    }
+
+    // Check the content type of the response
+    var contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return response.json();
+    } else {
+      // If somehow not JSON, throw an error since we expect JSON here
+      throw new Error('Execution map data is not in JSON format');
+    }
+  }).then(function (data) {
+    console.log('Execution map data received:', data);
+    // Handle both raw data and data wrapped in a value property
+    return data.value || data;
+  });
+}
+
+/**
+ * Apply execution map data to the BPMN viewer
+ * @param {object} executionMap - The execution map data
+ */
+function applyExecutionMapToViewer(executionMap) {
+  if (!currentViewer) {
+    console.error('No active viewer to apply execution map to');
+    return;
+  }
+  var canvas = currentViewer.get('canvas');
+  var elementRegistry = currentViewer.get('elementRegistry');
+
+  // Process nodes
+  if (executionMap.nodes && Array.isArray(executionMap.nodes)) {
+    executionMap.nodes.forEach(function (node) {
+      if (node.nodeId) {
+        var element = elementRegistry.get(node.nodeId);
+        if (element && node.isActive) {
+          applyStylesToElement(canvas, elementRegistry, element, node.nodeId, node);
+          addTooltipToElement(elementRegistry, node.nodeId, createNodeTooltipContent(node));
+        }
+      }
+    });
+  }
+
+  // Process flows
+  if (executionMap.flows && Array.isArray(executionMap.flows)) {
+    executionMap.flows.forEach(function (flow) {
+      if (flow.flowId) {
+        var element = elementRegistry.get(flow.flowId);
+        if (element && flow.isActive) {
+          canvas.addMarker(flow.flowId, 'active-flow');
+          var gfx = elementRegistry.getGraphics(flow.flowId);
+          applyColorToElement(gfx, "#FF8C00", 2);
+          addTooltipToElement(elementRegistry, flow.flowId, createFlowTooltipContent(flow));
+        }
+      }
+    });
+  }
+
+  // Process waiting tokens
+  if (executionMap.waitingTokens && Array.isArray(executionMap.waitingTokens)) {
+    executionMap.waitingTokens.forEach(function (token) {
+      if (token.currentElementId) {
+        var element = elementRegistry.get(token.currentElementId);
+        if (element) {
+          canvas.addMarker(token.currentElementId, 'waiting-token');
+          var gfx = elementRegistry.getGraphics(token.currentElementId);
+          applyColorToElement(gfx, "#BA55D3", 3);
+          addTooltipToElement(elementRegistry, token.currentElementId, createTokenTooltipContent(token, 'Waiting'));
+        }
+      }
+    });
+  }
+
+  // Process active tokens
+  if (executionMap.activeTokens && Array.isArray(executionMap.activeTokens)) {
+    executionMap.activeTokens.forEach(function (token) {
+      if (token.currentElementId) {
+        var element = elementRegistry.get(token.currentElementId);
+        if (element) {
+          canvas.addMarker(token.currentElementId, token.isExecutable ? 'highlight' : 'inactive');
+          var gfx = elementRegistry.getGraphics(token.currentElementId);
+          applyColorToElement(gfx, token.isExecutable ? "#1E90FF" : "#A9A9A9", token.isExecutable ? 3 : 1);
+          addTooltipToElement(elementRegistry, token.currentElementId, createTokenTooltipContent(token, 'Active'));
+        }
+      }
+    });
+  }
+
+  // Process completed tokens
+  if (executionMap.completedTokens && Array.isArray(executionMap.completedTokens)) {
+    executionMap.completedTokens.forEach(function (token) {
+      if (token.currentElementId) {
+        var element = elementRegistry.get(token.currentElementId);
+        if (element) {
+          canvas.addMarker(token.currentElementId, 'completed-node');
+          var gfx = elementRegistry.getGraphics(token.currentElementId);
+          applyColorToElement(gfx, "#228B22", 2);
+          addTooltipToElement(elementRegistry, token.currentElementId, createTokenTooltipContent(token, 'Completed'));
+        }
+      }
+    });
+  }
+
+  // Initialize tooltips
+  initializeTooltips();
+}
+
+/**
+ * Apply styles to a BPMN element based on its type
+ */
 function applyStylesToElement(canvas, elementRegistry, element, id, node) {
-  // Get the element type to determine styling
   var elementType = element.type;
   var gfx = elementRegistry.getGraphics(id);
   if (elementType.includes('StartEvent')) {
@@ -146048,106 +146121,245 @@ function applyStylesToElement(canvas, elementRegistry, element, id, node) {
   }
 }
 
-// تابع کمکی برای اعمال رنگ به المان‌های مختلف
+/**
+ * Apply color to a BPMN element
+ */
 function applyColorToElement(gfx, color, strokeWidth) {
-  if (!gfx) return;
+  if (!gfx) {
+    console.warn('No graphics element provided to applyColorToElement');
+    return;
+  }
+  console.log('Applying color', color, 'to element', gfx);
+  try {
+    // Direct styling for SVG elements
+    var selectors = ['path', 'rect', 'polygon', 'circle', 'polyline'];
+    var styled = false;
+    selectors.forEach(function (selector) {
+      var elements = gfx.querySelectorAll(selector);
+      if (elements.length > 0) {
+        styled = true;
+        elements.forEach(function (element) {
+          element.style.stroke = color;
+          if (strokeWidth) {
+            element.style.strokeWidth = strokeWidth + 'px';
+          }
+        });
+      }
+    });
 
-  // اعمال رنگ به انواع مختلف المان‌ها
-  var selectors = ['path', 'rect', 'polygon', 'circle', 'polyline'];
-  selectors.forEach(function (selector) {
-    var elements = gfx.querySelectorAll(selector);
-    elements.forEach(function (element) {
-      element.style.stroke = color;
+    // If no elements were styled, try direct styling (for some simple elements)
+    if (!styled && gfx.tagName && selectors.includes(gfx.tagName.toLowerCase())) {
+      gfx.style.stroke = color;
       if (strokeWidth) {
-        element.style.strokeWidth = strokeWidth + 'px';
+        gfx.style.strokeWidth = strokeWidth + 'px';
       }
-    });
-  });
-}
-
-// برای سازگاری با فرمت قدیمی
-function handleLegacyFormat(details, canvas, elementRegistry) {
-  details.filter(function (x) {
-    return x.IsActive;
-  }).forEach(function (node) {
-    var id = node.ElementId;
-    var element = elementRegistry.get(id);
-    if (element) {
-      canvas.addMarker(id, 'highlight');
-      var gfx = elementRegistry.getGraphics(id);
-      applyColorToElement(gfx, "blue", 2);
-    } else {
-      console.warn("Element not found: ".concat(id));
     }
-  });
-  details.filter(function (x) {
-    return x.IsPending;
-  }).forEach(function (node) {
-    var id = node.ElementId;
-    var element = elementRegistry.get(id);
-    if (element) {
-      var gfx = elementRegistry.getGraphics(id);
-      applyColorToElement(gfx, "green", 2);
 
-      // Add the title attribute for the tooltip
-      gfx.setAttribute('title', "Task ID: ".concat(node.ElementId));
-      gfx.setAttribute('data-toggle', 'popover');
-      if (node.UserTask) {
-        gfx.setAttribute('data-content', "Task ID: ".concat(node.UserTask.TaskId));
-      }
-    } else {
-      console.warn("Element not found: ".concat(id));
+    // Add styling class for CSS rules
+    if (color === "#228B22") {
+      // Forest green (completed)
+      gfx.classList.add('completed-node');
+    } else if (color === "#FF8C00") {
+      // Dark orange (active flow)
+      gfx.classList.add('active-flow');
+    } else if (color === "#1E90FF") {
+      // Dodger blue (active task)
+      gfx.classList.add('highlight');
+    } else if (color === "#BA55D3") {
+      // Medium orchid (waiting)
+      gfx.classList.add('waiting-token');
     }
-  });
-
-  // Initialize Bootstrap popover after DOM is updated
-  if (typeof $ !== 'undefined') {
-    $('[data-toggle="popover"]').popover({
-      trigger: 'hover'
-    });
+  } catch (error) {
+    console.error('Error applying color to element:', error);
   }
 }
+
+/**
+ * Add tooltip to a BPMN element
+ */
+function addTooltipToElement(elementRegistry, elementId, tooltipContent) {
+  var gfx = elementRegistry.getGraphics(elementId);
+  if (gfx) {
+    gfx.setAttribute('title', tooltipContent.title);
+    gfx.setAttribute('data-toggle', 'tooltip');
+    gfx.setAttribute('data-placement', 'top');
+    gfx.setAttribute('data-html', 'true');
+    gfx.setAttribute('data-content', tooltipContent.content);
+  }
+}
+
+/**
+ * Create tooltip content for a node
+ */
+function createNodeTooltipContent(node) {
+  return {
+    title: "Node: ".concat(node.nodeId),
+    content: "Execution count: ".concat(node.executionCount, "<br>\n                  Last execution: ").concat(formatDateTime(node.lastExecutionTime))
+  };
+}
+
+/**
+ * Create tooltip content for a flow
+ */
+function createFlowTooltipContent(flow) {
+  return {
+    title: "Flow: ".concat(flow.flowId),
+    content: "Execution count: ".concat(flow.executionCount, "<br>\n                  Last execution: ").concat(formatDateTime(flow.lastExecutionTime))
+  };
+}
+
+/**
+ * Create tooltip content for a token
+ */
+function createTokenTooltipContent(token, tokenType) {
+  return {
+    title: "".concat(tokenType, " Token: ").concat(token.currentElementId),
+    content: "Token ID: ".concat(token.id, "<br>\n                  ").concat(token.hasOwnProperty('isExecutable') ? "Executable: ".concat(token.isExecutable) : '')
+  };
+}
+
+/**
+ * Format date time for display
+ */
+function formatDateTime(dateTimeString) {
+  if (!dateTimeString) return 'N/A';
+  try {
+    return new Date(dateTimeString).toLocaleTimeString();
+  } catch (e) {
+    return dateTimeString;
+  }
+}
+
+/**
+ * Initialize bootstrap tooltips
+ */
+function initializeTooltips() {
+  if (typeof $ !== 'undefined') {
+    $('[data-toggle="tooltip"]').tooltip();
+  }
+}
+
+/**
+ * Reset viewer container
+ */
+function resetViewerContainer() {
+  var canvasElement = document.getElementById('canvas');
+  if (canvasElement) {
+    canvasElement.innerHTML = '';
+  }
+  if (currentViewer) {
+    try {
+      currentViewer.destroy();
+    } catch (e) {
+      console.warn('Error destroying previous viewer:', e);
+    }
+  }
+}
+
+/**
+ * Show loading state
+ */
+function showLoadingState() {
+  var canvasElement = document.getElementById('canvas');
+  if (canvasElement) {
+    var loader = document.createElement('div');
+    loader.className = 'bpmn-loader';
+    loader.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="sr-only">Loading...</span></div>';
+    loader.style.position = 'absolute';
+    loader.style.top = '50%';
+    loader.style.left = '50%';
+    loader.style.transform = 'translate(-50%, -50%)';
+    canvasElement.appendChild(loader);
+  }
+}
+
+/**
+ * Hide loading state
+ */
+function hideLoadingState() {
+  var loaderElement = document.querySelector('.bpmn-loader');
+  if (loaderElement) {
+    loaderElement.remove();
+  }
+}
+
+/**
+ * Show error message
+ */
+function showErrorMessage(message) {
+  var canvasElement = document.getElementById('canvas');
+  if (canvasElement) {
+    var errorElement = document.createElement('div');
+    errorElement.className = 'alert alert-danger';
+    errorElement.style.margin = '20px';
+    errorElement.innerText = message;
+    canvasElement.appendChild(errorElement);
+  }
+}
+
+/**
+ * Export BPMN diagram
+ */
 function exportDiagram() {
   return _exportDiagram.apply(this, arguments);
 }
+
+/**
+ * Save diagram changes
+ */
 function _exportDiagram() {
-  _exportDiagram = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee2() {
-    var res;
-    return _regeneratorRuntime().wrap(function _callee2$(_context2) {
-      while (1) switch (_context2.prev = _context2.next) {
+  _exportDiagram = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee() {
+    var result;
+    return _regeneratorRuntime().wrap(function _callee$(_context) {
+      while (1) switch (_context.prev = _context.next) {
         case 0:
-          _context2.next = 2;
+          if (bpmnModeler) {
+            _context.next = 2;
+            break;
+          }
+          throw new Error('BPMN Modeler is not initialized');
+        case 2:
+          _context.prev = 2;
+          _context.next = 5;
           return bpmnModeler.saveXML({
             format: true
           });
-        case 2:
-          res = _context2.sent;
-          return _context2.abrupt("return", res.xml);
-        case 4:
+        case 5:
+          result = _context.sent;
+          return _context.abrupt("return", result.xml);
+        case 9:
+          _context.prev = 9;
+          _context.t0 = _context["catch"](2);
+          console.error('Error exporting diagram:', _context.t0);
+          throw _context.t0;
+        case 13:
         case "end":
-          return _context2.stop();
+          return _context.stop();
       }
-    }, _callee2);
+    }, _callee, null, [[2, 9]]);
   }));
   return _exportDiagram.apply(this, arguments);
 }
-function saveChanges(_x2) {
+function saveChanges(_x) {
   return _saveChanges.apply(this, arguments);
 }
 
-// New function to handle updating the execution map
+/**
+ * Update execution map for a process
+ */
 function _saveChanges() {
-  _saveChanges = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee3(definitionKey) {
+  _saveChanges = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee2(definitionKey) {
     var updatedXML, response;
-    return _regeneratorRuntime().wrap(function _callee3$(_context3) {
-      while (1) switch (_context3.prev = _context3.next) {
+    return _regeneratorRuntime().wrap(function _callee2$(_context2) {
+      while (1) switch (_context2.prev = _context2.next) {
         case 0:
-          _context3.next = 2;
+          _context2.prev = 0;
+          _context2.next = 3;
           return exportDiagram();
-        case 2:
-          updatedXML = _context3.sent;
-          _context3.next = 5;
-          return fetch('/Bpmn/Save', {
+        case 3:
+          updatedXML = _context2.sent;
+          _context2.next = 6;
+          return fetch(API_ENDPOINTS.SAVE_DIAGRAM, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -146157,26 +146369,38 @@ function _saveChanges() {
               bpmnXML: updatedXML
             })
           });
-        case 5:
-          response = _context3.sent;
-          if (!response.ok) {
-            console.error('Failed to save BPMN diagram');
-          } else {
-            console.log('BPMN diagram saved successfully');
+        case 6:
+          response = _context2.sent;
+          if (response.ok) {
+            _context2.next = 9;
+            break;
           }
-        case 7:
+          throw new Error("Failed to save: ".concat(response.statusText));
+        case 9:
+          return _context2.abrupt("return", {
+            success: true,
+            message: 'BPMN diagram saved successfully'
+          });
+        case 12:
+          _context2.prev = 12;
+          _context2.t0 = _context2["catch"](0);
+          console.error('Failed to save BPMN diagram:', _context2.t0);
+          return _context2.abrupt("return", {
+            success: false,
+            message: 'Failed to save BPMN diagram'
+          });
+        case 16:
         case "end":
-          return _context3.stop();
+          return _context2.stop();
       }
-    }, _callee3);
+    }, _callee2, null, [[0, 12]]);
   }));
   return _saveChanges.apply(this, arguments);
 }
-function updateExecutionMap(executionMap) {
-  var viewer = new bpmn_js_lib_Viewer__WEBPACK_IMPORTED_MODULE_4__["default"]({
-    container: '#canvas'
-  });
-  initializeViewer("/api/bpmn/content/process/".concat(executionMap.processId), executionMap);
+function updateExecutionMap(processId) {
+  var includeVirtual = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
+  console.log("Updating execution map for process ".concat(processId, ", includeVirtual=").concat(includeVirtual));
+  initializeViewer(processId, includeVirtual);
 }
 })();
 

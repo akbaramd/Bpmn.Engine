@@ -1,151 +1,226 @@
-﻿using Novin.Bpmn.Abstractions;
+using Novin.Bpmn.Contracts;
 using Novin.Bpmn.Core;
-using Novin.Bpmn.Handlers;
-using Novin.Bpmn.Models;
+using Novin.Bpmn.V3;
+using Novin.Bpmn.V3.UserTasks;
 using System;
+using System.Collections.Generic;
 using System.IO;
-using System.Threading;
+using System.Linq;
 using System.Threading.Tasks;
-using Novin.Bpmn.V2;
 
 namespace Novin.Bpmn
 {
-    public class BpmnEngine
+    /// <summary>
+    /// پیاده‌سازی موتور اصلی BPMN
+    /// </summary>
+    public class BpmnEngine : IBpmnEngine
     {
-        private readonly IBpmnTaskAccessor _taskAccessor;
-        private readonly IBpmnDefinitionAccessor _definitionAccessor;
-        private readonly IBpmnProcessAccessor _processAccessor;
-        private readonly IServiceProvider _serviceProvider;
+        private readonly IBpmnProcessManager _processManager;
+        private readonly IBpmnDefinitionManager _definitionManager;
+        private readonly IBpmnTaskManager _taskManager;
+
+        public IBpmnProcessManager ProcessManager => _processManager;
+        
+        public IBpmnDefinitionManager DefinitionManager => _definitionManager;
+        
+        public IBpmnTaskManager TaskManager => _taskManager;
 
         public BpmnEngine(
-            IBpmnTaskAccessor taskAccessor,
-            IBpmnDefinitionAccessor definitionAccessor,
-            IBpmnProcessAccessor processAccessor,
-            IServiceProvider serviceProvider)
+            IBpmnProcessManager processManager,
+            IBpmnDefinitionManager definitionManager,
+            IBpmnTaskManager taskManager)
         {
-            _taskAccessor = taskAccessor ?? throw new ArgumentNullException(nameof(taskAccessor));
-            _definitionAccessor = definitionAccessor ?? throw new ArgumentNullException(nameof(definitionAccessor));
-            _processAccessor = processAccessor ?? throw new ArgumentNullException(nameof(processAccessor));
-            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+            _processManager = processManager ?? throw new ArgumentNullException(nameof(processManager));
+            _definitionManager = definitionManager ?? throw new ArgumentNullException(nameof(definitionManager));
+            _taskManager = taskManager ?? throw new ArgumentNullException(nameof(taskManager));
         }
 
-        public void DeployProcessDefinition(string filePath, string deploymentKey)
+        #region Process Definition Operations
+        
+        /// <summary>
+        /// بارگذاری یک فرآیند جدید با کلید و محتوا
+        /// </summary>
+        public async Task<BpmnDefinitionInfo> DeployProcessAsync(string deploymentKey, string definitionXml, string label = null)
         {
-            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
-                throw new FileNotFoundException($"Process definition file not found: {filePath}");
-
-            if (string.IsNullOrWhiteSpace(deploymentKey))
-                throw new ArgumentException("Deployment key cannot be null or empty", nameof(deploymentKey));
-
-            var definitionXml = File.ReadAllText(filePath);
-            _definitionAccessor.StoreDefinition(definitionXml, deploymentKey);
-            Console.WriteLine($"Successfully deployed process definition with key: {deploymentKey}");
+            return await _definitionManager.DeployProcessAsync(deploymentKey, definitionXml, label);
         }
-
-        public async Task<BpmnV2ProcessExecutor> CreateProcessExecutorAsync(string deploymentKey, CancellationToken cancellationToken = default)
+        
+        /// <summary>
+        /// بارگذاری یک فرآیند جدید با کلید و استریم محتوا
+        /// </summary>
+        public async Task<BpmnDefinitionInfo> DeployProcessAsync(string deploymentKey, Stream definitionStream, string label = null)
         {
-            if (string.IsNullOrWhiteSpace(deploymentKey))
-                throw new ArgumentException("Deployment key cannot be null or empty", nameof(deploymentKey));
-
-            var processDefinition = _definitionAccessor.GetDefinitionByDeploymentKey(deploymentKey);
-            if (processDefinition == null)
-                throw new KeyNotFoundException($"Process definition not found for key: {deploymentKey}");
-
-            var executor = _serviceProvider.GetService(typeof(BpmnV2ProcessExecutor)) as BpmnV2ProcessExecutor;
-            if (executor == null)
-                throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
-
-            executor.Initialize(processDefinition.DeploymentKey, processDefinition.Content);
-                
-            return executor;
+            return await _definitionManager.DeployProcessAsync(deploymentKey, definitionStream, label);
         }
-
-        public async Task<BpmnV2ProcessExecutor> CreateProcessExecutorAsync(Guid processId, CancellationToken cancellationToken = default)
+        
+        /// <summary>
+        /// دریافت یک تعریف فرآیند با کلید
+        /// </summary>
+        public async Task<BpmnDefinitionInfo> GetProcessDefinitionAsync(string deploymentKey)
         {
-            if (processId == Guid.Empty)
-                throw new ArgumentException("Process ID cannot be empty", nameof(processId));
-
-            var processState = _processAccessor.GetProcessState(processId);
-            if (processState == null)
-                throw new KeyNotFoundException($"Process state not found for ID: {processId}");
-
-            var executor = _serviceProvider.GetService(typeof(BpmnV2ProcessExecutor)) as BpmnV2ProcessExecutor;
-            if (executor == null)
-                throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
-
-            executor.Initialize(processState);
-
-            return executor;
+            return await _definitionManager.GetProcessDefinitionAsync(deploymentKey);
         }
-
-        public async Task<BpmnV2ProcessExecutor> CompleteUserTaskAsync(Guid taskId, dynamic? variables = null, CancellationToken cancellationToken = default)
+        
+        /// <summary>
+        /// دریافت همه تعاریف فرآیندها
+        /// </summary>
+        public async Task<IEnumerable<BpmnDefinitionInfo>> GetAllProcessDefinitionsAsync()
         {
-            if (taskId == Guid.Empty)
-                throw new ArgumentException("Task ID cannot be empty", nameof(taskId));
-
-            var task = await _taskAccessor.RetrieveTask(taskId).ConfigureAwait(false);
-            if (task == null)
-                throw new KeyNotFoundException($"Task not found for ID: {taskId}");
-
-            var processState = _processAccessor.GetProcessState(task.ProcessId);
-            if (processState == null)
-                throw new KeyNotFoundException($"Process state not found for ID: {task.ProcessId}");
-
-            var executor = _serviceProvider.GetService(typeof(BpmnV2ProcessExecutor)) as BpmnV2ProcessExecutor;
-            if (executor == null)
-                throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
-
-            executor.Initialize(processState);
-
-            if (variables != null)
-                executor.Instance.Variables = variables;
-
-            // await executor.CompleteUserTask(taskId).ConfigureAwait(false);
-             await executor.StartProcessAsync();
-             return executor;
+            return await _definitionManager.GetAllProcessDefinitionsAsync();
         }
-
-        public async Task<BpmnProcessInstance> GetProcessInstanceAsync(Guid instanceId)
+        
+        /// <summary>
+        /// حذف یک تعریف فرآیند
+        /// </summary>
+        public async Task<bool> DeleteProcessDefinitionAsync(string deploymentKey)
         {
-            var processState = _processAccessor.GetProcessState(instanceId);
-            if (processState == null)
-                throw new KeyNotFoundException($"Process instance not found for ID: {instanceId}");
-
-            return processState;
+            return await _definitionManager.DeleteProcessDefinitionAsync(deploymentKey);
         }
-
-        public BpmnV2ProcessExecutor GetExecutorForInstance(BpmnProcessInstance instance)
+        
+        #endregion
+        
+        #region Process Instance Operations
+        
+        /// <summary>
+        /// شروع یک نمونه فرآیند جدید
+        /// </summary>
+        public async Task<BpmnV3ProcessInstance> StartProcessAsync(string deploymentKey, string processId, Dictionary<string, object> variables = null)
         {
+            // دریافت تعریف فرآیند
+            var definition = await _definitionManager.GetProcessDefinitionAsync(deploymentKey);
+            if (definition == null)
+            {
+                throw new ArgumentException($"Process definition with key '{deploymentKey}' not found");
+            }
+
+            // ایجاد نمونه فرآیند
+            var instance = await _processManager.CreateProcessInstanceAsync(
+                deploymentKey, 
+                processId, 
+                definition.DefinitionXml, 
+                variables);
+            
+            // شروع اجرای فرآیند
+            var startedInstance = await _processManager.StartProcessAsync(instance);
+            
+            // برگرداندن نمونه فرآیند
+            return startedInstance;
+        }
+        
+        /// <summary>
+        /// دریافت یک نمونه فرآیند با شناسه
+        /// </summary>
+        public async Task<BpmnV3ProcessInstance> GetProcessInstanceAsync(string instanceId)
+        {
+            return await _processManager.GetProcessInstanceAsync(instanceId);
+        }
+        
+        /// <summary>
+        /// دریافت همه نمونه‌های فرآیندهای در حال اجرا
+        /// </summary>
+        public async Task<IEnumerable<BpmnV3ProcessInstance>> GetAllActiveProcessInstancesAsync()
+        {
+            return await _processManager.GetAllActiveInstancesAsync();
+        }
+        
+        /// <summary>
+        /// دریافت همه نمونه‌های فرآیندهای یک تعریف خاص
+        /// </summary>
+        public async Task<IEnumerable<BpmnV3ProcessInstance>> GetProcessInstancesByDeploymentKeyAsync(string deploymentKey)
+        {
+            return await _processManager.GetInstancesByDeploymentKeyAsync(deploymentKey);
+        }
+        
+        /// <summary>
+        /// خاتمه دادن به یک نمونه فرآیند
+        /// </summary>
+        public async Task<bool> TerminateProcessInstanceAsync(string instanceId)
+        {
+            return await _processManager.TerminateProcessInstanceAsync(instanceId);
+        }
+        
+        /// <summary>
+        /// حذف یک نمونه فرآیند
+        /// </summary>
+        public async Task<bool> DeleteProcessInstanceAsync(string instanceId)
+        {
+            return await _processManager.DeleteProcessInstanceAsync(instanceId);
+        }
+        
+        /// <summary>
+        /// ادامه اجرای یک فرآیند از آخرین وضعیت ذخیره شده
+        /// </summary>
+        public async Task<BpmnV3ProcessInstance> ResumeProcessAsync(string instanceId)
+        {
+            return await _processManager.ResumeProcessAsync(instanceId);
+        }
+        
+        #endregion
+        
+        #region Task Operations
+        
+        /// <summary>
+        /// دریافت وظایف کاربری یک کاربر
+        /// </summary>
+        public async Task<List<BpmnV3UserTaskAssignment>> GetUserTasksAsync(string userId, List<string> userGroups = null)
+        {
+            return await _taskManager.GetAvailableTasksForUserAsync(userId, userGroups);
+        }
+        
+        /// <summary>
+        /// دریافت وظایف کاربری یک فرآیند
+        /// </summary>
+        public async Task<List<BpmnV3UserTaskAssignment>> GetProcessTasksAsync(string instanceId)
+        {
+            return await _taskManager.GetTaskAssignmentsForProcessInstanceAsync(instanceId);
+        }
+        
+        /// <summary>
+        /// تخصیص یک وظیفه به کاربر
+        /// </summary>
+        public async Task<BpmnV3UserTaskAssignment> ClaimTaskAsync(Guid tokenId, string userId)
+        {
+            await _taskManager.ClaimTaskAssignmentAsync(tokenId, userId);
+            return await _taskManager.GetTaskAssignmentAsync(tokenId);
+        }
+        
+        /// <summary>
+        /// تکمیل یک وظیفه کاربری
+        /// </summary>
+        public async Task<BpmnV3ProcessInstance> CompleteTaskAsync(Guid tokenId, string userId, Dictionary<string, object> formData = null)
+        {
+            // تکمیل وظیفه
+            var isCompleted = await _taskManager.CompleteTaskAssignmentAsync(tokenId, userId, formData);
+            
+            if (!isCompleted)
+            {
+                throw new InvalidOperationException($"Failed to complete task with token ID {tokenId}");
+            }
+
+            // دریافت نمونه فرآیند مرتبط با توکن
+            var instance = await _processManager.GetProcessInstanceByTokenAsync(tokenId);
             if (instance == null)
-                throw new ArgumentNullException(nameof(instance));
-
-            var executor = _serviceProvider.GetService(typeof(BpmnV2ProcessExecutor)) as BpmnV2ProcessExecutor;
-            if (executor == null)
-                throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
-
-            executor.Initialize(instance);
-
-            return executor;
+            {
+                throw new InvalidOperationException($"Process instance for token {tokenId} not found");
+            }
+            
+            // با توجه به اینکه وظیفه تکمیل شده، ممکن است فرآیند نیز ادامه یافته باشد
+            // بنابراین پردازنده را دریافت می‌کنیم و فرآیند را ادامه می‌دهیم
+            var executor = await _processManager.GetExecutorForTokenAsync(tokenId);
+            var updatedInstance = await executor.StartProcessAsync();
+            
+            // ذخیره وضعیت به‌روز شده
+            await _processManager.SaveProcessInstanceAsync(updatedInstance);
+            
+            // برگرداندن جزئیات
+            return updatedInstance;
         }
-
-        public async Task<BpmnProcessInstance> ResumeProcessAsync(Guid processId, CancellationToken cancellationToken = default)
-        {
-            if (processId == Guid.Empty)
-                throw new ArgumentException("Process ID cannot be empty", nameof(processId));
-
-            var processState = _processAccessor.GetProcessState(processId);
-            if (processState == null)
-                throw new KeyNotFoundException($"Process state not found for ID: {processId}");
-
-            Console.WriteLine($"Resuming process execution for ID: {processId}");
-
-            var executor = _serviceProvider.GetService(typeof(BpmnV2ProcessExecutor)) as BpmnV2ProcessExecutor;
-            if (executor == null)
-                throw new InvalidOperationException("Failed to resolve BpmnProcessExecutor from service provider.");
-
-            executor.Initialize(processState);
-
-            return await executor.StartProcessAsync(cancellationToken: cancellationToken);
-        }
+        
+        #endregion
     }
-}
+
+    /// <summary>
+    /// جزئیات یک نمونه فرآیند
+    /// </summary>
+ 
+} 

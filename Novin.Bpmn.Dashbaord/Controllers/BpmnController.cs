@@ -1,465 +1,172 @@
-﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Newtonsoft.Json;
-using Novin.Bpmn.Dashbaord.Data;
+using Novin.Bpmn.Contracts;
+using Novin.Bpmn.Core;
 using Novin.Bpmn.Dashbaord.Models;
-using Novin.Bpmn.V3;
+using Novin.Bpmn.Dashbaord.Services;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
 namespace Novin.Bpmn.Dashbaord.Controllers
 {
-    [Authorize]
     public class BpmnController : Controller
     {
-        private readonly IWebHostEnvironment _hostingEnvironment;
-        private readonly BpmnEngine _engine;
-        private readonly ApplicationDbContext _context;
-        private readonly IBpmnV3EngineFactory _v3EngineFactory;
+        private readonly BpmnEngineFactory _engineFactory;
+        private readonly IWebHostEnvironment _environment;
 
-        public BpmnController(
-            IWebHostEnvironment hostingEnvironment, 
-            BpmnEngine engine, 
-            ApplicationDbContext context,
-            IBpmnV3EngineFactory v3EngineFactory)
+        public BpmnController(BpmnEngineFactory engineFactory, IWebHostEnvironment environment)
         {
-            _hostingEnvironment = hostingEnvironment;
-            _engine = engine;
-            _context = context;
-            _v3EngineFactory = v3EngineFactory;
+            _engineFactory = engineFactory;
+            _environment = environment;
         }
 
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
-            var definitions = _context.Definitions.ToList();
-            return View(definitions);
+            var engine = _engineFactory.GetEngine();
+            var processDefinitions = await engine.GetAllProcessDefinitionsAsync();
+            return View(processDefinitions);
         }
 
-        [HttpPost]
-        public IActionResult Upload(IFormFile file)
+        public async Task<IActionResult> Processes(string fileName)
         {
-            if (file != null)
-            {
-                var filePath = Path.Combine(_hostingEnvironment.WebRootPath, "uploads", file.FileName);
-
-                using (var stream = new FileStream(filePath, FileMode.Create))
-                {
-                    file.CopyTo(stream);
-                }
-
-                // Deploy the BPMN definition
-                _engine.DeployProcessDefinition(filePath, file.FileName);
-            }
-
-            return RedirectToAction("Index");
-        }
-
-        public IActionResult Processes(string fileName)
-        {
-            var definition = _context.Processes.Include(x => x.Definition).Where(d => d.Definition.DefinationKey == fileName);
-            if (definition == null)
-            {
-                return NotFound();
-            }
-
-            var viewModel = new ProcessViewModel
+            var engine = _engineFactory.GetEngine();
+            var instances = await engine.GetProcessInstancesByDeploymentKeyAsync(fileName);
+            
+            var model = new ProcessViewModel
             {
                 DefinitionKey = fileName,
-                Processes = definition.ToList()
+                Processes = instances.ToList()
             };
-
-            return View(viewModel);
-        }
-
-        [HttpPost]
-        public IActionResult Delete(string deploymentKey)
-        {
-            var definition = _context.Definitions.FirstOrDefault(x => x.DefinationKey.Equals(deploymentKey));
-            if (definition != null)
-            {
-                _context.Definitions.Remove(definition);
-                _context.SaveChanges();
-            }
-            return RedirectToAction("Index");
-        }
-
-        [HttpPost]
-        public IActionResult DeleteProcess(string processId)
-        {
-            var process = _context.Processes.FirstOrDefault(x => x.Id.Equals(processId));
-            if (process != null)
-            {
-                _context.Processes.Remove(process);
-                _context.SaveChanges();
-            }
-            return RedirectToAction("Processes", new { fileName = process.Definition.DefinationKey });
-        }
-
-        public IActionResult Diagram(string fileName)
-        {
-            var definition = _context.Definitions.First(x => x.DefinationKey.Equals(fileName));
-            return View(definition);
-        }
-
-        [HttpPost]
-        public IActionResult Save([FromBody] SaveDiagramRequest request)
-        {
-            // Update the BPMN definition in the storage
-            var definition = _context.Definitions.First(x => x.DefinationKey.Equals(request.DefinitionKey));
-            definition.Content = request.BpmnXML;
-            _context.Definitions.Update(definition);
-            _context.SaveChanges();
-            return Ok();
+            
+            return View(model);
         }
 
         public async Task<IActionResult> Execute(string fileName)
         {
-            try
-            {
-                // دریافت تعریف فرآیند
-                var definition = _context.Definitions.First(x => x.DefinationKey.Equals(fileName));
-                
-                // ایجاد نمونه از موتور V3
-                var processInstance = new BpmnV3ProcessInstance("process", definition.Content);
-                var processExecutor = new BpmnV3ProcessExecutor(processInstance);
-                
-                // اجرای فرآیند
-                var result = await processExecutor.StartProcessAsync();
-                
-                // ذخیره نتیجه در دیتابیس
-                var process = new Process
-                {
-                    Id = Guid.NewGuid(),
-                    DefinitionId = definition.Id,
-                    Content = JsonConvert.SerializeObject(result),
-                    Definition = definition
-                };
-                
-                _context.Processes.Add(process);
-                _context.SaveChanges();
-                
-                return RedirectToAction("ProcessDetail", new { id = process.Id });
-            }
-            catch (Exception ex)
-            {
-                // مدیریت خطا
-                return View("Error", new ErrorViewModel { RequestId = ex.Message });
-            }
-        }
-
-        public IActionResult ProcessDetail(Guid id)
-        {
-            var process = _context.Processes.Include(x => x.Definition).First(x => x.Id == id);
+            var engine = _engineFactory.GetEngine();
+            var definition = await engine.GetProcessDefinitionAsync(fileName);
             
-            try
+            if (definition == null)
             {
-                // دریافت اطلاعات فرآیند
-                var processContent = process.Content;
-                
-                // تلاش برای تبدیل به نسخه V3
-                var v3Instance = JsonConvert.DeserializeObject<BpmnV3ProcessInstance>(processContent);
-                
-                // Create a process executor to analyze the BPMN elements
-                var executor = new BpmnV3ProcessExecutor(v3Instance);
-                
-                // Extract all executed nodes to identify and categorize events
-                var executedNodes = v3Instance.GetExecutedNodes();
-                var definitionHandler = v3Instance.DefinitionsHandler;
-                
-                // Create lists for storing different event types
-                var startEvents = new List<EventNodeInfo>();
-                var endEvents = new List<EventNodeInfo>();
-                var triggeredEvents = new List<EventNodeInfo>();
-                var boundaryEvents = new List<EventNodeInfo>();
-                
-                // Scan executed nodes to find and categorize events
-                foreach (var node in executedNodes)
-                {
-                    var element = definitionHandler.GetElementById(node.NodeId);
-                    if (element == null) continue;
-                    
-                    // Check element type to categorize events
-                    if (element.GetType().Name.Contains("StartEvent"))
-                    {
-                        startEvents.Add(new EventNodeInfo
-                        {
-                            EventId = node.NodeId,
-                            EventType = "StartEvent",
-                            IsTriggered = true,
-                            TriggerTime = node.LastExecutionTime
-                        });
-                    }
-                    else if (element.GetType().Name.Contains("EndEvent"))
-                    {
-                        endEvents.Add(new EventNodeInfo
-                        {
-                            EventId = node.NodeId,
-                            EventType = "EndEvent",
-                            IsTriggered = true,
-                            TriggerTime = node.LastExecutionTime
-                        });
-                    }
-                    else if (element.GetType().Name.Contains("IntermediateCatchEvent") || 
-                             element.GetType().Name.Contains("IntermediateThrowEvent"))
-                    {
-                        triggeredEvents.Add(new EventNodeInfo
-                        {
-                            EventId = node.NodeId,
-                            EventType = element.GetType().Name,
-                            IsTriggered = true,
-                            TriggerTime = node.LastExecutionTime
-                        });
-                    }
-                    else if (element.GetType().Name.Contains("BoundaryEvent"))
-                    {
-                        // For boundary events, find the element they are attached to
-                        var boundaryEvent = element as Novin.Bpmn.Models.BpmnBoundaryEvent;
-                        var attachedToElementId = boundaryEvent?.attachedToRef?.Name;
-                        
-                        boundaryEvents.Add(new EventNodeInfo
-                        {
-                            EventId = node.NodeId,
-                            EventType = "BoundaryEvent",
-                            IsTriggered = true,
-                            TriggerTime = node.LastExecutionTime,
-                            AttachedToElementId = attachedToElementId
-                        });
-                    }
-                }
-                
-                // ایجاد مدل داده برای نمایش
-                var viewModel = new ProcessDetailViewModel
-                {
-                    Process = process,
-                    ExecutedNodes = executedNodes,
-                    ExecutedFlows = v3Instance.GetExecutedFlows(),
-                    ActiveTokens = v3Instance.Tokens.Where(t => t.Status == TokenStatus.Active).ToList(),
-                    WaitingTokens = v3Instance.Tokens.Where(t => t.Status == TokenStatus.Waiting).ToList(),
-                    CompletedTokens = v3Instance.Tokens.Where(t => t.Status == TokenStatus.Completed).ToList(),
-                    StartEvents = startEvents,
-                    EndEvents = endEvents,
-                    TriggeredEvents = triggeredEvents,
-                    BoundaryEvents = boundaryEvents,
-                    Variables = v3Instance.Variables
-                };
-                
-                return View(viewModel);
+                return NotFound();
             }
-            catch
-            {
-                // اگر تبدیل به نسخه V3 ممکن نبود، از روش قبلی استفاده می‌کنیم
-                var state = JsonConvert.DeserializeObject<BpmnProcessInstance>(process.Content);
-                return View("LegacyProcessDetail", state);
-            }
+            
+            var instance = await engine.StartProcessAsync(definition.DeploymentKey, "process");
+            return RedirectToAction("ProcessDetail", new { id = instance.Id });
         }
         
         [HttpPost]
-        public async Task<IActionResult> CompleteTask(Guid processId, Guid tokenId)
+        public async Task<IActionResult> Upload(IFormFile file, string deploymentKey, string label)
         {
+            if (file == null || file.Length == 0)
+            {
+                ModelState.AddModelError("file", "Please select a file to upload.");
+                return RedirectToAction("Index");
+            }
+
+            if (string.IsNullOrWhiteSpace(deploymentKey))
+            {
+                ModelState.AddModelError("deploymentKey", "Deployment key is required.");
+                return RedirectToAction("Index");
+            }
+
             try
             {
-                // دریافت اطلاعات فرآیند
-                var process = _context.Processes.Include(x => x.Definition).First(x => x.Id == processId);
-                var v3Instance = JsonConvert.DeserializeObject<BpmnV3ProcessInstance>(process.Content);
+                var engine = _engineFactory.GetEngine();
                 
-                // ایجاد اجرا کننده فرآیند
-                var executor = new BpmnV3ProcessExecutor(v3Instance);
+                using (var stream = file.OpenReadStream())
+                {
+                    // Deploy the process using IBpmnEngine
+                    await engine.DeployProcessAsync(deploymentKey, stream, label);
+                }
                 
-                // تکمیل تسک
-                var result = await executor.CompleteUserTaskAsync(tokenId);
-                
-                // به‌روزرسانی اطلاعات فرآیند در دیتابیس
-                process.Content = JsonConvert.SerializeObject(result);
-
-                
-                _context.Processes.Update(process);
-                _context.SaveChanges();
-                
-                return RedirectToAction("ProcessDetail", new { id = processId });
+                TempData["SuccessMessage"] = $"Process definition '{deploymentKey}' deployed successfully.";
             }
             catch (Exception ex)
             {
-                return View("Error", new ErrorViewModel { RequestId = ex.Message });
+                TempData["ErrorMessage"] = $"Error deploying process: {ex.Message}";
             }
+            
+            return RedirectToAction("Index");
+        }
+
+        public async Task<IActionResult> ProcessDetail(string id)
+        {
+            var engine = _engineFactory.GetEngine();
+            var instance = await engine.GetProcessInstanceAsync(id);
+            
+            if (instance == null)
+            {
+                return NotFound();
+            }
+            
+            // Create view model with process details
+            var viewModel = new ProcessDetailViewModel
+            {
+                Process = new Process 
+                { 
+                    Id = Guid.Parse(instance.Id),
+                    Definition = new Definitions 
+                    { 
+                        DefinationKey = instance.DeploymentKey 
+                    }
+                },
+                Status = "Active",
+                StartTime = DateTime.Now,
+                ExecutedNodes = instance.GetExecutedNodes(),
+                ExecutedFlows = instance.GetExecutedFlows(),
+                ActiveTokens = instance.Tokens.Where(t => t.Status == TokenStatus.Active).ToList(),
+                WaitingTokens = instance.Tokens.Where(t => t.Status == TokenStatus.Waiting).ToList(),
+                CompletedTokens = instance.Tokens.Where(t => t.Status == TokenStatus.Completed).ToList(),
+                Variables = new System.Dynamic.ExpandoObject()
+            };
+            
+            // Copy variables to dynamic object if available
+            if (instance.Variables != null)
+            {
+                var dict = viewModel.Variables as IDictionary<string, object>;
+                foreach (var kvp in instance.GetAllVariables())
+                {
+                    dict[kvp.Key] = kvp.Value;
+                }
+            }
+            
+            return View(viewModel);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> DeleteProcess(string processId)
+        {
+            var engine = _engineFactory.GetEngine();
+            var instance = await engine.GetProcessInstanceAsync(processId);
+            
+            if (instance == null)
+            {
+                return NotFound();
+            }
+            
+            await engine.DeleteProcessInstanceAsync(processId);
+            return RedirectToAction("Processes", new { fileName = instance.DeploymentKey });
         }
         
-        [HttpGet]
-        public IActionResult ProcessDiagram(Guid id)
+        [HttpPost]
+        public async Task<IActionResult> DeleteDefinition(string deploymentKey)
         {
-            var process = _context.Processes.Include(x => x.Definition).First(x => x.Id == id);
+            var engine = _engineFactory.GetEngine();
+            var result = await engine.DeleteProcessDefinitionAsync(deploymentKey);
             
-            try
+            if (result)
             {
-                // دریافت اطلاعات فرآیند
-                var v3Instance = JsonConvert.DeserializeObject<BpmnV3ProcessInstance>(process.Content);
-                
-                // ایجاد مدل داده برای نمایش دیاگرام
-                var viewModel = new ProcessDiagramViewModel
-                {
-                    Process = process,
-                    BpmnXml = process.Definition.Content,
-                    ExecutionMap = new BpmnV3ProcessExecutor(v3Instance).GetExecutionMap(false)
-                };
-                
-                return View(viewModel);
+                TempData["SuccessMessage"] = $"Process definition '{deploymentKey}' deleted successfully.";
             }
-            catch
+            else
             {
-                // اگر تبدیل به نسخه V3 ممکن نبود، از روش قبلی استفاده می‌کنیم
-                var state = JsonConvert.DeserializeObject<BpmnProcessInstance>(process.Content);
-                
-                var viewModel = new LegacyProcessDiagramViewModel
-                {
-                    Process = process,
-                    BpmnXml = process.Definition.Content,
-                    ExecutedPaths = state.GetExecutedPathsWithFlows()
-                };
-                
-                return View("LegacyProcessDiagram", viewModel);
+                TempData["ErrorMessage"] = $"Failed to delete process definition '{deploymentKey}'.";
             }
-        }
-
-        [HttpGet]
-        [Route("api/bpmn/execution-map/{id}")]
-        public IActionResult GetExecutionMap(Guid id, bool includeVirtual = true)
-        {
-            try
-            {
-                var process = _context.Processes.FirstOrDefault(x => x.Id == id);
-                if (process == null)
-                {
-                    return NotFound();
-                }
-                
-                var v3Instance = JsonConvert.DeserializeObject<BpmnV3ProcessInstance>(process.Content);
-                var executor = new BpmnV3ProcessExecutor(v3Instance);
-                
-                // دریافت نقشه اجرا با پارامتر مناسب
-                var executionMap = executor.GetExecutionMap(includeVirtual);
-                
-                // Add events to the execution map
-                var definitionHandler = v3Instance.DefinitionsHandler;
-                var executedNodes = v3Instance.GetExecutedNodes();
-                
-                // Create event lists
-                var startEvents = new List<EventNodeInfo>();
-                var endEvents = new List<EventNodeInfo>();
-                var triggeredEvents = new List<EventNodeInfo>();
-                var boundaryEvents = new List<EventNodeInfo>();
-                
-                // Categorize events
-                foreach (var node in executedNodes)
-                {
-                    var element = definitionHandler.GetElementById(node.NodeId);
-                    if (element == null) continue;
-                    
-                    if (element.GetType().Name.Contains("StartEvent"))
-                    {
-                        startEvents.Add(new EventNodeInfo
-                        {
-                            EventId = node.NodeId,
-                            EventType = "StartEvent",
-                            IsTriggered = true,
-                            TriggerTime = node.LastExecutionTime
-                        });
-                    }
-                    else if (element.GetType().Name.Contains("EndEvent"))
-                    {
-                        endEvents.Add(new EventNodeInfo
-                        {
-                            EventId = node.NodeId,
-                            EventType = "EndEvent",
-                            IsTriggered = true,
-                            TriggerTime = node.LastExecutionTime
-                        });
-                    }
-                    else if (element.GetType().Name.Contains("IntermediateCatchEvent") || 
-                             element.GetType().Name.Contains("IntermediateThrowEvent"))
-                    {
-                        triggeredEvents.Add(new EventNodeInfo
-                        {
-                            EventId = node.NodeId,
-                            EventType = element.GetType().Name,
-                            IsTriggered = true,
-                            TriggerTime = node.LastExecutionTime
-                        });
-                    }
-                    else if (element.GetType().Name.Contains("BoundaryEvent"))
-                    {
-                        var boundaryEvent = element as Novin.Bpmn.Models.BpmnBoundaryEvent;
-                        var attachedToElementId = boundaryEvent?.attachedToRef?.Name;
-                        
-                        boundaryEvents.Add(new EventNodeInfo
-                        {
-                            EventId = node.NodeId,
-                            EventType = "BoundaryEvent",
-                            IsTriggered = true,
-                            TriggerTime = node.LastExecutionTime,
-                            AttachedToElementId = attachedToElementId
-                        });
-                    }
-                }
-                
-                // Add event information to the execution map
-                var result = new
-                {
-                    executionMap.Nodes,
-                    executionMap.Flows,
-                    executionMap.ActiveTokens,
-                    executionMap.WaitingTokens,
-                    executionMap.CompletedTokens,
-                    executionMap.ExpiredTokens,
-                    executionMap.PendingTokens,
-                    StartEvents = startEvents,
-                    EndEvents = endEvents,
-                    TriggeredEvents = triggeredEvents,
-                    BoundaryEvents = boundaryEvents
-                };
-                
-                return Json(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            
+            return RedirectToAction("Index");
         }
     }
-
-    public class SaveDiagramRequest
-    {
-        public string DefinitionKey { get; set; }
-        public string BpmnXML { get; set; }
-    }
-
-    public class ProcessViewModel
-    {
-        public string DefinitionKey { get; set; }
-        public List<Process> Processes { get; set; }
-    }
-    
-    public class ProcessDiagramViewModel
-    {
-        public Process Process { get; set; }
-        public string BpmnXml { get; set; }
-        public ProcessExecutionMap ExecutionMap { get; set; }
-    }
-    
-    public class LegacyProcessDiagramViewModel
-    {
-        public Process Process { get; set; }
-        public string BpmnXml { get; set; }
-        public List<BpmnNodeState> ExecutedPaths { get; set; }
-    }
-    
-
-    
-    // این اینترفیس باید در پروژه اصلی تعریف شود
-    public interface IBpmnV3EngineFactory
-    {
-        BpmnV3ProcessExecutor CreateExecutor(string deploymentKey);
-        BpmnV3ProcessExecutor CreateExecutorFromInstance(BpmnV3ProcessInstance instance);
-    }
-}
+} 

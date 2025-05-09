@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_Registration" targetNamespace="http://example.com/cedo/registration" exporter="Camunda Modeler" exporterVersion="5.30.0">
+  <bpmn:process id="registration_process" name="Registration Process" isExecutable="true">
+    <bpmn:laneSet id="laneSet_1">
+      <bpmn:lane id="lane_admin" name="Admin">
+        <bpmn:flowNodeRef>review_task</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>end_approved</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="lane_applicant" name="Applicant">
+        <bpmn:flowNodeRef>fill_form_task</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start_evt" name="Start Registration">
+      <bpmn:outgoing>flow_start_to_fill</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="fill_form_task" name="Fill Registration Form">
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formKey="app:/Registration/Edit" />
+        <zeebe:assignmentDefinition assignee="=applicantId" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_start_to_fill</bpmn:incoming>
+      <bpmn:outgoing>flow_fill_to_review</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="review_task" name="Review Submission">
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formKey="app:/Registration/Review" />
+        <zeebe:assignmentDefinition candidateGroups="admins" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_fill_to_review</bpmn:incoming>
+      <bpmn:outgoing>flow_review_to_end</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="end_approved" name="Done">
+      <bpmn:incoming>flow_review_to_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="flow_start_to_fill" sourceRef="start_evt" targetRef="fill_form_task" />
+    <bpmn:sequenceFlow id="flow_fill_to_review" sourceRef="fill_form_task" targetRef="review_task" />
+    <bpmn:sequenceFlow id="flow_review_to_end" sourceRef="review_task" targetRef="end_approved" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_registration">
+    <bpmndi:BPMNPlane id="BPMNPlane_registration" bpmnElement="registration_process">
+      <bpmndi:BPMNShape id="Lane_Admin_di" bpmnElement="lane_admin" isHorizontal="true">
+        <dc:Bounds x="250" y="200" width="600" height="120" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Applicant_di" bpmnElement="lane_applicant" isHorizontal="true">
+        <dc:Bounds x="250" y="80" width="600" height="120" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="FillFormTask_di" bpmnElement="fill_form_task">
+        <dc:Bounds x="390" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ReviewTask_di" bpmnElement="review_task">
+        <dc:Bounds x="590" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="StartEvent_di" bpmnElement="start_evt">
+        <dc:Bounds x="292" y="114" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="157" y="273" width="85" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_di" bpmnElement="end_approved">
+        <dc:Bounds x="770" y="243" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="775" y="279" width="27" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_start_to_fill_di" bpmnElement="flow_start_to_fill">
+        <di:waypoint x="328" y="134" />
+        <di:waypoint x="390" y="134" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_fill_to_review_di" bpmnElement="flow_fill_to_review">
+        <di:waypoint x="490" y="140" />
+        <di:waypoint x="590" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_review_to_end_di" bpmnElement="flow_review_to_end">
+        <di:waypoint x="690" y="261" />
+        <di:waypoint x="770" y="261" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

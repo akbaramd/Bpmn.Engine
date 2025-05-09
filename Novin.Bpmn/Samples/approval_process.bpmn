@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="approval_process" name="فرآیند تایید درخواست" isExecutable="true">
+    <bpmn:startEvent id="start_event" name="شروع">
+      <bpmn:outgoing>flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="flow_1" sourceRef="start_event" targetRef="submit_request" />
+    <bpmn:userTask id="submit_request" name="ثبت درخواست">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="requestTitle" label="عنوان درخواست" type="string" />
+          <camunda:formField id="requestDescription" label="شرح درخواست" type="string" />
+          <camunda:formField id="requestAmount" label="مبلغ درخواست" type="long" />
+        </camunda:formData>
+        <!-- همه کاربران می‌توانند درخواست ثبت کنند -->
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_1</bpmn:incoming>
+      <bpmn:outgoing>flow_2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="flow_2" sourceRef="submit_request" targetRef="manager_approval" />
+    <bpmn:userTask id="manager_approval" name="تایید مدیر">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="approved" label="تایید شده؟" type="boolean" />
+          <camunda:formField id="managerComment" label="توضیحات مدیر" type="string" />
+        </camunda:formData>
+        <!-- این وظیفه فقط برای کاربرانی که در گروه مدیران هستند قابل انجام است -->
+        <camunda:candidateGroups>managers</camunda:candidateGroups>
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_2</bpmn:incoming>
+      <bpmn:outgoing>flow_3</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="flow_3" sourceRef="manager_approval" targetRef="approval_gateway" />
+    <bpmn:exclusiveGateway id="approval_gateway" name="بررسی تایید">
+      <bpmn:incoming>flow_3</bpmn:incoming>
+      <bpmn:outgoing>flow_approved</bpmn:outgoing>
+      <bpmn:outgoing>flow_rejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="flow_approved" name="تایید شده" sourceRef="approval_gateway" targetRef="finance_approval">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${approved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_rejected" name="رد شده" sourceRef="approval_gateway" targetRef="notify_rejection">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${approved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:userTask id="finance_approval" name="تایید مالی">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="financeApproved" label="تایید شده؟" type="boolean" />
+          <camunda:formField id="financeComment" label="توضیحات مالی" type="string" />
+        </camunda:formData>
+        <!-- این وظیفه برای کاربر خاصی تعریف شده است -->
+        <camunda:assignee>finance_manager</camunda:assignee>
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_approved</bpmn:incoming>
+      <bpmn:outgoing>flow_4</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="notify_rejection" name="اطلاع‌رسانی رد درخواست">
+      <bpmn:incoming>flow_rejected</bpmn:incoming>
+      <bpmn:outgoing>flow_5</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="flow_4" sourceRef="finance_approval" targetRef="finance_gateway" />
+    <bpmn:sequenceFlow id="flow_5" sourceRef="notify_rejection" targetRef="rejection_end" />
+    <bpmn:exclusiveGateway id="finance_gateway" name="بررسی تایید مالی">
+      <bpmn:incoming>flow_4</bpmn:incoming>
+      <bpmn:outgoing>flow_finance_approved</bpmn:outgoing>
+      <bpmn:outgoing>flow_finance_rejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="flow_finance_approved" name="تایید شده" sourceRef="finance_gateway" targetRef="payment_task">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${financeApproved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_finance_rejected" name="رد شده" sourceRef="finance_gateway" targetRef="notify_rejection">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${financeApproved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:userTask id="payment_task" name="پرداخت">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="paymentDate" label="تاریخ پرداخت" type="date" />
+          <camunda:formField id="paymentReference" label="شماره مرجع پرداخت" type="string" />
+        </camunda:formData>
+        <!-- این وظیفه برای چند کاربر خاص تعریف شده است -->
+        <camunda:candidateUsers>accountant1,accountant2,treasurer</camunda:candidateUsers>
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_finance_approved</bpmn:incoming>
+      <bpmn:outgoing>flow_6</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="flow_6" sourceRef="payment_task" targetRef="approve_end" />
+    <bpmn:endEvent id="approve_end" name="پایان تایید">
+      <bpmn:incoming>flow_6</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="rejection_end" name="پایان رد">
+      <bpmn:incoming>flow_5</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions> 

@@ -1,48 +1,86 @@
 ﻿@using Microsoft.AspNetCore.Mvc.TagHelpers
-@model List<Novin.Bpmn.Dashbaord.Models.Definitions>
+@model IEnumerable<Novin.Bpmn.Core.BpmnDefinitionInfo>
 
-<div class="card card-body mb-3">
-    <form method="post" enctype="multipart/form-data" asp-action="Upload">
-        <div class="form-group">
-            <label for="file">Choose file to upload</label>
-            <input type="file" name="file" class="form-control-file" id="file" />
+<div class="row mb-4">
+    <div class="col-md-7">
+        <div class="card card-body">
+            <h1 class="mb-3">BPMN Process Definitions</h1>
+            <p>Available process definitions in the system.</p>
         </div>
-        <button type="submit" class="btn btn-primary">Upload</button>
-    </form>
+    </div>
+
+    <div class="col-md-5">
+        <div class="card card-body">
+            <h3 class="mb-3">Deploy New Process</h3>
+            <form method="post" enctype="multipart/form-data" asp-action="Upload">
+                <div class="mb-3">
+                    <label for="deploymentKey" class="form-label">Deployment Key</label>
+                    <input type="text" class="form-control" id="deploymentKey" name="deploymentKey" required>
+                    <div class="form-text">A unique identifier for this process definition.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="label" class="form-label">Label (Optional)</label>
+                    <input type="text" class="form-control" id="label" name="label">
+                    <div class="form-text">A friendly name or description for this process.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="file" class="form-label">BPMN File</label>
+                    <input type="file" class="form-control" id="file" name="file" required accept=".bpmn,.xml">
+                    <div class="form-text">Upload a BPMN 2.0 compliant XML file.</div>
+                </div>
+                <button type="submit" class="btn btn-primary">Upload & Deploy</button>
+            </form>
+        </div>
+    </div>
 </div>
 
-<div class="card card-body">
-    @if (Model.Any())
-    {
-        <table class="table table-bordered">
-            <thead>
-                <tr>
-                    <th>Deployment Key</th>
-                    <th>Version</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var definition in Model)
-                {
-                    <tr>
-                        <td>@definition.DefinationKey</td>
-                        <td>@definition.version</td>
-                        <td>
-                            <form method="post" asp-action="Delete" asp-controller="Bpmn" style="display:inline;">
-                                <input type="hidden" name="deploymentKey" value="@definition.DefinationKey" />
-                                <button type="submit" class="btn btn-danger">Delete</button>
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (Model.Any())
+{
+    <div class="row">
+        @foreach (var definition in Model)
+        {
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">@definition.DeploymentKey</h5>
+                        <p class="card-text">@(string.IsNullOrEmpty(definition.Label) ? "No description" : definition.Label)</p>
+                        <p class="card-text">
+                            <small class="text-muted">Deployed: @definition.DeployedAt</small>
+                        </p>
+                        <div class="d-flex gap-2">
+                            <a asp-action="Processes" asp-route-fileName="@definition.DeploymentKey" class="btn btn-primary">View Processes</a>
+                            <a asp-action="Execute" asp-route-fileName="@definition.DeploymentKey" class="btn btn-success">Start New</a>
+                            <form asp-action="DeleteDefinition" method="post" class="d-inline">
+                                <input type="hidden" name="deploymentKey" value="@definition.DeploymentKey" />
+                                <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete this definition? This will delete all associated processes.');">Delete</button>
                             </form>
-                            <a asp-action="Diagram" asp-controller="Bpmn" asp-route-fileName="@definition.DefinationKey" class="btn btn-secondary">Diagram</a>
-                            <a asp-action="Processes" asp-controller="Bpmn" asp-route-fileName="@definition.DefinationKey" class="btn btn-secondary">Processes</a>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    }
-    else
-    {
-        <p>No files uploaded yet.</p>
-    }
-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="alert alert-info">
+        <h4>No process definitions found</h4>
+        <p>Upload a BPMN file to get started.</p>
+    </div>
+}

@@ -33,7 +33,7 @@ namespace Novin.Bpmn.Test
             var processInstance = new BpmnV3ProcessInstance("process", bpmnXml);
             
             // Create an executor
-            var executor = new BpmnV3ProcessExecutor(processInstance);
+            var executor = new BpmnProcessManager(processInstance);
             
             // Execute the process
             _output.WriteLine("Starting process with timer events in parallel gateway scenario...");
@@ -101,7 +101,7 @@ namespace Novin.Bpmn.Test
             var processInstance = new BpmnV3ProcessInstance("process_multi_timer", bpmnXml);
             
             // Create an executor
-            var executor = new BpmnV3ProcessExecutor(processInstance);
+            var executor = new BpmnProcessManager(processInstance);
             
             // Execute the process
             _output.WriteLine("Starting process with multiple timer events...");

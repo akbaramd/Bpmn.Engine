@@ -4,12 +4,9 @@ using Novin.Bpmn;
 using Novin.Bpmn.Abstractions;
 using Novin.Bpmn.Core;
 using Novin.Bpmn.Dashbaord;
-using Novin.Bpmn.Dashbaord.Accessors;
 using Novin.Bpmn.Dashbaord.Controllers;
 using Novin.Bpmn.Dashbaord.Data;
 using Novin.Bpmn.Dashbaord.Services;
-using Novin.Bpmn.Executors;
-using Novin.Bpmn.Handlers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,16 +23,9 @@ builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.Requ
 builder.Services.AddControllersWithViews();
 
 builder.Services.AddBpmnEngine();
-builder.Services.AddTransient<IBpmnTaskAccessor, EfBpmnTasksAccessor>();
-builder.Services.AddTransient<IBpmnDefinitionAccessor, EfBpmnDefinitionsAccessor>();
-builder.Services.AddTransient<IBpmnProcessAccessor, EfBpmnProcessAccessor>();
-
-// ثبت سرویس BpmnV3EngineFactory
-builder.Services.AddScoped<IBpmnV3EngineFactory, BpmnV3EngineFactory>();
+builder.Services.AddScoped<BpmnEngineFactory>();
 
 var app = builder.Build();
-
-
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -66,8 +56,6 @@ app.MapControllerRoute(
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
-
-
 
 app.MapRazorPages();
 

@@ -19,6 +19,11 @@ namespace Novin.Bpmn.Dashbaord.Models
         public List<EventNodeInfo> StartEvents { get; set; } = new List<EventNodeInfo>();
         public List<EventNodeInfo> EndEvents { get; set; } = new List<EventNodeInfo>();
         public dynamic Variables { get; set; } = new ExpandoObject();
+        
+        // Properties needed for ProcessDetail.cshtml view
+        public string Status { get; set; }
+        public DateTime StartTime { get; set; }
+        public DateTime? EndTime { get; set; }
     }
 
     public class EventNodeInfo

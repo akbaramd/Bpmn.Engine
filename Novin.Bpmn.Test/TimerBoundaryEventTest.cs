@@ -24,7 +24,7 @@ namespace Novin.Bpmn.Test
             
             // 1. Create a process instance
             var processInstance = new BpmnV3ProcessInstance("process", bpmnXml);
-            var executor = new BpmnV3ProcessExecutor(processInstance);
+            var executor = new BpmnProcessManager(processInstance);
             
             // Act
             await executor.StartProcessAsync();

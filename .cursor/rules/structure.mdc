@@ -1,0 +1,12 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- [IBpmnEngine.cs](mdc:Novin.Bpmn/Contracts/IBpmnEngine.cs) this is main entryp oint of my projects . user can be manage all operation with this . 
+
+- [IBpmnEngine.cs](mdc:Novin.Bpmn/Contracts/IBpmnEngine.cs) have [IBpmnTaskManager.cs](mdc:Novin.Bpmn/Contracts/IBpmnTaskManager.cs) and [IBpmnProcessInstanceAccessor.cs](mdc:Novin.Bpmn/Core/IBpmnProcessInstanceAccessor.cs) for amange taska nd porcess 
+- [IBpmnProcessInstanceAccessor.cs](mdc:Novin.Bpmn/Core/IBpmnProcessInstanceAccessor.cs) work with accoosrs and [BpmnV3ProcessExecutor.cs](mdc:Novin.Bpmn/V3/BpmnV3ProcessExecutor.cs) to excute and save state of isntancs if need can be use accors inside the excuters
+
+
+- engine fully have good developer api tod eveloper can be use 

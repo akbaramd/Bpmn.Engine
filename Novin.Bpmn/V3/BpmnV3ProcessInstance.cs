@@ -16,6 +16,9 @@ public class BpmnV3ProcessInstance
     public string ProcessElementId { get; private set; }
     public string DefinitionXml { get; private set; }
 
+    // کلید استقرار فرآیند که این نمونه از آن ایجاد شده است
+    public string DeploymentKey { get; set; }
+
     // توکن‌ها و رویدادها
     public ConcurrentDictionary<Guid, List<BaseEvent>> TokenEvents { get; private set; } = new();
     public ConcurrentBag<BpmnV3Token> Tokens { get; private set; } = new();
@@ -31,16 +34,26 @@ public class BpmnV3ProcessInstance
     public BpmnDefinitions Definition => BpmnDefinitionSerializer.Deserialize(DefinitionXml);
 
     [JsonIgnore]
-    public BpmnDefinitionsHandler DefinitionsHandler => new(Definition);
+    public BpmnDefinitionsHandler DefinitionsHandler { get; private set; }
 
     // افزودن قفل‌های مورد نیاز برای مدیریت همزمانی
     private readonly object _gatewayLockObj = new object();
     private readonly ConcurrentDictionary<string, object> _gatewayLocks = new ConcurrentDictionary<string, object>();
 
+    // فیلد جدید برای ذخیره متغیرهای فرآیند
+    private readonly Dictionary<string, object> _variables = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+    
+    // شناسه فرآیند
+    public string Id { get; }
+
     public BpmnV3ProcessInstance(string processElementId, string definitionXml)
     {
         ProcessElementId = processElementId;
         DefinitionXml = definitionXml;
+        DefinitionsHandler = new BpmnDefinitionsHandler(definitionXml);
+        ExecutedNodes = new ConcurrentDictionary<string, NodeExecutionInfo>();
+        ExecutedFlows = new ConcurrentDictionary<string, FlowExecutionInfo>();
+        Id = Guid.NewGuid().ToString();
     }
 
     public BpmnV3Token CreateUnExecutableToken(string startElementId, string? flowElementId = null)
@@ -114,7 +127,7 @@ public class BpmnV3ProcessInstance
         
         // جدید: ثبت تغییر در وضعیت توکن
         bool isExecutableValue = isExecutable ?? token.IsExecutable;
-        
+
         // بررسی Boundary Event‌های متصل به نود
         // ادامه مدیریت توکن
         if (currentElement is BpmnGateway gateway)
@@ -466,8 +479,8 @@ public class BpmnV3ProcessInstance
                     
                     shouldContinue = true;
                 }
-            }
-            else
+        }
+        else
             {
                 // هنوز به تعداد کافی توکن دریافت نشده است
                 Console.WriteLine($"Waiting for more tokens at inclusive gateway {gateway.id}. Received {tokensAtGateway.Count}/{incomingFlows.Count}");
@@ -708,7 +721,7 @@ public class BpmnV3ProcessInstance
                 return true;
             }
         }
-        
+
         return false;
     }
 
@@ -829,7 +842,7 @@ public class BpmnV3ProcessInstance
     private async Task HandleComplexGateway(BpmnV3Token token, BpmnComplexGateway gateway, bool? isExecutable)
     {
         token.SetPendingToMerge();
-        
+
         var incomingFlows = DefinitionsHandler.GetIncomingSequenceFlows(gateway);
         
         // If there's only one incoming flow, we don't need to wait for merge
@@ -843,7 +856,7 @@ public class BpmnV3ProcessInstance
         // توکن‌های رسیده به گیت‌وی را جمع‌آوری می‌کنیم
         var tokensAtGateway = Tokens
             .Where(t => t.CurrentElementId == gateway.id && t.Status == TokenStatus.PendingToMerge).ToList();
-        
+
         // شرط ادغام را ارزیابی می‌کنیم - ابتدا بررسی می‌کنیم آیا شرط ادغام وجود دارد
         bool canActivate = false;
         if (gateway.activationCondition != null)
@@ -880,12 +893,12 @@ public class BpmnV3ProcessInstance
             {
                 t.Complete();
             }
-            
+
             // پیدا کردن توکن والد
             var parentToken = token.ParentTokenId != null
                 ? Tokens.FirstOrDefault(t => t.Id == token.ParentTokenId)
                 : token;
-                
+
             if (parentToken != null)
             {
                 // اطمینان از فعال بودن توکن والد اگر حداقل یک توکن ورودی فعال باشد
@@ -911,8 +924,8 @@ public class BpmnV3ProcessInstance
         bool tokenIsExecutable = isExecutable ?? token.IsExecutable;
         
         // مسیرهای خروجی را بررسی می‌کنیم
-        var outgoingFlows = DefinitionsHandler.GetOutgoingSequenceFlows(gateway);
-        
+                var outgoingFlows = DefinitionsHandler.GetOutgoingSequenceFlows(gateway);
+
         // یافتن مسیر پیش‌فرض (در صورت وجود)
         BpmnSequenceFlow defaultFlow = null;
         if (!string.IsNullOrEmpty(gateway.@default))
@@ -937,13 +950,13 @@ public class BpmnV3ProcessInstance
                 TrackFlowExecution(flow.id, token.Id, Guid.Empty, flowExecutable);
                 
                 if (flowExecutable)
-                {
-                    var newToken = CreateToken(flow.targetRef, flow.id);
+                    {
+                        var newToken = CreateToken(flow.targetRef, flow.id);
                     newToken.ParentTokenId = token.Id;
-                }
-                else
-                {
-                    var inactiveToken = CreateUnExecutableToken(flow.targetRef, flow.id);
+                    }
+                    else
+                    {
+                        var inactiveToken = CreateUnExecutableToken(flow.targetRef, flow.id);
                     inactiveToken.ParentTokenId = token.Id;
                 }
             }
@@ -1222,6 +1235,49 @@ public class BpmnV3ProcessInstance
         if (lastHistory != null && !string.IsNullOrEmpty(lastHistory.FlowId))
         {
             TrackFlowExecution(lastHistory.FlowId, token.ParentTokenId ?? Guid.Empty, token.Id, token.IsExecutable);
+        }
+    }
+
+    /// <summary>
+    /// تنظیم یک متغیر فرآیند
+    /// </summary>
+    public void SetVariable(string name, object value)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            throw new ArgumentException("Name cannot be null or empty.", nameof(name));
+        }
+        
+        lock (_variables)
+        {
+            _variables[name] = value;
+        }
+    }
+    
+    /// <summary>
+    /// دریافت مقدار یک متغیر فرآیند
+    /// </summary>
+    public object GetVariable(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            throw new ArgumentException("Name cannot be null or empty.", nameof(name));
+        }
+        
+        lock (_variables)
+        {
+            return _variables.TryGetValue(name, out var value) ? value : null;
+        }
+    }
+    
+    /// <summary>
+    /// دریافت تمام متغیرهای فرآیند
+    /// </summary>
+    public Dictionary<string, object> GetAllVariables()
+    {
+        lock (_variables)
+        {
+            return new Dictionary<string, object>(_variables);
         }
     }
 }

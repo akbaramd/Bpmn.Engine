@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bpsim="http://www.bpsim.org/schemas/1.0" xmlns:drools="http://www.jboss.org/drools" xmlns:xsi="xsi" id="_t13cgQ7XED6RwoXhtTwbAA" targetNamespace="http://www.omg.org/bpmn20" exporter="Camunda Modeler" exporterVersion="5.30.0">
-  <bpmn2:process id="test_inclusive_gateway" name="test_inclusive_gateway" processType="Public" isExecutable="true" drools:packageName="com.example" drools:version="1.0" drools:adHoc="false">
+  <bpmn2:process id="process" name="process" processType="Public" isExecutable="true" drools:packageName="com.example" drools:version="1.0" drools:adHoc="false">
     <bpmn2:startEvent id="StartEvent" name="StartEvent">
       <bpmn2:outgoing>Flow_08ng2px</bpmn2:outgoing>
     </bpmn2:startEvent>
@@ -11,18 +11,10 @@
       <bpmn2:script>Instance.Variables.Index = 1;</bpmn2:script>
     </bpmn2:scriptTask>
     <bpmn2:sequenceFlow id="Flow_1ifmrp3" sourceRef="StartTask" targetRef="ForkParallel" />
-    <bpmn2:task id="Activity1" name="Activity1">
-      <bpmn2:incoming>Flow_0mgxwvp</bpmn2:incoming>
-      <bpmn2:outgoing>Flow_1mdk4m7</bpmn2:outgoing>
-    </bpmn2:task>
     <bpmn2:sequenceFlow id="Flow_0mgxwvp" sourceRef="ForkParallel" targetRef="Activity1" />
-    <bpmn2:task id="Activity_1wa74h6" name="Activity1">
-      <bpmn2:incoming>Flow_0q3wwv1</bpmn2:incoming>
-      <bpmn2:outgoing>Flow_02uuvjj</bpmn2:outgoing>
-    </bpmn2:task>
-    <bpmn2:sequenceFlow id="Flow_0q3wwv1" sourceRef="ForkParallel" targetRef="Activity_1wa74h6" />
+    <bpmn2:sequenceFlow id="Flow_0q3wwv1" sourceRef="ForkParallel" targetRef="Activity2" />
     <bpmn2:sequenceFlow id="Flow_1mdk4m7" sourceRef="Activity1" targetRef="MergeParallel" />
-    <bpmn2:sequenceFlow id="Flow_02uuvjj" sourceRef="Activity_1wa74h6" targetRef="MergeParallel" />
+    <bpmn2:sequenceFlow id="Flow_02uuvjj" sourceRef="Activity2" targetRef="MergeParallel" />
     <bpmn2:endEvent id="EndEvent" name="EndEvent">
       <bpmn2:incoming>Flow_1fhrfxf</bpmn2:incoming>
     </bpmn2:endEvent>
@@ -37,9 +29,19 @@
       <bpmn2:outgoing>Flow_0mgxwvp</bpmn2:outgoing>
       <bpmn2:outgoing>Flow_0q3wwv1</bpmn2:outgoing>
     </bpmn2:parallelGateway>
+    <bpmn2:scriptTask id="Activity1" name="Activity1">
+      <bpmn2:incoming>Flow_0mgxwvp</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_1mdk4m7</bpmn2:outgoing>
+      <bpmn2:script>await Task.Delay(5000);</bpmn2:script>
+    </bpmn2:scriptTask>
+    <bpmn2:scriptTask id="Activity2" name="Activity2">
+      <bpmn2:incoming>Flow_0q3wwv1</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_02uuvjj</bpmn2:outgoing>
+      <bpmn2:script>await Task.Delay(3000);</bpmn2:script>
+    </bpmn2:scriptTask>
   </bpmn2:process>
   <bpmndi:BPMNDiagram>
-    <bpmndi:BPMNPlane bpmnElement="test_inclusive_gateway">
+    <bpmndi:BPMNPlane bpmnElement="process">
       <bpmndi:BPMNShape id="Event_065ao3n_di" bpmnElement="StartEvent">
         <dc:Bounds x="152" y="232" width="36" height="36" />
         <bpmndi:BPMNLabel>
@@ -48,14 +50,6 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_0p57n8t_di" bpmnElement="StartTask">
         <dc:Bounds x="270" y="210" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0l4g79t_di" bpmnElement="Activity1">
-        <dc:Bounds x="570" y="80" width="100" height="80" />
-        <bpmndi:BPMNLabel />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1wa74h6_di" bpmnElement="Activity_1wa74h6">
-        <dc:Bounds x="570" y="290" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_1p9j39t_di" bpmnElement="EndEvent">
@@ -75,6 +69,13 @@
         <bpmndi:BPMNLabel>
           <dc:Bounds x="532" y="240" width="60" height="14" />
         </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0dsj5ap_di" bpmnElement="Activity1">
+        <dc:Bounds x="570" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0pilgf9_di" bpmnElement="Activity2">
+        <dc:Bounds x="570" y="290" width="100" height="80" />
+        <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_08ng2px_di" bpmnElement="Flow_08ng2px">
         <di:waypoint x="188" y="250" />

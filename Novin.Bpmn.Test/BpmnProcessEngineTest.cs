@@ -22,7 +22,7 @@ namespace Novin.Bpmn.Test
 
             // Initialize the process instance
             var processInstance = new BpmnV3ProcessInstance(processElementId, definitionXml);
-            var executor = new BpmnV3ProcessExecutor(processInstance);
+            var executor = new BpmnProcessManager(processInstance);
             await executor.StartProcessAsync();
             
             // Simulate user task completion
@@ -30,7 +30,7 @@ namespace Novin.Bpmn.Test
             foreach (var token in waitingTokens)
             {
                 Console.WriteLine($"Completing user task for token {token.Id} at {token.CurrentElementId}");
-                await executor.CompleteUserTaskAsync(token.Id);
+                await executor.CompleteUserTaskAsync(token.Id, token.CurrentElementId);
             }
             // Ensure the file exists
             Assert.True(File.Exists(_bpmnFilePath));

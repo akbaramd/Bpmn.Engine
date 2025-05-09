@@ -33,5 +33,8 @@
     <ItemGroup>
       <ProjectReference Include="..\Novin.Bpmn\Novin.Bpmn.csproj" />
     </ItemGroup>
+    <ItemGroup>
+      <_ContentIncludedByDefault Remove="Views\AddNumberToVariables\ShowForm.cshtml" />
+    </ItemGroup>
 
 </Project>
