@@ -38,6 +38,9 @@ public class UserTaskService : IUserTaskService
     /// <inheritdoc />
     public async Task<UserTaskInfo?> GetTaskByIdAsync(string taskId, CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrEmpty(taskId))
+            throw new ArgumentException("Task ID cannot be null or empty", nameof(taskId));
+            
         _logger.LogDebug("Getting task by ID {TaskId}", taskId);
         return await _taskStore.GetTaskByIdAsync(taskId, cancellationToken);
     }
@@ -48,6 +51,9 @@ public class UserTaskService : IUserTaskService
         bool includeCompleted = false, 
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrEmpty(processInstanceId))
+            throw new ArgumentException("Process instance ID cannot be null or empty", nameof(processInstanceId));
+            
         _logger.LogDebug("Getting tasks for process instance {ProcessInstanceId}, includeCompleted: {IncludeCompleted}", 
             processInstanceId, includeCompleted);
             
@@ -59,6 +65,9 @@ public class UserTaskService : IUserTaskService
         string userId, 
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrEmpty(userId))
+            throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            
         _logger.LogDebug("Getting tasks assigned to user {UserId}", userId);
         return await _taskStore.GetTasksAssignedToUserAsync(userId, cancellationToken);
     }
@@ -69,6 +78,9 @@ public class UserTaskService : IUserTaskService
         ICollection<string>? userGroups = null, 
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrEmpty(userId))
+            throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            
         _logger.LogDebug("Getting available tasks for user {UserId} with groups {UserGroups}", 
             userId, userGroups != null ? string.Join(", ", userGroups) : "none");
             
@@ -80,6 +92,9 @@ public class UserTaskService : IUserTaskService
         UserTaskSearchOptions searchOptions, 
         CancellationToken cancellationToken = default)
     {
+        if (searchOptions == null)
+            throw new ArgumentNullException(nameof(searchOptions));
+            
         _logger.LogDebug("Searching tasks with options: ProcessInstanceId={ProcessInstanceId}, AssigneeId={AssigneeId}, IncludeCompleted={IncludeCompleted}", 
             searchOptions.ProcessInstanceId, searchOptions.AssigneeId, searchOptions.IncludeCompleted);
             
@@ -93,14 +108,14 @@ public class UserTaskService : IUserTaskService
         string? userName = null, 
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Assigning task {TaskId} to user {UserId}", taskId, userId);
-        
         if (string.IsNullOrEmpty(taskId))
             throw new ArgumentException("Task ID cannot be null or empty", nameof(taskId));
             
         if (string.IsNullOrEmpty(userId))
             throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
             
+        _logger.LogInformation("Assigning task {TaskId} to user {UserId}", taskId, userId);
+        
         var task = await _taskStore.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null)
             throw new KeyNotFoundException($"Task with ID {taskId} not found");
@@ -108,15 +123,26 @@ public class UserTaskService : IUserTaskService
         if (task.Status == UserTaskStatus.Completed || task.Status == UserTaskStatus.Cancelled)
             throw new InvalidOperationException($"Cannot assign task {taskId} because it is already {task.Status}");
             
-        // اختصاص وظیفه به کاربر
+        // Check if task is already assigned to this user
+        if (task.Assignee == userId)
+        {
+            _logger.LogDebug("Task {TaskId} is already assigned to user {UserId}", taskId, userId);
+            return task;
+        }
+        
+        // Check if task is assigned to another user
+        if (!string.IsNullOrEmpty(task.Assignee) && task.Assignee != userId)
+            throw new InvalidOperationException($"Task {taskId} is already assigned to user {task.Assignee}");
+            
+        // Update task assignment
         task.Assignee = userId;
         task.AssigneeName = userName;
         task.AssignedAt = DateTime.UtcNow;
         task.Status = UserTaskStatus.Assigned;
         task.UpdatedAt = DateTime.UtcNow;
         
-        // انتشار رویداد تخصیص وظیفه
-        await _eventBus.PublishAsync(new Events.UserTaskAssignedEvent
+        // Publish assignment event
+        await _eventBus.PublishAsync(new UserTaskAssignedEvent
         {
             ProcessInstanceId = task.ProcessInstanceId,
             UserTaskId = task.ElementId,
@@ -125,7 +151,7 @@ public class UserTaskService : IUserTaskService
             Timestamp = DateTime.UtcNow
         }, cancellationToken);
         
-        // ذخیره‌سازی تغییرات
+        // Save changes
         return await _taskStore.UpdateTaskAsync(task, cancellationToken);
     }
     
@@ -135,14 +161,14 @@ public class UserTaskService : IUserTaskService
         string userId, 
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Unassigning task {TaskId} from user {UserId}", taskId, userId);
-        
         if (string.IsNullOrEmpty(taskId))
             throw new ArgumentException("Task ID cannot be null or empty", nameof(taskId));
             
         if (string.IsNullOrEmpty(userId))
             throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
             
+        _logger.LogInformation("Unassigning task {TaskId} from user {UserId}", taskId, userId);
+        
         var task = await _taskStore.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null)
             throw new KeyNotFoundException($"Task with ID {taskId} not found");
@@ -150,19 +176,19 @@ public class UserTaskService : IUserTaskService
         if (task.Status == UserTaskStatus.Completed || task.Status == UserTaskStatus.Cancelled)
             throw new InvalidOperationException($"Cannot unassign task {taskId} because it is already {task.Status}");
             
-        // بررسی اینکه آیا وظیفه به همین کاربر تخصیص یافته است
+        // Check if task is assigned to this user
         if (task.Assignee != userId)
             throw new InvalidOperationException($"Task {taskId} is not assigned to user {userId}");
             
-        // لغو تخصیص وظیفه
+        // Update task assignment
         task.Assignee = null;
         task.AssigneeName = null;
         task.AssignedAt = null;
         task.Status = UserTaskStatus.Active;
         task.UpdatedAt = DateTime.UtcNow;
         
-        // انتشار رویداد لغو تخصیص وظیفه
-        await _eventBus.PublishAsync(new Events.UserTaskUnassignedEvent
+        // Publish unassignment event
+        await _eventBus.PublishAsync(new UserTaskUnassignedEvent
         {
             ProcessInstanceId = task.ProcessInstanceId,
             UserTaskId = task.ElementId,
@@ -170,7 +196,7 @@ public class UserTaskService : IUserTaskService
             Timestamp = DateTime.UtcNow
         }, cancellationToken);
         
-        // ذخیره‌سازی تغییرات
+        // Save changes
         return await _taskStore.UpdateTaskAsync(task, cancellationToken);
     }
     
@@ -181,14 +207,14 @@ public class UserTaskService : IUserTaskService
         Dictionary<string, object>? formData = null, 
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Completing task {TaskId} by user {UserId}", taskId, userId);
-        
         if (string.IsNullOrEmpty(taskId))
             throw new ArgumentException("Task ID cannot be null or empty", nameof(taskId));
             
         if (string.IsNullOrEmpty(userId))
             throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
             
+        _logger.LogInformation("Completing task {TaskId} by user {UserId}", taskId, userId);
+        
         var task = await _taskStore.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null)
             throw new KeyNotFoundException($"Task with ID {taskId} not found");
@@ -196,18 +222,18 @@ public class UserTaskService : IUserTaskService
         if (task.Status == UserTaskStatus.Completed || task.Status == UserTaskStatus.Cancelled)
             throw new InvalidOperationException($"Cannot complete task {taskId} because it is already {task.Status}");
             
-        // بررسی اینکه آیا وظیفه به همین کاربر تخصیص یافته است
+        // Check if task is assigned to this user
         if (!string.IsNullOrEmpty(task.Assignee) && task.Assignee != userId)
             throw new InvalidOperationException($"Task {taskId} is assigned to {task.Assignee}, not to {userId}");
             
-        // تکمیل وظیفه
+        // Update task completion
         task.Status = UserTaskStatus.Completed;
         task.CompletedAt = DateTime.UtcNow;
         task.CompletedBy = userId;
         task.FormData = formData;
         task.UpdatedAt = DateTime.UtcNow;
         
-        // انتشار رویداد تکمیل وظیفه
+        // Publish completion event
         await _eventBus.PublishAsync(new UserTaskCompletedEvent
         {
             ProcessInstanceId = task.ProcessInstanceId,
@@ -217,7 +243,7 @@ public class UserTaskService : IUserTaskService
             Timestamp = DateTime.UtcNow
         }, cancellationToken);
         
-        // ذخیره‌سازی تغییرات
+        // Save changes
         return await _taskStore.UpdateTaskAsync(task, cancellationToken);
     }
     
@@ -226,9 +252,6 @@ public class UserTaskService : IUserTaskService
         UserTaskInfo taskInfo, 
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Creating new user task for process {ProcessInstanceId}, element {ElementId}", 
-            taskInfo.ProcessInstanceId, taskInfo.ElementId);
-            
         if (taskInfo == null)
             throw new ArgumentNullException(nameof(taskInfo));
             
@@ -238,7 +261,10 @@ public class UserTaskService : IUserTaskService
         if (string.IsNullOrEmpty(taskInfo.ElementId))
             throw new ArgumentException("Element ID cannot be null or empty", nameof(taskInfo.ElementId));
             
-        // تنظیم مقادیر پیش‌فرض
+        _logger.LogInformation("Creating new user task for process {ProcessInstanceId}, element {ElementId}", 
+            taskInfo.ProcessInstanceId, taskInfo.ElementId);
+            
+        // Set default values
         if (string.IsNullOrEmpty(taskInfo.TaskId))
             taskInfo.TaskId = Guid.NewGuid().ToString();
             
@@ -246,8 +272,8 @@ public class UserTaskService : IUserTaskService
         taskInfo.UpdatedAt = DateTime.UtcNow;
         taskInfo.Status = UserTaskStatus.Active;
         
-        // انتشار رویداد ایجاد وظیفه
-        await _eventBus.PublishAsync(new Events.UserTaskCreatedEvent
+        // Publish creation event
+        await _eventBus.PublishAsync(new UserTaskCreatedEvent
         {
             ProcessInstanceId = taskInfo.ProcessInstanceId,
             UserTaskId = taskInfo.ElementId,
@@ -262,7 +288,7 @@ public class UserTaskService : IUserTaskService
             Timestamp = DateTime.UtcNow
         }, cancellationToken);
         
-        // ذخیره‌سازی وظیفه
+        // Save task
         return await _taskStore.SaveTaskAsync(taskInfo, cancellationToken);
     }
     
@@ -272,6 +298,9 @@ public class UserTaskService : IUserTaskService
         DateTime dueDate, 
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrEmpty(taskId))
+            throw new ArgumentException("Task ID cannot be null or empty", nameof(taskId));
+            
         _logger.LogInformation("Setting due date for task {TaskId} to {DueDate}", taskId, dueDate);
         
         var task = await _taskStore.GetTaskByIdAsync(taskId, cancellationToken);
@@ -281,14 +310,14 @@ public class UserTaskService : IUserTaskService
         if (task.Status == UserTaskStatus.Completed || task.Status == UserTaskStatus.Cancelled)
             throw new InvalidOperationException($"Cannot update due date for task {taskId} because it is already {task.Status}");
             
-        // به‌روزرسانی تاریخ سررسید
+        // Update due date
         task.DueDate = dueDate;
         task.UpdatedAt = DateTime.UtcNow;
         
-        // انتشار رویداد منقضی شدن وظیفه (در صورت لزوم)
+        // Publish due date event if task is overdue
         if (dueDate <= DateTime.UtcNow)
         {
-            await _eventBus.PublishAsync(new Events.UserTaskDueEvent
+            await _eventBus.PublishAsync(new UserTaskDueEvent
             {
                 ProcessInstanceId = task.ProcessInstanceId,
                 UserTaskId = task.ElementId,
@@ -297,7 +326,7 @@ public class UserTaskService : IUserTaskService
             }, cancellationToken);
         }
         
-        // ذخیره‌سازی تغییرات
+        // Save changes
         return await _taskStore.UpdateTaskAsync(task, cancellationToken);
     }
     
@@ -309,8 +338,6 @@ public class UserTaskService : IUserTaskService
         string commentText, 
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Adding comment to task {TaskId} by user {UserId}", taskId, userId);
-        
         if (string.IsNullOrEmpty(taskId))
             throw new ArgumentException("Task ID cannot be null or empty", nameof(taskId));
             
@@ -320,11 +347,13 @@ public class UserTaskService : IUserTaskService
         if (string.IsNullOrEmpty(commentText))
             throw new ArgumentException("Comment text cannot be null or empty", nameof(commentText));
             
+        _logger.LogInformation("Adding comment to task {TaskId} by user {UserId}", taskId, userId);
+        
         var task = await _taskStore.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null)
             throw new KeyNotFoundException($"Task with ID {taskId} not found");
             
-        // ایجاد کامنت جدید
+        // Create new comment
         var comment = new UserTaskComment
         {
             CommentId = Guid.NewGuid().ToString(),
@@ -334,15 +363,15 @@ public class UserTaskService : IUserTaskService
             CreatedAt = DateTime.UtcNow
         };
         
-        // اضافه کردن کامنت به لیست کامنت‌های وظیفه
+        // Add comment to task
         if (task.Comments == null)
             task.Comments = new List<UserTaskComment>();
             
         task.Comments.Add(comment);
         task.UpdatedAt = DateTime.UtcNow;
         
-        // انتشار رویداد افزودن کامنت
-        await _eventBus.PublishAsync(new Events.TaskCommentAddedEvent
+        // Publish comment event
+        await _eventBus.PublishAsync(new TaskCommentAddedEvent
         {
             ProcessInstanceId = task.ProcessInstanceId,
             UserTaskId = task.ElementId,
@@ -353,7 +382,7 @@ public class UserTaskService : IUserTaskService
             Timestamp = DateTime.UtcNow
         }, cancellationToken);
         
-        // ذخیره‌سازی تغییرات
+        // Save changes
         await _taskStore.UpdateTaskAsync(task, cancellationToken);
         
         return comment.CommentId;
@@ -365,11 +394,14 @@ public class UserTaskService : IUserTaskService
         int priority, 
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Setting priority for task {TaskId} to {Priority}", taskId, priority);
-        
+        if (string.IsNullOrEmpty(taskId))
+            throw new ArgumentException("Task ID cannot be null or empty", nameof(taskId));
+            
         if (priority < 0 || priority > 100)
             throw new ArgumentOutOfRangeException(nameof(priority), "Priority must be between 0 and 100");
             
+        _logger.LogInformation("Setting priority for task {TaskId} to {Priority}", taskId, priority);
+        
         var task = await _taskStore.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null)
             throw new KeyNotFoundException($"Task with ID {taskId} not found");
@@ -377,13 +409,13 @@ public class UserTaskService : IUserTaskService
         if (task.Status == UserTaskStatus.Completed || task.Status == UserTaskStatus.Cancelled)
             throw new InvalidOperationException($"Cannot update priority for task {taskId} because it is already {task.Status}");
             
-        // به‌روزرسانی اولویت
+        // Update priority
         int oldPriority = task.Priority;
         task.Priority = priority;
         task.UpdatedAt = DateTime.UtcNow;
         
-        // انتشار رویداد تغییر اولویت
-        await _eventBus.PublishAsync(new Events.UserTaskPriorityChangedEvent
+        // Publish priority change event
+        await _eventBus.PublishAsync(new UserTaskPriorityChangedEvent
         {
             ProcessInstanceId = task.ProcessInstanceId,
             UserTaskId = task.ElementId,
@@ -392,7 +424,7 @@ public class UserTaskService : IUserTaskService
             Timestamp = DateTime.UtcNow
         }, cancellationToken);
         
-        // ذخیره‌سازی تغییرات
+        // Save changes
         return await _taskStore.UpdateTaskAsync(task, cancellationToken);
     }
     
@@ -402,11 +434,14 @@ public class UserTaskService : IUserTaskService
         Dictionary<string, object> formVariables, 
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Updating form variables for task {TaskId}", taskId);
-        
+        if (string.IsNullOrEmpty(taskId))
+            throw new ArgumentException("Task ID cannot be null or empty", nameof(taskId));
+            
         if (formVariables == null)
             throw new ArgumentNullException(nameof(formVariables));
             
+        _logger.LogInformation("Updating form variables for task {TaskId}", taskId);
+        
         var task = await _taskStore.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null)
             throw new KeyNotFoundException($"Task with ID {taskId} not found");
@@ -414,11 +449,11 @@ public class UserTaskService : IUserTaskService
         if (task.Status == UserTaskStatus.Completed || task.Status == UserTaskStatus.Cancelled)
             throw new InvalidOperationException($"Cannot update form variables for task {taskId} because it is already {task.Status}");
             
-        // به‌روزرسانی متغیرهای فرم
+        // Update form variables
         task.FormVariables = new Dictionary<string, object>(formVariables);
         task.UpdatedAt = DateTime.UtcNow;
         
-        // ذخیره‌سازی تغییرات
+        // Save changes
         return await _taskStore.UpdateTaskAsync(task, cancellationToken);
     }
     
@@ -428,11 +463,14 @@ public class UserTaskService : IUserTaskService
         ICollection<string> candidateGroups, 
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Setting candidate groups for task {TaskId}", taskId);
-        
+        if (string.IsNullOrEmpty(taskId))
+            throw new ArgumentException("Task ID cannot be null or empty", nameof(taskId));
+            
         if (candidateGroups == null || candidateGroups.Count == 0)
             throw new ArgumentException("Candidate groups cannot be null or empty", nameof(candidateGroups));
             
+        _logger.LogInformation("Setting candidate groups for task {TaskId}", taskId);
+        
         var task = await _taskStore.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null)
             throw new KeyNotFoundException($"Task with ID {taskId} not found");
@@ -440,11 +478,11 @@ public class UserTaskService : IUserTaskService
         if (task.Status == UserTaskStatus.Completed || task.Status == UserTaskStatus.Cancelled)
             throw new InvalidOperationException($"Cannot update candidate groups for task {taskId} because it is already {task.Status}");
             
-        // به‌روزرسانی گروه‌های کاندیدا
+        // Update candidate groups
         task.CandidateGroups = new List<string>(candidateGroups);
         task.UpdatedAt = DateTime.UtcNow;
         
-        // ذخیره‌سازی تغییرات
+        // Save changes
         return await _taskStore.UpdateTaskAsync(task, cancellationToken);
     }
     
@@ -454,10 +492,13 @@ public class UserTaskService : IUserTaskService
         ICollection<string> candidateUsers, 
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Setting candidate users for task {TaskId}", taskId);
-        
+        if (string.IsNullOrEmpty(taskId))
+            throw new ArgumentException("Task ID cannot be null or empty", nameof(taskId));
+            
         if (candidateUsers == null || candidateUsers.Count == 0)
             throw new ArgumentException("Candidate users cannot be null or empty", nameof(candidateUsers));
+            
+        _logger.LogInformation("Setting candidate users for task {TaskId}", taskId);
         
         var task = await _taskStore.GetTaskByIdAsync(taskId, cancellationToken);
         if (task == null)
@@ -466,11 +507,11 @@ public class UserTaskService : IUserTaskService
         if (task.Status == UserTaskStatus.Completed || task.Status == UserTaskStatus.Cancelled)
             throw new InvalidOperationException($"Cannot update candidate users for task {taskId} because it is already {task.Status}");
             
-        // به‌روزرسانی کاربران کاندیدا
+        // Update candidate users
         task.CandidateUsers = new List<string>(candidateUsers);
         task.UpdatedAt = DateTime.UtcNow;
         
-        // ذخیره‌سازی تغییرات
+        // Save changes
         return await _taskStore.UpdateTaskAsync(task, cancellationToken);
     }
 } 

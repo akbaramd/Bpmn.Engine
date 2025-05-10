@@ -1,0 +1,100 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# BPMN Event Classes – Explanation
+
+This document explains each BPMN event class in the Events folder, including their purpose and usage.
+
+---
+
+## BpmnEvent
+**Base class for all BPMN events.**
+- Contains common metadata for all events (ID, process instance, type, timestamp, user, etc.).
+
+---
+
+## ElementEvent
+**Base class for all BPMN element-related events.**
+- Adds `ElementId` and `ElementType` to identify the BPMN element involved.
+
+### ElementCreated
+- Raised when a BPMN element is instantiated in a process instance.
+
+### ElementActivating
+- Raised when the engine is about to activate an element (before execution starts).
+- Includes `SourceElementId` and `SequenceFlowId` for context.
+
+### ElementActivated
+- Raised when the element is fully activated and ready for work.
+
+### ElementProcessing
+- Raised while the element is being processed.
+- Includes `Progress` and `ProcessingDetails` for tracking.
+
+### ElementCompleting
+- Raised when the element is about to complete (before outgoing flows are taken).
+- Includes `OutgoingFlowIds`, `Output`, and `UpdatedVariables`.
+
+### ElementCompleted
+- Raised when the element has finished execution and outgoing flows are taken.
+
+### ElementFailed
+- Raised when the element fails (error, exception, or boundary event).
+- Includes `ErrorCode`, `ErrorMessage`, `HasErrorBoundaryEvent`, and `ErrorBoundaryEventId`.
+
+### ElementTerminating
+- Raised when the element is about to be terminated (e.g., process cancel, boundary terminate event).
+- Includes `Reason`.
+
+### ElementTerminated
+- Raised when the element is fully terminated and removed from active execution.
+
+---
+
+## TimerTriggeredEvent
+- Raised when a timer event fires (start, intermediate, or boundary timer).
+- Includes `TimerEventId`, `TimerEventType`, `StartTime`, and `TimerExpression`.
+
+---
+
+## MessageReceivedEvent
+- Raised when a message event is received (start, intermediate, or boundary message).
+- Includes `MessageEventId`, `MessageName`, `CorrelationKey`, and `MessageContent`.
+
+---
+
+## User Task Events (UserTaskEvents.cs)
+- Events for user task lifecycle: creation, assignment, completion, etc.
+
+---
+
+## Process Events (BpmnProcessEvents.cs)
+- Events for process instance lifecycle: creation, start, end, etc.
+
+---
+
+## Gateway Events (BpmnGatewayEvents.cs)
+- Events for gateway elements: split, join, and flow control.
+
+---
+
+## SubProcess Events (BpmnSubProcessEvents.cs)
+- Events for subprocess lifecycle: creation, completion, etc.
+
+---
+
+## Job Events (BpmnJobEvents.cs)
+- Events for job execution: creation, execution, completion.
+
+---
+
+## Subscription Events (BpmnSubscriptionEvents.cs)
+- Events for event subscriptions: creation, triggering, etc.
+
+---
+
+## ActivityCancelledEvent
+- Raised when an activity is cancelled (e.g., by boundary event or process termination).
+

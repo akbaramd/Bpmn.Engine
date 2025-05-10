@@ -16,6 +16,9 @@ namespace Novin.Bpmn.EventSourcing.Core.EventHandlers;
 /// </summary>
 public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
 {
+    private const int MaxRetries = 3;
+    private const int RetryDelay = 1000; // 1 second
+
     private readonly ILogger<ElementCompletedHandler> _logger;
     private readonly IStateStore _stateStore;
     private readonly IEventBus _eventBus;
@@ -50,78 +53,126 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         
         try
         {
-            Console.WriteLine($"✅ ElementCompletedHandler.HandleAsync called for element {@event.ElementId}");
-            
             _logger.LogDebug("Processing ElementCompleted event for element {ElementId} in process {ProcessInstanceId}", 
                 @event.ElementId, @event.ProcessInstanceId);
             
-            // ابتدا وضعیت فرآیند را بازیابی می‌کنیم
-            var (state, version) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(@event.ProcessInstanceId);
-            
-            if (state == null)
+            var retryCount = 0;
+            while (true)
             {
-                _logger.LogWarning("Process instance state not found for {ProcessInstanceId}", @event.ProcessInstanceId);
-                return;
-            }
-            
-            // بررسی نوع المان تکمیل شده و المان‌های بعدی که باید فعال شوند
-            // در حالت‌های مختلف، منطق ادامه فرآیند متفاوت است
-            
-            switch (@event.ElementType)
-            {
-                case "bpmn:StartEvent":
-                    // برای رویداد شروع، باید المان بعدی را فعال کنیم
-                    await HandleStartEventCompletionAsync(state, @event, cancellationToken);
-                    break;
+                try
+                {
+                    var (state, version) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(@event.ProcessInstanceId);
                     
-                case "bpmn:EndEvent":
-                    // برای رویداد پایان، باید فرآیند را تکمیل کنیم
-                    await HandleEndEventCompletionAsync(state, @event, cancellationToken);
-                    break;
+                    if (state == null)
+                    {
+                        _logger.LogWarning("Process instance state not found for {ProcessInstanceId}", @event.ProcessInstanceId);
+                        return;
+                    }
+
+                    // Add the completed element to the state
+                    if (!state.CompletedElements.Contains(@event.ElementId))
+                    {
+                        state.CompletedElements.Add(@event.ElementId);
+                    }
                     
-                case "bpmn:UserTask":
-                    // برای وظیفه کاربر، باید المان بعدی را فعال کنیم
-                    await HandleUserTaskCompletionAsync(state, @event, cancellationToken);
-                    break;
+                    // Remove from active elements if present
+                    state.ActiveElements.Remove(@event.ElementId);
                     
-                case "bpmn:ServiceTask":
-                    // برای وظیفه سرویس، باید المان بعدی را فعال کنیم
-                    await HandleServiceTaskCompletionAsync(state, @event, cancellationToken);
-                    break;
+                    // Update element status
+                    if (state.ElementStatuses.TryGetValue(@event.ElementId, out var elementStatus))
+                    {
+                        elementStatus.Status = "Completed";
+                        elementStatus.CompletedAt = DateTime.UtcNow;
+                        elementStatus.UpdatedAt = DateTime.UtcNow;
+                    }
                     
-                case "bpmn:ParallelGateway":
-                    // برای دروازه موازی، باید منطق انشعاب/ادغام را پیاده‌سازی کنیم
-                    await HandleParallelGatewayCompletionAsync(state, @event, cancellationToken);
-                    break;
+                    // Save the updated state with the current version
+                    await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, version);
+
+                    // Check if this is an end event
+                    if (@event.ElementType == "bpmn:EndEvent")
+                    {
+                        await HandleEndEventCompletionAsync(state, @event, cancellationToken);
+                        return;
+                    }
+
+                    // Get outgoing flows
+                    var outgoingFlows = await GetOutgoingFlowsAsync(state, @event.ElementId, cancellationToken);
+                    if (!outgoingFlows.Any())
+                    {
+                        _logger.LogDebug("No outgoing flows found for element {ElementId} in process {ProcessInstanceId}",
+                            @event.ElementId, @event.ProcessInstanceId);
+                        return;
+                    }
+
+                    // Handle different element types
+                    switch (@event.ElementType)
+                    {
+                        case "bpmn:StartEvent":
+                            await HandleStartEventCompletionAsync(state, @event, cancellationToken);
+                            break;
+                            
+                        case "bpmn:UserTask":
+                        case "bpmn:ServiceTask":
+                        case "bpmn:ScriptTask":
+                        case "bpmn:BusinessRuleTask":
+                        case "bpmn:SendTask":
+                        case "bpmn:ReceiveTask":
+                            await HandleTaskCompletionAsync(state, @event, cancellationToken);
+                            break;
+                            
+                        case "bpmn:ParallelGateway":
+                            await HandleParallelGatewayCompletionAsync(state, @event, cancellationToken);
+                            break;
+                            
+                        case "bpmn:InclusiveGateway":
+                            await HandleInclusiveGatewayCompletionAsync(state, @event, cancellationToken);
+                            break;
+                            
+                        case "bpmn:ExclusiveGateway":
+                            await HandleExclusiveGatewayCompletionAsync(state, @event, cancellationToken);
+                            break;
+                            
+                        case "bpmn:BoundaryEvent":
+                            await HandleBoundaryEventTriggerAsync(state, @event, cancellationToken);
+                            break;
+                            
+                        case "bpmn:SubProcess":
+                        case "bpmn:CallActivity":
+                            await HandleSubProcessCompletionAsync(state, @event, cancellationToken);
+                            break;
+                            
+                        default:
+                            _logger.LogDebug("Element {ElementId} of type {ElementType} completed in process {ProcessInstanceId}", 
+                                @event.ElementId, @event.ElementType, @event.ProcessInstanceId);
+                            await ActivateNextElementsAsync(state, @event, cancellationToken);
+                            break;
+                    }
                     
-                case "bpmn:InclusiveGateway":
-                    // برای دروازه فراگیر، باید منطق انشعاب/ادغام را پیاده‌سازی کنیم
-                    await HandleInclusiveGatewayCompletionAsync(state, @event, cancellationToken);
-                    break;
+                    return; // Success, exit retry loop
+                }
+                catch (ConcurrencyException)
+                {
+                    retryCount++;
+                    if (retryCount >= MaxRetries)
+                    {
+                        _logger.LogError("Failed to handle ElementCompleted event after {MaxRetries} retries for element {ElementId} in process {ProcessInstanceId}",
+                            MaxRetries, @event.ElementId, @event.ProcessInstanceId);
+                        throw;
+                    }
                     
-                case "bpmn:ExclusiveGateway":
-                    // برای دروازه انحصاری، باید منطق انشعاب/ادغام را پیاده‌سازی کنیم
-                    await HandleExclusiveGatewayCompletionAsync(state, @event, cancellationToken);
-                    break;
+                    _logger.LogWarning("Concurrency conflict detected, retry {RetryCount} of {MaxRetries} for element {ElementId} in process {ProcessInstanceId}",
+                        retryCount, MaxRetries, @event.ElementId, @event.ProcessInstanceId);
                     
-                case "bpmn:BoundaryEvent":
-                    // برای رویداد مرزی، بررسی می‌کنیم که آیا قطع‌کننده است یا خیر
-                    await HandleBoundaryEventTriggerAsync(state, @event, cancellationToken);
-                    break;
-                    
-                default:
-                    _logger.LogDebug("Element {ElementId} of type {ElementType} completed in process {ProcessInstanceId}", 
-                        @event.ElementId, @event.ElementType, @event.ProcessInstanceId);
-                    // فعال‌سازی المان‌های بعدی بر اساس جریان‌های خروجی
-                    await ActivateNextElementsAsync(state, @event, cancellationToken);
-                    break;
+                    await Task.Delay(RetryDelay * retryCount, cancellationToken);
+                }
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error handling ElementCompleted event for element {ElementId} in process {ProcessInstanceId}",
                 @event.ElementId, @event.ProcessInstanceId);
-            throw; // رخداد را رد می‌کنیم تا سیستم مدیریت رخداد آن را مدیریت کند
+            throw;
         }
     }
     
@@ -136,7 +187,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         _logger.LogDebug("Processing completion of start event {EventId} in process {ProcessInstanceId}",
             @event.ElementId, @event.ProcessInstanceId);
             
-        // برای رویداد شروع، باید المان‌های بعدی را فعال کنیم
         await ActivateNextElementsAsync(state, @event, cancellationToken);
     }
     
@@ -151,19 +201,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         _logger.LogDebug("Processing completion of end event {EventId} in process {ProcessInstanceId}",
             @event.ElementId, @event.ProcessInstanceId);
             
-        // رویداد پایان به معنی تکمیل فرآیند است
-        // باید رویداد تکمیل فرآیند را منتشر کنیم
-        
-        await _eventBus.PublishAsync(new ProcessInstanceCompleting
-        {
-            ProcessInstanceId = @event.ProcessInstanceId,
-            FinalVariables = state.Variables,
-            EndEventId = @event.ElementId
-        }, cancellationToken);
-        
-        // کمی صبر برای پردازش رویداد
-        await Task.Delay(50, cancellationToken);
-        
         await _eventBus.PublishAsync(new ProcessCompletedEvent
         {
             ProcessInstanceId = @event.ProcessInstanceId,
@@ -185,7 +222,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         _logger.LogDebug("Processing completion of user task {TaskId} in process {ProcessInstanceId}",
             @event.ElementId, @event.ProcessInstanceId);
             
-        // برای وظیفه کاربر، باید المان بعدی را فعال کنیم
         await ActivateNextElementsAsync(state, @event, cancellationToken);
     }
     
@@ -200,7 +236,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         _logger.LogDebug("Processing completion of service task {TaskId} in process {ProcessInstanceId}",
             @event.ElementId, @event.ProcessInstanceId);
             
-        // برای وظیفه سرویس، باید المان بعدی را فعال کنیم
         await ActivateNextElementsAsync(state, @event, cancellationToken);
     }
     
@@ -212,15 +247,10 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         ElementCompleted @event,
         CancellationToken cancellationToken)
     {
-        // دریافت اطلاعات دروازه از تعریف BPMN
         var gatewayInfo = await GetGatewayInfoAsync(state, @event.ElementId, cancellationToken);
         
         if (gatewayInfo.IsJoin)
         {
-            // منطق ادغام دروازه موازی (Join):
-            // باید همه توکن‌ها از تمام مسیرهای ورودی دریافت شوند
-            
-            // آیا این جریان فعلی، آخرین جریان مورد نیاز برای ادغام است؟
             bool canMerge = await CanMergeParallelGatewayAsync(state, @event, gatewayInfo, cancellationToken);
             
             if (canMerge)
@@ -228,25 +258,16 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
                 _logger.LogDebug("Parallel gateway {GatewayId} has received all required tokens. Proceeding with merge in process {ProcessInstanceId}",
                     @event.ElementId, @event.ProcessInstanceId);
                 
-                // تمام شرایط ادغام برآورده شده است، ادامه به المان‌های بعدی
                 await ActivateNextElementsAsync(state, @event, cancellationToken);
             }
             else
             {
                 _logger.LogDebug("Parallel gateway {GatewayId} is waiting for more tokens to merge in process {ProcessInstanceId}",
                     @event.ElementId, @event.ProcessInstanceId);
-                
-                // ذخیره وضعیت این توکن در دروازه
-                // در پیاده‌سازی واقعی، باید این توکن را در وضعیت دروازه ذخیره کرد
-                // و منتظر رسیدن توکن‌های دیگر ماند
-                
-                // در این نمونه، وضعیت توکن در ActiveElements نگه داشته می‌شود
             }
         }
         else
         {
-            // منطق انشعاب دروازه موازی (Fork/Split):
-            // همه مسیرهای خروجی باید فعال شوند
             _logger.LogDebug("Parallel gateway {GatewayId} is forking execution in process {ProcessInstanceId}",
                 @event.ElementId, @event.ProcessInstanceId);
             
@@ -262,15 +283,10 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         ElementCompleted @event,
         CancellationToken cancellationToken)
     {
-        // دریافت اطلاعات دروازه از تعریف BPMN
         var gatewayInfo = await GetGatewayInfoAsync(state, @event.ElementId, cancellationToken);
         
         if (gatewayInfo.IsJoin)
         {
-            // منطق ادغام دروازه فراگیر (Join):
-            // باید توکن‌ها از تمام مسیرهای ورودی فعال دریافت شوند
-            
-            // بررسی وضعیت ادغام
             var canMerge = await CanMergeInclusiveGatewayAsync(state, @event, gatewayInfo, cancellationToken);
             
             if (canMerge)
@@ -278,21 +294,16 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
                 _logger.LogDebug("Inclusive gateway {GatewayId} has received all required tokens from active paths. Proceeding with merge in process {ProcessInstanceId}",
                     @event.ElementId, @event.ProcessInstanceId);
                 
-                // تمام شرایط ادغام برآورده شده است، ادامه به المان‌های بعدی
                 await ActivateNextElementsAsync(state, @event, cancellationToken);
             }
             else
             {
                 _logger.LogDebug("Inclusive gateway {GatewayId} is waiting for more tokens from active paths in process {ProcessInstanceId}",
                     @event.ElementId, @event.ProcessInstanceId);
-                
-                // در حالت واقعی، وضعیت این توکن را ذخیره می‌کنیم و منتظر می‌مانیم
             }
         }
         else
         {
-            // منطق انشعاب دروازه فراگیر (Fork/Split):
-            // مسیرهای خروجی که شرط آنها برقرار است باید فعال شوند
             _logger.LogDebug("Inclusive gateway {GatewayId} is evaluating conditions for outgoing paths in process {ProcessInstanceId}",
                 @event.ElementId, @event.ProcessInstanceId);
             
@@ -308,23 +319,17 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         ElementCompleted @event,
         CancellationToken cancellationToken)
     {
-        // دریافت اطلاعات دروازه از تعریف BPMN
         var gatewayInfo = await GetGatewayInfoAsync(state, @event.ElementId, cancellationToken);
         
         if (gatewayInfo.IsJoin)
         {
-            // منطق ادغام دروازه انحصاری (Join):
-            // نیازی به انتظار برای توکن‌های دیگر نیست، اولین توکن رسیده کافی است
             _logger.LogDebug("Exclusive gateway {GatewayId} received a token. As an XOR-join, proceeding immediately in process {ProcessInstanceId}",
                 @event.ElementId, @event.ProcessInstanceId);
             
-            // ادامه به المان‌های بعدی - بدون نیاز به بررسی سایر توکن‌ها
             await ActivateNextElementsAsync(state, @event, cancellationToken);
         }
         else
         {
-            // منطق انشعاب دروازه انحصاری (Fork/Split):
-            // فقط اولین مسیر خروجی که شرط آن برقرار است باید فعال شود
             _logger.LogDebug("Exclusive gateway {GatewayId} is evaluating conditions to select exactly one path in process {ProcessInstanceId}",
                 @event.ElementId, @event.ProcessInstanceId);
             
@@ -340,7 +345,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         ElementCompleted @event,
         CancellationToken cancellationToken)
     {
-        // دریافت جریان‌های خروجی از المان فعلی
         var outgoingFlows = await GetOutgoingFlowsAsync(state, @event.ElementId, cancellationToken);
         
         if (outgoingFlows == null || !outgoingFlows.Any())
@@ -350,7 +354,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             return;
         }
         
-        // فعال‌سازی هر المان بعدی
         foreach (var flow in outgoingFlows)
         {
             await ActivateElementAsync(state, flow.TargetElementId, flow.TargetElementType, 
@@ -367,7 +370,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         GatewayInfo gatewayInfo,
         CancellationToken cancellationToken)
     {
-        // برای دروازه موازی، تمام مسیرهای خروجی باید فعال شوند
         var outgoingFlows = await GetOutgoingFlowsAsync(state, @event.ElementId, cancellationToken);
         
         if (outgoingFlows == null || !outgoingFlows.Any())
@@ -380,7 +382,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         _logger.LogDebug("Activating all {FlowCount} outgoing flows for parallel gateway {GatewayId} in process {ProcessInstanceId}",
             outgoingFlows.Count, @event.ElementId, @event.ProcessInstanceId);
             
-        // فعال‌سازی همه مسیرهای خروجی
         foreach (var flow in outgoingFlows)
         {
             await ActivateElementAsync(state, flow.TargetElementId, flow.TargetElementType, 
@@ -395,10 +396,9 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         BpmnProcessState state,
         ElementCompleted @event,
         GatewayInfo gatewayInfo,
-        bool activateAllValidPaths,  // برای دروازه فراگیر true و برای دروازه انحصاری false
+        bool activateAllValidPaths,
         CancellationToken cancellationToken)
     {
-        // دریافت جریان‌های خروجی از المان فعلی
         var outgoingFlows = await GetOutgoingFlowsAsync(state, @event.ElementId, cancellationToken);
         
         if (outgoingFlows == null || !outgoingFlows.Any())
@@ -411,24 +411,18 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         _logger.LogDebug("Evaluating conditions for {FlowCount} outgoing flows from gateway {GatewayId} in process {ProcessInstanceId}",
             outgoingFlows.Count, @event.ElementId, @event.ProcessInstanceId);
             
-        // یافتن مسیر پیش‌فرض (اگر موجود باشد)
         var defaultFlow = outgoingFlows.FirstOrDefault(f => f.IsDefault);
-        
-        // لیست مسیرهایی که شرط آنها برقرار است
         var validFlows = new List<FlowInfo>();
         
-        // بررسی شرط هر مسیر
         foreach (var flow in outgoingFlows.Where(f => !f.IsDefault))
         {
             if (string.IsNullOrEmpty(flow.Condition))
             {
-                // بدون شرط، معتبر است
                 _logger.LogDebug("Flow {FlowId} has no condition, treating as valid", flow.Id);
                 validFlows.Add(flow);
             }
             else
             {
-                // ارزیابی شرط
                 var isValid = await EvaluateConditionAsync(state, flow.Condition, cancellationToken);
                 _logger.LogDebug("Flow {FlowId} condition evaluation result: {IsValid}", flow.Id, isValid);
                 
@@ -436,7 +430,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
                 {
                     validFlows.Add(flow);
                     
-                    // اگر دروازه انحصاری است، فقط اولین مسیر معتبر را می‌پذیریم
                     if (!activateAllValidPaths)
                     {
                         _logger.LogDebug("Exclusive gateway taking only first valid path: {FlowId}", flow.Id);
@@ -446,7 +439,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             }
         }
         
-        // اگر هیچ مسیر معتبری یافت نشد و مسیر پیش‌فرض داریم، از آن استفاده می‌کنیم
         if (!validFlows.Any() && defaultFlow != null)
         {
             _logger.LogDebug("No valid paths found, taking default flow: {FlowId}", defaultFlow.Id);
@@ -457,9 +449,17 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         {
             _logger.LogWarning("No valid paths found and no default flow for gateway {GatewayId} in process {ProcessInstanceId}",
                 @event.ElementId, @event.ProcessInstanceId);
+                
+            await _eventBus.PublishAsync(new ElementFailed
+            {
+                ProcessInstanceId = @event.ProcessInstanceId,
+                ElementId = @event.ElementId,
+                ElementType = @event.ElementType,
+                ErrorMessage = "No valid flow found for gateway"
+            }, cancellationToken);
+            return;
         }
         
-        // فعال‌سازی مسیرهای معتبر
         foreach (var flow in validFlows)
         {
             await ActivateElementAsync(state, flow.TargetElementId, flow.TargetElementType, 
@@ -481,26 +481,59 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         _logger.LogDebug("Activating element {ElementId} of type {ElementType} via flow {FlowId} in process {ProcessInstanceId}",
             elementId, elementType, sequenceFlowId, state.ProcessInstanceId);
             
-        // انتشار رویداد فعال‌سازی المان
-        await _eventBus.PublishAsync(new ElementActivating
+        var retryCount = 0;
+        while (true)
         {
-            ProcessInstanceId = state.ProcessInstanceId,
-            ElementId = elementId,
-            ElementType = elementType,
-            SourceElementId = sourceElementId,
-            SequenceFlowId = sequenceFlowId
-        }, cancellationToken);
-        
-        // کمی صبر برای پردازش رویداد
-        await Task.Delay(50, cancellationToken);
-        
-        // انتشار رویداد فعال شدن المان
-        await _eventBus.PublishAsync(new ElementActivated
-        {
-            ProcessInstanceId = state.ProcessInstanceId,
-            ElementId = elementId,
-            ElementType = elementType
-        }, cancellationToken);
+            try
+            {
+                // Get current state and version
+                var (currentState, currentVersion) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(state.ProcessInstanceId);
+                
+                if (currentState == null)
+                {
+                    _logger.LogWarning("Process instance state not found for {ProcessInstanceId}", state.ProcessInstanceId);
+                    return;
+                }
+
+                // Add to active elements if not already present
+                if (!currentState.ActiveElements.Contains(elementId))
+                {
+                    currentState.ActiveElements.Add(elementId);
+                }
+                
+                // Save the updated state with current version
+                await _stateStore.SaveStateAsync(state.ProcessInstanceId, currentState, currentVersion);
+                
+                // First publish ElementCreated event
+                await _eventBus.PublishAsync(new ElementCreated
+                {
+                    ProcessInstanceId = state.ProcessInstanceId,
+                    ElementId = elementId,
+                    ElementType = elementType,
+                    EventId = Guid.NewGuid(),
+                    Timestamp = DateTime.UtcNow
+                }, cancellationToken);
+                
+   
+                
+                return; // Success, exit retry loop
+            }
+            catch (ConcurrencyException)
+            {
+                retryCount++;
+                if (retryCount >= MaxRetries)
+                {
+                    _logger.LogError("Failed to activate element {ElementId} after {MaxRetries} retries in process {ProcessInstanceId}",
+                        elementId, MaxRetries, state.ProcessInstanceId);
+                    throw;
+                }
+                
+                _logger.LogWarning("Concurrency conflict detected while activating element {ElementId}, retry {RetryCount} of {MaxRetries} in process {ProcessInstanceId}",
+                    elementId, retryCount, MaxRetries, state.ProcessInstanceId);
+                
+                await Task.Delay(RetryDelay * retryCount, cancellationToken);
+            }
+        }
     }
     
     /// <summary>
@@ -512,16 +545,9 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         GatewayInfo gatewayInfo,
         CancellationToken cancellationToken)
     {
-        // برای دروازه موازی، باید توکن از همه مسیرهای ورودی دریافت شده باشد
-        
-        // شمارش تعداد توکن‌هایی که به این دروازه رسیده‌اند
-        // در یک پیاده‌سازی واقعی، این اطلاعات باید از یک مخزن نشانه‌ها استخراج شود
-        
-        // بررسی تعداد توکن‌های فعال برای این گیت‌وی در وضعیت فرآیند
-        var receivedTokensCount = state.ActiveElements.Count(e => e == @event.ElementId);
+        var receivedTokensCount = state.CompletedElements.Count(e => e == @event.ElementId);
             
-        // اضافه کردن توکن فعلی اگر هنوز شمارش نشده است
-        if (!state.ActiveElements.Contains(@event.ElementId))
+        if (!state.CompletedElements.Contains(@event.ElementId))
         {
             receivedTokensCount++;
         }
@@ -529,7 +555,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         _logger.LogDebug("Parallel gateway {GatewayId} has received {ReceivedCount} tokens out of {TotalCount} required",
             @event.ElementId, receivedTokensCount, gatewayInfo.IncomingFlows.Count());
             
-        // برای ادغام کامل، باید تعداد توکن‌ها برابر با تعداد مسیرهای ورودی باشد
         return receivedTokensCount >= gatewayInfo.IncomingFlows.Count();
     }
     
@@ -542,13 +567,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         GatewayInfo gatewayInfo,
         CancellationToken cancellationToken)
     {
-        // برای دروازه فراگیر، باید توکن از همه مسیرهای ورودی فعال دریافت شده باشد
-        
-        // شناسایی مسیرهای ورودی فعال
-        // در یک پیاده‌سازی واقعی، باید مسیرهای فعال را بر اساس تجزیه و تحلیل جریان تشخیص داد
-        // برای این نمونه، فرض می‌کنیم همه مسیرهای ورودی فعال هستند
-        
-        // دریافت تعریف BPMN
         var definitions = _definitionStorage.GetParsedDefinition(state.DeploymentKey);
         if (definitions == null)
         {
@@ -556,7 +574,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             return false;
         }
         
-        // یافتن فرآیند
         var process = FindProcess(definitions, state.ProcessDefinitionId);
         if (process == null)
         {
@@ -565,14 +582,10 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             return false;
         }
         
-        // تعیین مسیرهای ورودی فعال
         var activeIncomingFlows = DetermineActiveIncomingFlows(process, state, @event.ElementId);
-        
-        // شمارش تعداد توکن‌هایی که به این دروازه رسیده‌اند
-        var receivedTokensCount = state.ActiveElements.Count(e => e == @event.ElementId);
+        var receivedTokensCount = state.CompletedElements.Count(e => e == @event.ElementId);
             
-        // اضافه کردن توکن فعلی اگر هنوز شمارش نشده است
-        if (!state.ActiveElements.Contains(@event.ElementId))
+        if (!state.CompletedElements.Contains(@event.ElementId))
         {
             receivedTokensCount++;
         }
@@ -580,7 +593,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         _logger.LogDebug("Inclusive gateway {GatewayId} has received {ReceivedCount} tokens out of {ActiveCount} active paths",
             @event.ElementId, receivedTokensCount, activeIncomingFlows.Count);
             
-        // برای ادغام، باید تعداد توکن‌ها برابر با تعداد مسیرهای ورودی فعال باشد
         return receivedTokensCount >= activeIncomingFlows.Count;
     }
     
@@ -592,13 +604,7 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         BpmnProcessState state,
         string gatewayId)
     {
-        // یافتن جریان‌های ورودی
         var incomingFlows = FindIncomingFlows(process, gatewayId);
-        
-        // در یک پیاده‌سازی واقعی، باید تعیین کرد کدام مسیرها فعال هستند
-        // با بررسی توکن‌های فعال، تاریخچه اجرا، و شرایط مسیرها
-        
-        // برای سادگی در این نمونه، فرض می‌کنیم همه مسیرهای ورودی فعال هستند
         return incomingFlows.Select(f => f.id).ToList();
     }
     
@@ -610,7 +616,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         string gatewayId,
         CancellationToken cancellationToken)
     {
-        // دریافت تعریف BPMN از حافظه
         var definitions = _definitionStorage.GetParsedDefinition(state.DeploymentKey);
         if (definitions == null)
         {
@@ -624,7 +629,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             };
         }
 
-        // یافتن فرآیند
         var process = FindProcess(definitions, state.ProcessDefinitionId);
         if (process == null)
         {
@@ -639,7 +643,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             };
         }
 
-        // یافتن المان گیت‌وی در فرآیند
         var gateway = FindElementById(process, gatewayId) as BpmnGateway;
         if (gateway == null)
         {
@@ -654,12 +657,8 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             };
         }
 
-        // یافتن جریان‌های ورودی و خروجی
         var incomingFlows = FindIncomingFlows(process, gatewayId);
         var outgoingFlows = FindOutgoingFlows(process, gatewayId);
-
-        // تشخیص اینکه آیا گیت‌وی Join است یا Split
-        // اگر تعداد جریان‌های ورودی بیش از یکی باشد، Join است
         bool isJoin = incomingFlows.Count > 1;
 
         return new GatewayInfo
@@ -679,7 +678,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         string elementId,
         CancellationToken cancellationToken)
     {
-        // دریافت تعریف BPMN از حافظه
         var definitions = _definitionStorage.GetParsedDefinition(state.DeploymentKey);
         if (definitions == null)
         {
@@ -687,7 +685,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             return new List<FlowInfo>();
         }
 
-        // یافتن فرآیند
         var process = FindProcess(definitions, state.ProcessDefinitionId);
         if (process == null)
         {
@@ -696,7 +693,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             return new List<FlowInfo>();
         }
 
-        // یافتن جریان‌های خروجی
         var outgoingFlows = FindOutgoingFlows(process, elementId);
         if (!outgoingFlows.Any())
         {
@@ -707,10 +703,8 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
 
         var result = new List<FlowInfo>();
 
-        // تبدیل به اطلاعات جریان
         foreach (var flow in outgoingFlows)
         {
-            // یافتن المان هدف
             var targetElement = FindElementById(process, flow.targetRef);
             if (targetElement == null)
             {
@@ -719,13 +713,9 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
                 continue;
             }
 
-            // تشخیص نوع المان هدف
             var targetElementType = GetElementType(targetElement);
-
-            // آیا این جریان، جریان پیش‌فرض است؟
             bool isDefault = false;
             
-            // بررسی گیت‌وی منبع
             var sourceElement = FindElementById(process, flow.sourceRef);
             if (sourceElement is BpmnGateway gateway)
             {
@@ -745,7 +735,7 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
                 SourceElementId = flow.sourceRef,
                 TargetElementId = flow.targetRef,
                 TargetElementType = targetElementType,
-                Condition = flow.conditionExpression?.Text.ToString(), // تبدیل شرط به رشته
+                Condition = flow.conditionExpression?.Text.ToString(),
                 IsDefault = isDefault
             });
         }
@@ -761,7 +751,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         if (definitions?.Items == null || !definitions.Items.Any())
             return null;
             
-        // جستجوی فرآیند
         var processes = definitions.Items
             .OfType<BpmnProcess>()
             .ToList();
@@ -770,7 +759,7 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             return null;
             
         if (string.IsNullOrEmpty(processId))
-            return processes.First(); // اگر شناسه مشخص نشده، اولین فرآیند را برمی‌گرداند
+            return processes.First();
             
         return processes.FirstOrDefault(p => p.id == processId);
     }
@@ -783,13 +772,11 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         if (process?.Items == null || !process.Items.Any() || string.IsNullOrEmpty(elementId))
             return null;
 
-        // بررسی همه المان‌های فرآیند
         foreach (var item in process.Items)
         {
             if (item is BpmnBaseElement element && element.id == elementId)
                 return element;
                 
-            // بررسی المان‌های تو در تو (مانند SubProcess)
             if (item is BpmnSubProcess subProcess && subProcess.Items != null)
             {
                 var subElement = FindElementInSubProcess(subProcess, elementId);
@@ -798,7 +785,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             }
         }
         
-        // بررسی جریان‌های توالی
         var flows = process.Items.OfType<BpmnSequenceFlow>().ToList();
         return flows.FirstOrDefault(f => f.id == elementId);
     }
@@ -813,13 +799,9 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             
         foreach (var item in subProcess.Items)
         {
-            // فقط بررسی می‌کنیم که آیا این آیتم یک المان BPMN پایه با ID مورد نظر است
             if (item is BpmnBaseElement element && element.id == elementId)
                 return element;
         }
-        
-        // پیاده‌سازی بازگشتی برای زیرفرآیندها را حذف می‌کنیم تا از خطای اجرا جلوگیری شود
-        // در یک پیاده‌سازی کامل، باید روی همه المان‌های SubProcess بازگشتی فراخوانی شود
         
         return null;
     }
@@ -832,10 +814,7 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         if (process?.Items == null || !process.Items.Any() || string.IsNullOrEmpty(elementId))
             return new List<BpmnSequenceFlow>();
             
-        // یافتن جریان‌های توالی
         var flows = process.Items.OfType<BpmnSequenceFlow>().ToList();
-        
-        // فیلتر کردن جریان‌هایی که به المان مورد نظر وارد می‌شوند
         return flows.Where(f => f.targetRef == elementId).ToList();
     }
 
@@ -847,10 +826,7 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         if (process?.Items == null || !process.Items.Any() || string.IsNullOrEmpty(elementId))
             return new List<BpmnSequenceFlow>();
             
-        // یافتن جریان‌های توالی
         var flows = process.Items.OfType<BpmnSequenceFlow>().ToList();
-        
-        // فیلتر کردن جریان‌هایی که از المان مورد نظر خارج می‌شوند
         return flows.Where(f => f.sourceRef == elementId).ToList();
     }
 
@@ -862,8 +838,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         if (element == null)
             return "unknown";
             
-        // تشخیص نوع المان بر اساس کلاس آن
-       
         if (element is BpmnUserTask)
             return "bpmn:UserTask";
         if (element is BpmnServiceTask)
@@ -904,7 +878,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             return "bpmn:EventBasedGateway";
         if (element is BpmnTask)
             return "bpmn:Task";     
-        // برای المان‌های ناشناخته
         return element.GetType().Name;
     }
     
@@ -917,14 +890,10 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(condition))
-            return true; // اگر شرط خالی باشد، همیشه صحیح است
+            return true;
             
         try
         {
-            // در پیاده‌سازی واقعی، باید از یک موتور اسکریپت برای ارزیابی شرط استفاده شود
-            // و متغیرهای فرآیند را در ارزیابی در نظر گرفت
-            
-            // مثال ساده برای ارزیابی شرط‌های ساده
             if (condition.Contains("=="))
             {
                 var parts = condition.Split(new[] { "==" }, StringSplitOptions.RemoveEmptyEntries);
@@ -933,7 +902,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
                     var leftPart = parts[0].Trim();
                     var rightPart = parts[1].Trim();
                     
-                    // اگر متغیر در شرط وجود داشته باشد، جایگزین می‌کنیم
                     if (leftPart.StartsWith("${") && leftPart.EndsWith("}"))
                     {
                         var varName = leftPart.Substring(2, leftPart.Length - 3);
@@ -945,9 +913,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
                 }
             }
             
-            // پیاده‌سازی پیشرفته‌تر ارزیابی شرط در اینجا
-            
-            // برای سادگی در این نمونه
             _logger.LogWarning("Condition evaluation not fully implemented: {Condition}", condition);
             return true;
         }
@@ -993,27 +958,22 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         _logger.LogDebug("Processing trigger of boundary event {EventId} in process {ProcessInstanceId}",
             @event.ElementId, @event.ProcessInstanceId);
         
-        // دریافت تعریف BPMN برای تشخیص نوع رویداد مرزی (interrupting یا non-interrupting)
         var definition = _definitionStorage.GetParsedDefinition(state.DeploymentKey);
         if (definition == null)
         {
             _logger.LogWarning("BPMN definition not found for deployment key {DeploymentKey}", state.DeploymentKey);
-            // فرض می‌کنیم که رویداد از نوع غیرقطع‌کننده است و فقط مسیر بعدی را فعال می‌کنیم
             await ActivateNextElementsAsync(state, @event, cancellationToken);
             return;
         }
 
-        // یافتن رویداد مرزی در تعریف
         var boundaryEvent = FindBoundaryEvent(definition, state.ProcessDefinitionId, @event.ElementId);
         if (boundaryEvent == null)
         {
             _logger.LogWarning("Boundary event {ElementId} not found in definition", @event.ElementId);
-            // فرض می‌کنیم که رویداد از نوع غیرقطع‌کننده است و فقط مسیر بعدی را فعال می‌کنیم
             await ActivateNextElementsAsync(state, @event, cancellationToken);
             return;
         }
 
-        // تعیین فعالیتی که رویداد مرزی به آن متصل است
         string attachedToElementId = boundaryEvent.attachedToRef?.ToString();
         if (string.IsNullOrEmpty(attachedToElementId))
         {
@@ -1022,28 +982,19 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
             return;
         }
 
-        // تعیین نوع رویداد مرزی (قطع‌کننده یا غیرقطع‌کننده)
         bool isInterrupting = boundaryEvent.cancelActivity;
         
-        // اگر رویداد مرزی از نوع قطع‌کننده (interrupting) است
         if (isInterrupting)
         {
             _logger.LogDebug("Boundary event {ElementId} is interrupting. Canceling activity {ActivityId}",
                 @event.ElementId, attachedToElementId);
             
-            // انتشار رویداد لغو فعالیت متصل
-            await _eventBus.PublishAsync(new Events.ActivityCancelledEvent
+            await _eventBus.PublishAsync(new ElementTerminated
             {
-                EventId = Guid.NewGuid(),
                 ProcessInstanceId = @event.ProcessInstanceId,
                 ElementId = attachedToElementId,
-                Reason = $"Interrupted by boundary event {boundaryEvent.id}",
-                Intent = "CANCELLED",
-                Timestamp = DateTime.UtcNow
+                ElementType = "bpmn:BoundaryEvent"
             }, cancellationToken);
-            
-            // کمی صبر برای پردازش رویداد
-            await Task.Delay(50, cancellationToken);
         }
         else
         {
@@ -1051,7 +1002,6 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
                 @event.ElementId, attachedToElementId);
         }
         
-        // در هر صورت، فعال‌سازی مسیر‌های خروجی از رویداد مرزی
         await ActivateNextElementsAsync(state, @event, cancellationToken);
     }
 
@@ -1060,12 +1010,10 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
     /// </summary>
     private BpmnBoundaryEvent FindBoundaryEvent(BpmnDefinitions definitions, string processId, string eventId)
     {
-        // یافتن فرآیند با شناسه مشخص
         var process = FindProcess(definitions, processId);
         if (process == null)
             return null;
         
-        // جستجوی رویداد مرزی در فرآیند
         foreach (var item in process.Items)
         {
             if (item is BpmnBoundaryEvent boundaryEvent && boundaryEvent.id == eventId)
@@ -1073,5 +1021,148 @@ public class ElementCompletedHandler : IBpmnEventHandler<ElementCompleted>
         }
         
         return null;
+    }
+
+    private async Task HandleTaskCompletionAsync(
+        BpmnProcessState state,
+        ElementCompleted @event,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogDebug("Processing completion of task {TaskId} in process {ProcessInstanceId}",
+            @event.ElementId, @event.ProcessInstanceId);
+            
+        // Check for boundary events
+        var boundaryEvents = await GetAttachedBoundaryEventsAsync(state, @event.ElementId, cancellationToken);
+        if (boundaryEvents.Any())
+        {
+            _logger.LogDebug("Found {Count} boundary events attached to task {TaskId}", 
+                boundaryEvents.Count, @event.ElementId);
+                
+            foreach (var boundaryEvent in boundaryEvents)
+            {
+                if (boundaryEvent.IsInterrupting)
+                {
+                    _logger.LogDebug("Interrupting boundary event {EventId} will be triggered", boundaryEvent.Id);
+                    await ActivateElementAsync(state, boundaryEvent.Id, "bpmn:BoundaryEvent", 
+                        @event.ElementId, null, cancellationToken);
+                    return;
+                }
+            }
+        }
+        
+        await ActivateNextElementsAsync(state, @event, cancellationToken);
+    }
+
+    private async Task HandleSubProcessCompletionAsync(
+        BpmnProcessState state,
+        ElementCompleted @event,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogDebug("Processing completion of subprocess {SubProcessId} in process {ProcessInstanceId}",
+            @event.ElementId, @event.ProcessInstanceId);
+            
+        // Check if all child elements are completed
+        var childElements = await GetChildElementsAsync(state, @event.ElementId, cancellationToken);
+        var allChildrenCompleted = childElements.All(child => state.CompletedElements.Contains(child));
+        
+        if (!allChildrenCompleted)
+        {
+            _logger.LogDebug("Subprocess {SubProcessId} has incomplete child elements", @event.ElementId);
+            return;
+        }
+        
+        await ActivateNextElementsAsync(state, @event, cancellationToken);
+    }
+
+    private async Task<List<BoundaryEventInfo>> GetAttachedBoundaryEventsAsync(
+        BpmnProcessState state,
+        string elementId,
+        CancellationToken cancellationToken)
+    {
+        var definition = _definitionStorage.GetParsedDefinition(state.DeploymentKey);
+        if (definition == null)
+        {
+            _logger.LogWarning("BPMN definition not found for deployment key {DeploymentKey}", state.DeploymentKey);
+            return new List<BoundaryEventInfo>();
+        }
+
+        var process = FindProcess(definition, state.ProcessDefinitionId);
+        if (process == null)
+        {
+            _logger.LogWarning("Process definition not found with ID {ProcessId}", state.ProcessDefinitionId);
+            return new List<BoundaryEventInfo>();
+        }
+
+        var boundaryEvents = process.Items.OfType<BpmnBoundaryEvent>()
+            .Where(e => e.attachedToRef?.Name == elementId)
+            .Select(e => new BoundaryEventInfo
+            {
+                Id = e.id,
+                IsInterrupting = e.cancelActivity,
+                EventType = GetEventType(e)
+            })
+            .ToList();
+
+        return boundaryEvents;
+    }
+
+    private async Task<List<string>> GetChildElementsAsync(
+        BpmnProcessState state,
+        string subProcessId,
+        CancellationToken cancellationToken)
+    {
+        var definition = _definitionStorage.GetParsedDefinition(state.DeploymentKey);
+        if (definition == null)
+        {
+            _logger.LogWarning("BPMN definition not found for deployment key {DeploymentKey}", state.DeploymentKey);
+            return new List<string>();
+        }
+
+        var process = FindProcess(definition, state.ProcessDefinitionId);
+        if (process == null)
+        {
+            _logger.LogWarning("Process definition not found with ID {ProcessId}", state.ProcessDefinitionId);
+            return new List<string>();
+        }
+
+        var subProcess = process.Items.OfType<BpmnSubProcess>()
+            .FirstOrDefault(s => s.id == subProcessId);
+            
+        if (subProcess == null)
+        {
+            _logger.LogWarning("Subprocess {SubProcessId} not found in process {ProcessId}", 
+                subProcessId, state.ProcessDefinitionId);
+            return new List<string>();
+        }
+
+        return subProcess.Items.OfType<BpmnBaseElement>()
+            .Select(e => e.id)
+            .ToList();
+    }
+
+    private string GetEventType(BpmnBoundaryEvent boundaryEvent)
+    {
+        if (boundaryEvent.Items == null || !boundaryEvent.Items.Any())
+            return "unknown";
+            
+        var eventDefinition = boundaryEvent.Items.First();
+        
+        if (eventDefinition is BpmnTimerEventDefinition)
+            return "timer";
+        if (eventDefinition is BpmnMessageEventDefinition)
+            return "message";
+        if (eventDefinition is BpmnErrorEventDefinition)
+            return "error";
+        if (eventDefinition is BpmnSignalEventDefinition)
+            return "signal";
+            
+        return "unknown";
+    }
+
+    private class BoundaryEventInfo
+    {
+        public string Id { get; set; }
+        public bool IsInterrupting { get; set; }
+        public string EventType { get; set; }
     }
 }

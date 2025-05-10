@@ -139,6 +139,8 @@ public class BpmnProcessorService
         
         // بازیابی تعریف پارس شده از حافظه
         var definitions = _definitionStorage.GetParsedDefinition(deploymentKey);
+        if (definitions == null)
+            throw new BpmnProcessorException($"Failed to load BPMN definition for key {deploymentKey}");
         
         var process = FindProcess(definitions, processId);
         if (process == null)
@@ -152,97 +154,30 @@ public class BpmnProcessorService
             ? new Dictionary<string, object>(variables) 
             : new Dictionary<string, object>();
         
-        // انتشار رویداد ایجاد نمونه فرآیند
         try 
         {
-            await _eventBus.PublishAsync(new ProcessInstanceCreating
+            // Create initial state
+            var initialState = new BpmnProcessState
             {
                 ProcessInstanceId = processInstanceId,
                 ProcessDefinitionId = process.id,
                 DeploymentKey = deploymentKey,
-                DefinitionXml = deploymentInfo.XmlContent,
-                InitialVariables = initialVariables
-            }, cancellationToken);
+                ActiveElements = new HashSet<string>(),
+                CompletedElements = new HashSet<string>(),
+                Variables = initialVariables,
+                Status = ProcessStatus.Created
+            };
+
+            // Save initial state
+            await _stateStore.SaveStateAsync(processInstanceId, initialState, 0);
             
-            // کمی صبر برای پردازش رویداد
-            await Task.Delay(50, cancellationToken);
-            
-            // تأیید ایجاد فرآیند
+            // انتشار رویداد ایجاد نمونه فرآیند
             await _eventBus.PublishAsync(new ProcessInstanceCreated
             {
                 ProcessInstanceId = processInstanceId,
                 ProcessDefinitionId = process.id,
                 ProcessDefinitionKey = deploymentKey,
-                ProcessDefinitionVersion = 1,
                 Variables = initialVariables
-            }, cancellationToken);
-            
-            // کمی صبر برای پردازش رویداد
-            await Task.Delay(50, cancellationToken);
-            
-            // یافتن رویداد شروع
-            var startEvent = FindStartEvent(process);
-            if (startEvent == null)
-                throw new BpmnProcessorException($"No start event found in process {process.id}");
-                
-            // انتشار رویداد شروع فرآیند
-            await _eventBus.PublishAsync(new ProcessInstanceStarting
-            {
-                ProcessInstanceId = processInstanceId,
-                StartEventId = startEvent.id
-            }, cancellationToken);
-            
-            // کمی صبر برای پردازش رویداد
-            await Task.Delay(50, cancellationToken);
-            
-            // تأیید شروع فرآیند
-            await _eventBus.PublishAsync(new ProcessInstanceStarted
-            {
-                ProcessInstanceId = processInstanceId
-            }, cancellationToken);
-            
-            // فعال‌سازی رویداد شروع
-            await _eventBus.PublishAsync(new ElementActivating
-            {
-                ProcessInstanceId = processInstanceId,
-                ElementId = startEvent.id,
-                ElementType = "bpmn:StartEvent",
-                SequenceFlowId = null,
-                SourceElementId = null
-            }, cancellationToken);
-            
-            // کمی صبر برای پردازش رویداد
-            await Task.Delay(50, cancellationToken);
-            
-            // تأیید فعال‌سازی رویداد شروع
-            await _eventBus.PublishAsync(new ElementActivated
-            {
-                ProcessInstanceId = processInstanceId,
-                ElementId = startEvent.id,
-                ElementType = "bpmn:StartEvent"
-            }, cancellationToken);
-            
-            // کمی صبر برای پردازش رویداد
-            await Task.Delay(50, cancellationToken);
-            
-            // تکمیل رویداد شروع
-            await _eventBus.PublishAsync(new ElementCompleting
-            {
-                ProcessInstanceId = processInstanceId,
-                ElementId = startEvent.id,
-                ElementType = "bpmn:StartEvent",
-                OutgoingFlowIds = GetOutgoingFlows(startEvent)
-            }, cancellationToken);
-            
-            // کمی صبر برای پردازش رویداد
-            await Task.Delay(50, cancellationToken);
-            
-            // تأیید تکمیل رویداد شروع
-            await _eventBus.PublishAsync(new ElementCompleted
-            {
-                ProcessInstanceId = processInstanceId,
-                ElementId = startEvent.id,
-                ElementType = "bpmn:StartEvent"
             }, cancellationToken);
             
             _logger.LogInformation("Started process instance {ProcessInstanceId} for definition {DeploymentKey}", 
@@ -445,7 +380,9 @@ public class BpmnProcessorService
         if (string.IsNullOrEmpty(taskId))
             throw new ArgumentException("Task ID cannot be empty", nameof(taskId));
             
-        var state = await GetProcessInstanceStateAsync(processInstanceId, cancellationToken);
+        var (state, version) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(processInstanceId, cancellationToken);
+        if (state == null)
+            throw new BpmnProcessorException($"Process instance {processInstanceId} not found");
         
         // بررسی وجود وظیفه در عناصر فعال
         if (!state.ActiveElements.Contains(taskId))
@@ -468,6 +405,25 @@ public class BpmnProcessorService
             Dictionary<string, object> finalFormData = formData != null
                 ? new Dictionary<string, object>(formData)
                 : new Dictionary<string, object>();
+
+            // Update state
+            state.Variables = state.Variables ?? new Dictionary<string, object>();
+            foreach (var kvp in finalFormData)
+            {
+                state.Variables[kvp.Key] = kvp.Value;
+            }
+
+            // Remove from active elements
+            state.ActiveElements.Remove(taskId);
+            
+            // Add to completed elements
+            if (!state.CompletedElements.Contains(taskId))
+            {
+                state.CompletedElements.Add(taskId);
+            }
+
+            // Save updated state
+            await _stateStore.SaveStateAsync(processInstanceId, state, version + 1);
                 
             // ارسال رویداد کامل شدن وظیفه کاربری
             await _eventBus.PublishAsync(new Events.UserTaskCompletedEvent
@@ -478,38 +434,7 @@ public class BpmnProcessorService
                 FormData = finalFormData
             }, cancellationToken);
             
-            // کمی صبر برای پردازش رویداد
-            await Task.Delay(50, cancellationToken);
-            
-            // ارسال رویداد تکمیل فرم کاربری
-            await _eventBus.PublishAsync(new Events.UserTaskSubmittedEvent
-            {
-                ProcessInstanceId = processInstanceId,
-                UserTaskId = taskId,
-                FormData = finalFormData,
-                OutputVariables = finalFormData // در اینجا متغیرهای خروجی همان داده‌های فرم هستند
-            }, cancellationToken);
-            
-            // کمی صبر برای پردازش رویداد
-            await Task.Delay(50, cancellationToken);
-            
-            // یافتن مسیرهای خروجی
-            var outgoingFlows = new List<string>(); // در حالت واقعی باید از مدل BPMN استخراج شود
-            
             // انتشار رویداد تکمیل وظیفه
-            await _eventBus.PublishAsync(new ElementCompleting
-            {
-                ProcessInstanceId = processInstanceId,
-                ElementId = taskId,
-                ElementType = "bpmn:UserTask",
-                UpdatedVariables = finalFormData,
-                OutgoingFlowIds = outgoingFlows
-            }, cancellationToken);
-            
-            // کمی صبر برای پردازش رویداد
-            await Task.Delay(50, cancellationToken);
-            
-            // تأیید تکمیل وظیفه
             await _eventBus.PublishAsync(new ElementCompleted
             {
                 ProcessInstanceId = processInstanceId,
@@ -560,27 +485,27 @@ public class BpmnProcessorService
         if (string.IsNullOrEmpty(processInstanceId))
             throw new ArgumentException("Process instance ID cannot be empty", nameof(processInstanceId));
             
-        var state = await GetProcessInstanceStateAsync(processInstanceId, cancellationToken);
+        var (state, version) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(processInstanceId, cancellationToken);
+        if (state == null)
+            throw new BpmnProcessorException($"Process instance {processInstanceId} not found");
         
         if (state.Status == ProcessStatus.Completed || state.Status == ProcessStatus.Deleted)
             throw new BpmnProcessorException($"Process instance {processInstanceId} is already terminated");
             
         try
         {
+            // Update state
+            state.Status = ProcessStatus.Deleted;
+            state.ActiveElements.Clear();
+            
+            // Save updated state
+            await _stateStore.SaveStateAsync(processInstanceId, state, version + 1);
+            
             // انتشار رویداد حذف نمونه فرآیند
-            await _eventBus.PublishAsync(new ProcessInstanceDeleting
+            await _eventBus.PublishAsync(new ProcessInstanceDeleted
             {
                 ProcessInstanceId = processInstanceId,
                 Reason = reason ?? "Manual termination"
-            }, cancellationToken);
-            
-            // کمی صبر برای پردازش رویداد
-            await Task.Delay(50, cancellationToken);
-            
-            // تأیید حذف نمونه فرآیند
-            await _eventBus.PublishAsync(new ProcessInstanceDeleted
-            {
-                ProcessInstanceId = processInstanceId
             }, cancellationToken);
             
             _logger.LogInformation("Terminated process instance {ProcessInstanceId} with reason: {Reason}", 
@@ -635,6 +560,16 @@ public class BpmnProcessorService
         // در پیاده‌سازی واقعی، این روش باید با استفاده از مدل BPMN، مسیرهای خروجی را استخراج کند
         // برای سادگی، در اینجا یک لیست خالی برمی‌گردانیم
         return new List<string>();
+    }
+
+    private List<BpmnStartEvent> FindStartEvents(BpmnProcess process)
+    {
+        if (process?.Items == null || !process.Items.Any())
+            return new List<BpmnStartEvent>();
+            
+        return process.Items
+            .OfType<BpmnStartEvent>()
+            .ToList();
     }
 }
 

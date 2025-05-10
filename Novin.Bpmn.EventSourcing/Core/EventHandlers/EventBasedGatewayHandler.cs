@@ -12,7 +12,7 @@ namespace Novin.Bpmn.EventSourcing.Core.EventHandlers;
 /// <summary>
 /// پردازش‌کننده رویدادهای مرتبط با گیت‌وی مبتنی بر رویداد (Event-Based)
 /// </summary>
-public class EventBasedGatewayHandler : BaseEventHandler<ElementActivated>
+public class EventBasedGatewayHandler : BaseEventHandler<ElementProcessing>
 {
     /// <summary>
     /// ایجاد یک نمونه جدید از پردازش‌کننده گیت‌وی مبتنی بر رویداد
@@ -29,7 +29,7 @@ public class EventBasedGatewayHandler : BaseEventHandler<ElementActivated>
     }
 
     /// <inheritdoc />
-    protected override async Task ProcessEventAsync(ElementActivated @event, CancellationToken cancellationToken = default)
+    protected override async Task ProcessEventAsync(ElementProcessing @event, CancellationToken cancellationToken = default)
     {
         // فقط پردازش المان‌های گیت‌وی مبتنی بر رویداد
         if (@event.ElementType != "bpmn:EventBasedGateway")
@@ -37,7 +37,7 @@ public class EventBasedGatewayHandler : BaseEventHandler<ElementActivated>
             return;
         }
 
-        Logger.LogDebug("Processing event-based gateway activation for {ElementId} in process {ProcessInstanceId}",
+        Logger.LogDebug("Processing event-based gateway for {ElementId} in process {ProcessInstanceId}",
             @event.ElementId, @event.ProcessInstanceId);
 
         // دریافت وضعیت فعلی فرآیند
@@ -54,7 +54,7 @@ public class EventBasedGatewayHandler : BaseEventHandler<ElementActivated>
     }
 
     private async Task HandleEventBasedGatewayAsync(
-        ElementActivated @event,
+        ElementProcessing @event,
         BpmnProcessState state,
         long version,
         CancellationToken cancellationToken)
@@ -92,15 +92,13 @@ public class EventBasedGatewayHandler : BaseEventHandler<ElementActivated>
         
         // ذخیره وضعیت
         await StateStore.SaveStateAsync(@event.ProcessInstanceId, state, version);
-        
-        // هیچ رویداد تکمیلی ارسال نمی‌کنیم، زیرا گیت‌وی مبتنی بر رویداد برای تکمیل باید منتظر یک رویداد باشد
     }
 }
 
 /// <summary>
 /// پردازش‌کننده رویدادهای میانی پس از گیت‌وی مبتنی بر رویداد
 /// </summary>
-public class IntermediateEventAfterEventBasedGatewayHandler : BaseEventHandler<ElementActivated>
+public class IntermediateEventAfterEventBasedGatewayHandler : BaseEventHandler<ElementProcessing>
 {
     /// <summary>
     /// ایجاد یک نمونه جدید از پردازش‌کننده رویدادهای میانی پس از گیت‌وی مبتنی بر رویداد
@@ -117,7 +115,7 @@ public class IntermediateEventAfterEventBasedGatewayHandler : BaseEventHandler<E
     }
 
     /// <inheritdoc />
-    protected override async Task ProcessEventAsync(ElementActivated @event, CancellationToken cancellationToken = default)
+    protected override async Task ProcessEventAsync(ElementProcessing @event, CancellationToken cancellationToken = default)
     {
         // فقط پردازش رویدادهای میانی
         if (!IsIntermediateEvent(@event.ElementType))
@@ -125,7 +123,7 @@ public class IntermediateEventAfterEventBasedGatewayHandler : BaseEventHandler<E
             return;
         }
 
-        Logger.LogDebug("Processing intermediate event activation for {ElementId} in process {ProcessInstanceId}",
+        Logger.LogDebug("Processing intermediate event for {ElementId} in process {ProcessInstanceId}",
             @event.ElementId, @event.ProcessInstanceId);
 
         // دریافت وضعیت فعلی فرآیند
@@ -179,7 +177,7 @@ public class IntermediateEventAfterEventBasedGatewayHandler : BaseEventHandler<E
     }
 
     private async Task HandleIntermediateEventAfterEventBasedGatewayAsync(
-        ElementActivated @event,
+        ElementProcessing @event,
         BpmnProcessState state,
         long version,
         CancellationToken cancellationToken)
@@ -202,7 +200,6 @@ public class IntermediateEventAfterEventBasedGatewayHandler : BaseEventHandler<E
         }
         
         // تمام رویدادهای دیگر فعال شده پس از این گیت‌وی را غیرفعال می‌کنیم
-        // در پیاده‌سازی واقعی، باید این المان‌ها را خاتمه دهیم (Terminate)
         var eventInfo = state.EventBasedGateways[gatewayId];
         eventInfo.IsActive = false;
         eventInfo.SelectedEventId = @event.ElementId;
@@ -210,17 +207,16 @@ public class IntermediateEventAfterEventBasedGatewayHandler : BaseEventHandler<E
         // ذخیره وضعیت
         await StateStore.SaveStateAsync(@event.ProcessInstanceId, state, version);
         
-        // انتشار رویداد غیرفعال‌سازی برای سایر رویدادها
+        // انتشار رویداد خاتمه برای سایر رویدادها
         foreach (var targetId in eventInfo.EventTargets)
         {
             if (targetId != @event.ElementId)
             {
-                await EventBus.PublishAsync(new ElementTerminating
+                await EventBus.PublishAsync(new ElementTerminated
                 {
                     ProcessInstanceId = @event.ProcessInstanceId,
                     ElementId = targetId,
-                    ElementType = "bpmn:IntermediateCatchEvent", // این یک مقدار پیش‌فرض است
-                    Reason = "Another event was triggered after event-based gateway"
+                    ElementType = "bpmn:IntermediateCatchEvent" // این یک مقدار پیش‌فرض است
                 }, cancellationToken);
             }
         }

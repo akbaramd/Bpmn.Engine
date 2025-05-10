@@ -34,4 +34,6 @@ public abstract record BpmnEvent : IBpmnEvent
     
     /// <inheritdoc />
     public int ProcessVersion { get; init; } = 1;
+
+
 } 

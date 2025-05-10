@@ -171,6 +171,7 @@ public record ProcessInstanceDeleted : ProcessEvent
 {
     /// <inheritdoc/>
     public new string Intent { get; init; } = "DELETED";
+    public new string Reason { get; init; } 
 }
 
 /// <summary>

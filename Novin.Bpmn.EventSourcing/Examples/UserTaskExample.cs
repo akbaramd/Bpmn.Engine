@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Novin.Bpmn.EventSourcing.Contracts;
 using Novin.Bpmn.EventSourcing.Core;
 using Novin.Bpmn.EventSourcing.Core.Models;
+using Novin.Bpmn.EventSourcing.Events;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -105,236 +106,340 @@ public class UserTaskExample
   <escalation id=""Escalation_High_Priority"" name=""HighPriorityEscalation"" escalationCode=""HIGH_PRIORITY"" />
 </definitions>";
 
+    private const string DeploymentKey = "user-task-flow-with-boundaries";
+    private const int TaskCreationDelay = 2000;
+    private const int TaskTransitionDelay = 1000;
+    private const int TimerBoundaryDelay = 12000;
+    private const int MaxRetries = 3;
+    private const int RetryDelay = 1000;
+
     /// <summary>
     /// Run the user task example
     /// </summary>
     public static async Task RunAsync()
     {
-        // Create and start the host with all required services
-        var host = CreateHostBuilder().Build();
-        await host.StartAsync();
-        
-        var logger = host.Services.GetRequiredService<ILogger<UserTaskExample>>();
-        var bpmnProcessor = host.Services.GetRequiredService<BpmnProcessorService>();
-        var userTaskService = host.Services.GetRequiredService<IUserTaskService>();
-        var eventBus = host.Services.GetRequiredService<IEventBus>();
-
-        logger.LogInformation("Starting User Task Example with Boundary Events");
-
+        IHost? host = null;
         try
         {
-            // Deploy the process definition
-            string deploymentKey = "user-task-flow-with-boundaries";
-            string definitionId = await bpmnProcessor.DeployProcessDefinitionAsync(
-                deploymentKey, 
-                UserTaskFlowXml,
-                "User Task Workflow Example with Boundary Events");
-                
-            logger.LogInformation("Deployed process definition with ID {ProcessDefinitionId}", 
-                definitionId);
-
-            // Create a new process instance
-            var processInstanceId = await bpmnProcessor.StartProcessInstanceAsync(
-                deploymentKey, 
-                null,
-                new Dictionary<string, object> 
-                { 
-                    { "requester", "John Doe" },
-                    { "priority", 1 }
-                });
-                
-            logger.LogInformation("Created process instance with ID {ProcessInstanceId}", 
-                processInstanceId);
-
-            // Short pause to ensure tasks are created
-            await Task.Delay(2000);
-
-            // Display process tasks
-            var tasks = await userTaskService.GetTasksByProcessInstanceAsync(processInstanceId);
+            // Create and start the host with all required services
+            host = CreateHostBuilder().Build();
+            await host.StartAsync();
             
-            logger.LogInformation("Found {TaskCount} tasks for the process", tasks.Count);
-            foreach (var task in tasks)
-            {
-                logger.LogInformation("Task: {TaskId}, Title: {Title}, Status: {Status}", 
-                    task.TaskId, task.TaskTitle, task.Status);
-            }
+            var logger = host.Services.GetRequiredService<ILogger<UserTaskExample>>();
+            var bpmnProcessor = host.Services.GetRequiredService<BpmnProcessorService>();
+            var userTaskService = host.Services.GetRequiredService<IUserTaskService>();
+            var eventBus = host.Services.GetRequiredService<IEventBus>();
 
-            if (tasks.Count > 0)
-            {
-                var firstTask = tasks[0];
-                
-                // Assign task to a user
-                logger.LogInformation("Assigning task {TaskId} to user user1", firstTask.TaskId);
-                await userTaskService.AssignTaskAsync(firstTask.TaskId, "user1", "John Smith");
-                
-                // Wait for the non-interrupting timer boundary event to trigger
-                logger.LogInformation("Waiting for non-interrupting timer boundary event (10 seconds)...");
-                await Task.Delay(12000); // Wait a bit more than the 10 seconds timer
-                
-                logger.LogInformation("Timer should have triggered. The main task should still be active.");
-                
-                // Check if the first task is still active (it should be, as the boundary event is non-interrupting)
-                var activeTask = await userTaskService.GetTaskByIdAsync(firstTask.TaskId);
-                logger.LogInformation("First task status after timer: {Status}", activeTask?.Status);
-                
-                // Complete the first task
-                logger.LogInformation("Completing task {TaskId}", firstTask.TaskId);
-                await userTaskService.CompleteTaskAsync(
-                    firstTask.TaskId, 
-                    "user1", 
-                    new Dictionary<string, object>
-                    {
-                        { "approved", true },
-                        { "comment", "Request approved" }
-                    });
-                
-                // Short pause to ensure task completion is processed
-                await Task.Delay(1000);
-                
-                // Check for new tasks (second task)
-                tasks = await userTaskService.GetTasksByProcessInstanceAsync(processInstanceId);
-                
-                logger.LogInformation("After first task completion, {TaskCount} active tasks remain", 
-                    tasks.Count);
-                
-                if (tasks.Count > 0)
-                {
-                    var secondTask = tasks[0]; // Now the second task is the first active one
-                    
-                    logger.LogInformation("Assigning task {TaskId} to user manager1", secondTask.TaskId);
-                    await userTaskService.AssignTaskAsync(secondTask.TaskId, "manager1", "Manager One");
-                    
-                    // Trigger the interrupting message boundary event
-                    logger.LogInformation("Triggering interrupting message boundary event...");
-                    await eventBus.PublishAsync(new Events.MessageReceivedEvent
-                    {
-                        EventId = Guid.NewGuid(),
-                        ProcessInstanceId = processInstanceId,
-                        MessageEventId = Guid.NewGuid().ToString(),
-                        MessageName = "UrgentCancellation",
-                        MessageContent = new Dictionary<string, object>
-                        {
-                            { "cancelReason", "Urgent business reason" }
-                        },
-                        Intent = "RECEIVED",
-                        Timestamp = DateTime.UtcNow
-                    });
-                    
-                    // Wait for event processing
-                    await Task.Delay(2000);
-                    
-                    // Check if the second task was cancelled (it should be, as the boundary event is interrupting)
-                    var cancelledTask = await userTaskService.GetTaskByIdAsync(secondTask.TaskId);
-                    logger.LogInformation("Second task status after message: {Status}", cancelledTask?.Status);
-                    
-                    // The process should have followed the cancellation path
-                    // Check process state
-                    var processState = await bpmnProcessor.GetProcessInstanceStateAsync(processInstanceId);
-                    
-                    logger.LogInformation("Process state after cancellation: Active elements: {ActiveCount}, Status: {Status}",
-                        processState.ActiveElements.Count,
-                        processState.Status);
-                }
-                
-                // Demonstrate the escalation boundary event with a new process instance
-                logger.LogInformation("Creating a new process instance to demonstrate escalation boundary event");
-                
-                var escalationProcessId = await bpmnProcessor.StartProcessInstanceAsync(
-                    deploymentKey, 
-                    null,
-                    new Dictionary<string, object> 
-                    { 
-                        { "requester", "Jane Smith" },
-                        { "priority", 3 }
-                    });
-                
-                // Short pause to ensure tasks are created
-                await Task.Delay(2000);
-                
-                // Get tasks for the new process
-                var escalationTasks = await userTaskService.GetTasksByProcessInstanceAsync(escalationProcessId);
-                
-                // Complete first task
-                if (escalationTasks.Count > 0)
-                {
-                    await userTaskService.CompleteTaskAsync(
-                        escalationTasks[0].TaskId,
-                        "user2",
-                        new Dictionary<string, object> { { "approved", true } });
-                }
-                
-                // Wait for task transition
-                await Task.Delay(1000);
-                
-                // Get second task and complete it
-                escalationTasks = await userTaskService.GetTasksByProcessInstanceAsync(escalationProcessId);
-                if (escalationTasks.Count > 0)
-                {
-                    await userTaskService.CompleteTaskAsync(
-                        escalationTasks[0].TaskId,
-                        "manager2",
-                        new Dictionary<string, object> { { "approved", true } });
-                }
-                
-                // Wait for task transition
-                await Task.Delay(1000);
-                
-                // Get third task
-                escalationTasks = await userTaskService.GetTasksByProcessInstanceAsync(escalationProcessId);
-                if (escalationTasks.Count > 0)
-                {
-                    var thirdTask = escalationTasks[0];
-                    
-                    // Trigger the escalation boundary event
-                    logger.LogInformation("Triggering interrupting escalation boundary event...");
-                    
-                    // For escalation, we need to publish an escalation event
-                    await eventBus.PublishAsync(new Events.MessageReceivedEvent
-                    {
-                        EventId = Guid.NewGuid(),
-                        ProcessInstanceId = escalationProcessId,
-                        MessageEventId = Guid.NewGuid().ToString(),
-                        MessageName = "escalation:HIGH_PRIORITY",
-                        MessageContent = new Dictionary<string, object>
-                        {
-                            { "escalationReason", "Executive attention required" }
-                        },
-                        Intent = "TRIGGERED",
-                        Timestamp = DateTime.UtcNow
-                    });
-                    
-                    // Wait for event processing
-                    await Task.Delay(2000);
-                    
-                    // Check if the third task was cancelled and escalated
-                    var escalatedTask = await userTaskService.GetTaskByIdAsync(thirdTask.TaskId);
-                    logger.LogInformation("Third task status after escalation: {Status}", escalatedTask?.Status);
-                    
-                    // Check for the executive review task (the escalation path)
-                    var executiveTasks = await userTaskService.GetTasksByProcessInstanceAsync(escalationProcessId);
-                    
-                    logger.LogInformation("Tasks after escalation: {Count}", executiveTasks.Count);
-                    foreach (var task in executiveTasks)
-                    {
-                        logger.LogInformation("Post-escalation task: {TaskId}, Title: {Title}", 
-                            task.TaskId, task.TaskTitle);
-                    }
-                }
+            logger.LogInformation("Starting User Task Example with Boundary Events");
 
-                var process = await bpmnProcessor.GetProcessInstanceStateAsync(processInstanceId);
-            }
+            // Deploy the process definition
+            string definitionId = await DeployProcessDefinitionAsync(bpmnProcessor, logger);
+            
+            // Run the normal flow example
+            await RunNormalFlowExampleAsync(bpmnProcessor, userTaskService, eventBus, logger);
+            
+            // Run the escalation flow example
+            await RunEscalationFlowExampleAsync(bpmnProcessor, userTaskService, eventBus, logger);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error executing user task example");
+            if (host?.Services.GetService<ILogger<UserTaskExample>>() is ILogger<UserTaskExample> logger)
+            {
+                logger.LogError(ex, "Error executing user task example");
+            }
+            throw;
         }
         finally
         {
-            // Stop the host
-            await host.StopAsync();
+            if (host != null)
+            {
+                await host.StopAsync();
+            }
         }
+    }
 
-        logger.LogInformation("User Task Example with Boundary Events completed");
+    private static async Task<string> DeployProcessDefinitionAsync(
+        BpmnProcessorService bpmnProcessor,
+        ILogger<UserTaskExample> logger)
+    {
+        string definitionId = await bpmnProcessor.DeployProcessDefinitionAsync(
+            DeploymentKey, 
+            UserTaskFlowXml,
+            "User Task Workflow Example with Boundary Events");
+            
+        logger.LogInformation("Deployed process definition with ID {ProcessDefinitionId}", 
+            definitionId);
+            
+        return definitionId;
+    }
+
+    private static async Task RunNormalFlowExampleAsync(
+        BpmnProcessorService bpmnProcessor,
+        IUserTaskService userTaskService,
+        IEventBus eventBus,
+        ILogger<UserTaskExample> logger)
+    {
+        // Create a new process instance with retry logic
+        var processInstanceId = await StartProcessInstanceWithRetryAsync(
+            bpmnProcessor,
+            new Dictionary<string, object> 
+            { 
+                { "requester", "John Doe" },
+                { "priority", 1 }
+            },
+            logger);
+            
+        logger.LogInformation("Created process instance with ID {ProcessInstanceId}", 
+            processInstanceId);
+
+        // Wait for tasks to be created
+        await Task.Delay(TaskCreationDelay);
+
+        // Get and display initial tasks
+        var tasks = await GetAndDisplayTasksAsync(userTaskService, processInstanceId, logger);
+        
+        if (tasks.Count > 0)
+        {
+            var firstTask = tasks[0];
+            
+            // Handle first task
+            await HandleFirstTaskAsync(userTaskService, firstTask, logger);
+            
+            // Handle second task with message boundary
+            await HandleSecondTaskWithMessageBoundaryAsync(
+                bpmnProcessor, userTaskService, eventBus, processInstanceId, logger);
+        }
+    }
+
+    private static async Task<string> StartProcessInstanceWithRetryAsync(
+        BpmnProcessorService bpmnProcessor,
+        Dictionary<string, object> variables,
+        ILogger<UserTaskExample> logger)
+    {
+        int retryCount = 0;
+        while (true)
+        {
+            try
+            {
+                return await bpmnProcessor.StartProcessInstanceAsync(
+                    DeploymentKey,
+                    null,
+                    variables);
+            }
+            catch (Exception ex) when (ex.Message.Contains("Concurrency conflict") && retryCount < MaxRetries)
+            {
+                retryCount++;
+                logger.LogWarning("Concurrency conflict detected, retry {RetryCount} of {MaxRetries}", 
+                    retryCount, MaxRetries);
+                await Task.Delay(RetryDelay * retryCount);
+            }
+        }
+    }
+
+    private static async Task<List<UserTaskInfo>> GetAndDisplayTasksAsync(
+        IUserTaskService userTaskService,
+        string processInstanceId,
+        ILogger<UserTaskExample> logger)
+    {
+        var tasks = await userTaskService.GetTasksByProcessInstanceAsync(processInstanceId);
+        
+        logger.LogInformation("Found {TaskCount} tasks for the process", tasks.Count);
+        foreach (var task in tasks)
+        {
+            logger.LogInformation("Task: {TaskId}, Title: {Title}, Status: {Status}", 
+                task.TaskId, task.TaskTitle, task.Status);
+        }
+        
+        return tasks;
+    }
+
+    private static async Task HandleFirstTaskAsync(
+        IUserTaskService userTaskService,
+        UserTaskInfo task,
+        ILogger<UserTaskExample> logger)
+    {
+        // Assign task to a user
+        logger.LogInformation("Assigning task {TaskId} to user user1", task.TaskId);
+        await userTaskService.AssignTaskAsync(task.TaskId, "user1", "John Smith");
+        
+        // Wait for the non-interrupting timer boundary event to trigger
+        logger.LogInformation("Waiting for non-interrupting timer boundary event (10 seconds)...");
+        await Task.Delay(TimerBoundaryDelay);
+        
+        logger.LogInformation("Timer should have triggered. The main task should still be active.");
+        
+        // Check if the first task is still active
+        var activeTask = await userTaskService.GetTaskByIdAsync(task.TaskId);
+        logger.LogInformation("First task status after timer: {Status}", activeTask?.Status);
+        
+        // Complete the first task
+        logger.LogInformation("Completing task {TaskId}", task.TaskId);
+        await userTaskService.CompleteTaskAsync(
+            task.TaskId, 
+            "user1", 
+            new Dictionary<string, object>
+            {
+                { "approved", true },
+                { "comment", "Request approved" }
+            });
+        
+        // Wait for task completion to be processed
+        await Task.Delay(TaskTransitionDelay);
+    }
+
+    private static async Task HandleSecondTaskWithMessageBoundaryAsync(
+        BpmnProcessorService bpmnProcessor,
+        IUserTaskService userTaskService,
+        IEventBus eventBus,
+        string processInstanceId,
+        ILogger<UserTaskExample> logger)
+    {
+        // Get tasks after first task completion
+        var tasks = await userTaskService.GetTasksByProcessInstanceAsync(processInstanceId);
+        
+        logger.LogInformation("After first task completion, {TaskCount} active tasks remain", 
+            tasks.Count);
+        
+        if (tasks.Count > 0)
+        {
+            var secondTask = tasks[0];
+            
+            logger.LogInformation("Assigning task {TaskId} to user manager1", secondTask.TaskId);
+            await userTaskService.AssignTaskAsync(secondTask.TaskId, "manager1", "Manager One");
+            
+            // Trigger the interrupting message boundary event
+            logger.LogInformation("Triggering interrupting message boundary event...");
+            await eventBus.PublishAsync(new ElementProcessing
+            {
+                EventId = Guid.NewGuid(),
+                ProcessInstanceId = processInstanceId,
+                ElementId = "MessageBoundary_1",
+                ElementType = "boundaryEvent",
+                Progress = 100,
+                ProcessingDetails = "Message boundary event triggered",
+                Timestamp = DateTime.UtcNow
+            });
+            
+            // Wait for event processing
+            await Task.Delay(TaskTransitionDelay);
+            
+            // Check if the second task was cancelled
+            var cancelledTask = await userTaskService.GetTaskByIdAsync(secondTask.TaskId);
+            logger.LogInformation("Second task status after message: {Status}", cancelledTask?.Status);
+            
+            // Check process state
+            var processState = await bpmnProcessor.GetProcessInstanceStateAsync(processInstanceId);
+            
+            logger.LogInformation("Process state after cancellation: Active elements: {ActiveCount}, Status: {Status}",
+                processState.ActiveElements.Count,
+                processState.Status);
+        }
+    }
+
+    private static async Task RunEscalationFlowExampleAsync(
+        BpmnProcessorService bpmnProcessor,
+        IUserTaskService userTaskService,
+        IEventBus eventBus,
+        ILogger<UserTaskExample> logger)
+    {
+        logger.LogInformation("Creating a new process instance to demonstrate escalation boundary event");
+        
+        var escalationProcessId = await StartProcessInstanceWithRetryAsync(
+            bpmnProcessor,
+            new Dictionary<string, object> 
+            { 
+                { "requester", "Jane Smith" },
+                { "priority", 3 }
+            },
+            logger);
+        
+        // Wait for tasks to be created
+        await Task.Delay(TaskCreationDelay);
+        
+        // Complete first two tasks
+        await CompleteFirstTwoTasksAsync(userTaskService, escalationProcessId, logger);
+        
+        // Handle escalation
+        await HandleEscalationAsync(
+            bpmnProcessor, userTaskService, eventBus, escalationProcessId, logger);
+    }
+
+    private static async Task CompleteFirstTwoTasksAsync(
+        IUserTaskService userTaskService,
+        string processInstanceId,
+        ILogger<UserTaskExample> logger)
+    {
+        // Get and complete first task
+        var tasks = await userTaskService.GetTasksByProcessInstanceAsync(processInstanceId);
+        if (tasks.Count > 0)
+        {
+            await userTaskService.CompleteTaskAsync(
+                tasks[0].TaskId,
+                "user2",
+                new Dictionary<string, object> { { "approved", true } });
+        }
+        
+        // Wait for task transition
+        await Task.Delay(TaskTransitionDelay);
+        
+        // Get and complete second task
+        tasks = await userTaskService.GetTasksByProcessInstanceAsync(processInstanceId);
+        if (tasks.Count > 0)
+        {
+            await userTaskService.CompleteTaskAsync(
+                tasks[0].TaskId,
+                "manager2",
+                new Dictionary<string, object> { { "approved", true } });
+        }
+        
+        // Wait for task transition
+        await Task.Delay(TaskTransitionDelay);
+    }
+
+    private static async Task HandleEscalationAsync(
+        BpmnProcessorService bpmnProcessor,
+        IUserTaskService userTaskService,
+        IEventBus eventBus,
+        string processInstanceId,
+        ILogger<UserTaskExample> logger)
+    {
+        // Get third task
+        var tasks = await userTaskService.GetTasksByProcessInstanceAsync(processInstanceId);
+        if (tasks.Count > 0)
+        {
+            var thirdTask = tasks[0];
+            
+            // Trigger the escalation boundary event
+            logger.LogInformation("Triggering interrupting escalation boundary event...");
+            
+            await eventBus.PublishAsync(new ElementProcessing
+            {
+                EventId = Guid.NewGuid(),
+                ProcessInstanceId = processInstanceId,
+                ElementId = "EscalationBoundary_1",
+                ElementType = "boundaryEvent",
+                Progress = 100,
+                ProcessingDetails = "Escalation boundary event triggered",
+                Timestamp = DateTime.UtcNow
+            });
+            
+            // Wait for event processing
+            await Task.Delay(TaskTransitionDelay);
+            
+            // Check if the third task was cancelled and escalated
+            var escalatedTask = await userTaskService.GetTaskByIdAsync(thirdTask.TaskId);
+            logger.LogInformation("Third task status after escalation: {Status}", escalatedTask?.Status);
+            
+            // Check for the executive review task
+            var executiveTasks = await userTaskService.GetTasksByProcessInstanceAsync(processInstanceId);
+            
+            logger.LogInformation("Tasks after escalation: {Count}", executiveTasks.Count);
+            foreach (var task in executiveTasks)
+            {
+                logger.LogInformation("Post-escalation task: {TaskId}, Title: {Title}", 
+                    task.TaskId, task.TaskTitle);
+            }
+        }
     }
     
     /// <summary>
@@ -353,12 +458,8 @@ public class UserTaskExample
             {
                 // Register Event Sourcing services
                 services.AddBpmnEventSourcing(options => {
-                    // Use auto-registration from the assembly
                     options.AutoRegisterEventHandlers = true;
                 });
-                
-                // No need to register handlers explicitly now, as they're auto-registered
-                // from the Novin.Bpmn.EventSourcing assembly
             });
     }
 } 

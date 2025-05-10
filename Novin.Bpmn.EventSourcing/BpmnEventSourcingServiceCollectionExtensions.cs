@@ -69,18 +69,13 @@ public static class BpmnEventSourcingServiceCollectionExtensions
         if (!options.AutoRegisterEventHandlers)
         {
             // ثبت پردازش‌کننده‌های رویداد پایه
-            services.AddTransient<IBpmnEventHandler<ElementActivated>, ElementActivatedHandler>();
+            services.AddTransient<IBpmnEventHandler<ElementCreated>, ElementCreatedHandler>();
             services.AddTransient<IBpmnEventHandler<ElementCompleted>, ElementCompletedHandler>();
+            services.AddTransient<IBpmnEventHandler<ElementProcessing>, ElementProcessingHandler>();
             
             // ثبت هندلرهای وظایف کاربری
-            services.AddTransient<IBpmnEventHandler<UserTaskCompletedEvent>, UserTaskCompletedHandler>();
             
             // ثبت پردازش‌کننده‌های گیت‌وی
-            services.AddTransient<IBpmnEventHandler<ElementActivated>, ParallelGatewayHandler>();
-            services.AddTransient<IBpmnEventHandler<ElementActivated>, InclusiveGatewayHandler>();
-            services.AddTransient<IBpmnEventHandler<ElementActivated>, ExclusiveGatewayHandler>();
-            services.AddTransient<IBpmnEventHandler<ElementActivated>, EventBasedGatewayHandler>();
-            services.AddTransient<IBpmnEventHandler<ElementActivated>, IntermediateEventAfterEventBasedGatewayHandler>();
         }
         else
         {

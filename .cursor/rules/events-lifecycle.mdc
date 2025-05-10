@@ -1,0 +1,63 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# BPMN Event Lifecycle: Created vs Completed
+
+This document explains the meaning of the 'created' and 'completed' states in BPMN event classes, for both elements and processes.
+
+---
+
+## Created
+- **ElementCreated**: Raised when a BPMN element (such as a task, event, or gateway) is instantiated in a process instance. This marks the moment the element enters the process execution context, but before any activation or work begins.
+- **ProcessCreated**: Raised when a new process instance is created. The process definition is loaded and an instance is registered, but execution has not started yet.
+
+**Summary:**
+> 'Created' means the object (element or process) now exists in the engine, but is not yet active or running.
+
+---
+
+## Processing
+- **ElementProcessing**: Raised while the BPMN element is actively executing its work. For example, a script task is running its code, or a service task is calling an external service. This state indicates that the element is in the middle of its execution lifecycle.
+
+**Summary:**
+> 'Processing' means the element is currently executing its assigned work or logic.
+
+---
+
+## Completed
+- **ElementCompleted**: Raised when a BPMN element has finished its execution and all outgoing flows have been taken. For tasks, this means the work is done; for gateways, the split/join logic is resolved; for events, the event has been fully processed.
+- **ProcessCompleted**: Raised when the process instance has reached an end event and all execution paths are finished. The process is now considered ended and resources can be released.
+
+**Summary:**
+> 'Completed' means the object (element or process) has finished all its work and responsibilities in the process, and its lifecycle is over.
+
+---
+
+## Terminated
+- **ElementTerminated**: Raised when a BPMN element is forcefully terminated, often due to a process cancellation or a boundary terminate event. This state indicates that the element's execution was stopped before it could complete normally.
+
+**Summary:**
+> 'Terminated' means the element's execution was stopped prematurely, and it will not complete its normal lifecycle.
+
+---
+
+## Canceled
+- **ElementCanceled**: Raised when a BPMN element is canceled, typically due to a boundary cancel event or a process-level cancellation. This state indicates that the element was intentionally canceled and will not proceed to completion.
+
+**Summary:**
+> 'Canceled' means the element was intentionally canceled and will not complete its normal lifecycle.
+
+---
+
+**Note:**
+- These states are part of the standard BPMN execution lifecycle and are essential for tracking progress, auditing, and process monitoring.
+- Other states, such as 'Failed' or 'Suspended', may also occur depending on the specific BPMN engine implementation and process design.
+
+
+
+
+
+
+
