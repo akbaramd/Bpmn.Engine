@@ -24,23 +24,5 @@ public interface IEventBus
     /// <param name="cancellationToken">توکن لغو</param>
     Task PublishAsync<TEvent>(TEvent @event, CancellationToken cancellationToken = default) where TEvent : IBpmnEvent;
     
-    /// <summary>
-    /// اشتراک در رویدادها با نوع مشخص
-    /// </summary>
-    /// <typeparam name="TEvent">نوع رویداد</typeparam>
-    /// <param name="handler">پردازش‌کننده رویداد</param>
-    /// <returns>شناسه اشتراک</returns>
-    string Subscribe<TEvent>(Func<TEvent, Task> handler) where TEvent : IBpmnEvent;
-    
-    /// <summary>
-    /// لغو اشتراک از رویدادها
-    /// </summary>
-    /// <typeparam name="TEvent">نوع رویداد</typeparam>
-    void Unsubscribe<TEvent>() where TEvent : IBpmnEvent;
-    
-    /// <summary>
-    /// لغو اشتراک با شناسه مشخص
-    /// </summary>
-    /// <param name="subscriptionId">شناسه اشتراک</param>
-    void Unsubscribe(string subscriptionId);
+
 } 

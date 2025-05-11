@@ -30,17 +30,17 @@ public enum ProcessStatus
     Terminated = 3,
     
     /// <summary>
+    /// خغلق شده
+    /// </summary>
+    Cancelled = 4,
+    
+    /// <summary>
     /// شکست خورده
     /// </summary>
-    Failed = 4,
+    Failed = 5,
     
     /// <summary>
     /// تعلیق شده
     /// </summary>
-    Suspended = 5,
-    
-    /// <summary>
-    /// حذف شده
-    /// </summary>
-    Deleted = 6
+    Suspended = 6
 }

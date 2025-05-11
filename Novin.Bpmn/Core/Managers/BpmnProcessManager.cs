@@ -813,7 +813,7 @@ public class BpmnProcessManager : IBpmnProcessManager
         {
             return ProcessInstanceStatus.Completed;
         }
-        else if (instance.Variables.ContainsKey("error") && instance.Variables["error"] != null)
+        else if (instance.Variables.error != null)
         {
             return ProcessInstanceStatus.Error;
         }

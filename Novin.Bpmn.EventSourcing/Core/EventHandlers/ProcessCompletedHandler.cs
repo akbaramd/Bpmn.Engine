@@ -19,18 +19,18 @@ public class ProcessCompletedHandler : IBpmnEventHandler<ProcessCompletedEvent>
     private readonly ILogger<ProcessCompletedHandler> _logger;
     private readonly IStateStore _stateStore;
     private readonly IEventBus _eventBus;
-    private readonly IBpmnDefinitionStorage _definitionStorage;
+    private readonly IDefinitionStore _definitionStore;
     
     public ProcessCompletedHandler(
         ILogger<ProcessCompletedHandler> logger,
         IStateStore stateStore,
         IEventBus eventBus,
-        IBpmnDefinitionStorage definitionStorage)
+        IDefinitionStore definitionStore)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
-        _definitionStorage = definitionStorage ?? throw new ArgumentNullException(nameof(definitionStorage));
+        _definitionStore = definitionStore ?? throw new ArgumentNullException(nameof(definitionStore));
     }
     
     public async Task HandleAsync(ProcessCompletedEvent @event, CancellationToken cancellationToken = default)
@@ -45,8 +45,8 @@ public class ProcessCompletedHandler : IBpmnEventHandler<ProcessCompletedEvent>
             _logger.LogDebug("Processing ProcessInstanceCompleted event for process instance {ProcessInstanceId}", 
                 @event.ProcessInstanceId);
             
-            // Get current state
-            var state = await _stateStore.GetStateAsync<BpmnProcessState>(@event.ProcessInstanceId);
+            // Get current state with version
+            var (state, version) = await _stateStore.GetStateWithVersionAsync(@event.ProcessInstanceId);
             if (state == null)
             {
                 throw new InvalidOperationException($"Process instance state not found for {@event.ProcessInstanceId}");
@@ -56,8 +56,8 @@ public class ProcessCompletedHandler : IBpmnEventHandler<ProcessCompletedEvent>
             state.Status = ProcessStatus.Completed;
             state.ActiveElements.Clear();
             
-            // Save final state
-            await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, 1);
+            // Save final state with current version
+            await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, version);
             
 
             

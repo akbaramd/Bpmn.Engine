@@ -11,34 +11,6 @@ public abstract record ProcessEvent : BpmnEvent
 {
 }
 
-/// <summary>
-/// رویداد ایجاد نمونه فرآیند BPMN
-/// </summary>
-public record ProcessInstanceCreating : ProcessEvent
-{
-    /// <summary>
-    /// شناسه تعریف فرآیند
-    /// </summary>
-    public required string ProcessDefinitionId { get; init; }
-    
-    /// <summary>
-    /// کلید انتشار
-    /// </summary>
-    public required string DeploymentKey { get; init; }
-    
-    /// <summary>
-    /// XML تعریف BPMN
-    /// </summary>
-    public required string DefinitionXml { get; init; }
-    
-    /// <summary>
-    /// متغیرهای اولیه فرآیند
-    /// </summary>
-    public Dictionary<string, object>? InitialVariables { get; init; }
-    
-    /// <inheritdoc/>
-    public new string Intent { get; init; } = "CREATING";
-}
 
 /// <summary>
 /// رویداد ایجاد شدن نمونه فرآیند BPMN
@@ -103,6 +75,21 @@ public record ProcessInstanceStarting : ProcessEvent
 /// </summary>
 public record ProcessInstanceStarted : ProcessEvent
 {
+    /// <summary>
+    /// شناسه تعریف فرآیند
+    /// </summary>
+    public required string ProcessDefinitionId { get; init; }
+    
+    /// <summary>
+    /// کلید فرآیند
+    /// </summary>
+    public string? ProcessDefinitionKey { get; init; }
+    
+    /// <summary>
+    /// نسخه تعریف فرآیند
+    /// </summary>
+    public int ProcessDefinitionVersion { get; init; }
+    
     /// <inheritdoc/>
     public new string Intent { get; init; } = "STARTED";
 }
@@ -364,4 +351,34 @@ public record GatewayReadyEvent : BpmnEvent
     /// جریان‌های خروجی از دروازه
     /// </summary>
     public ICollection<string>? OutgoingFlowIds { get; init; }
+} 
+
+
+public record ProcessInstanceContinued : Events.BpmnEvent
+{
+    public string ProcessDefinitionId { get; init; } = string.Empty;
+    public string ProcessDefinitionKey { get; init; } = string.Empty;
+    public int DefinitionVersion { get; init; }
+}
+
+/// <summary>
+/// رویداد لغو فرآیند
+/// </summary>
+public record ProcessInstanceCancelled : Events.BpmnEvent
+{
+    public string ProcessDefinitionId { get; init; } = string.Empty;
+    public string ProcessDefinitionKey { get; init; } = string.Empty;
+    public int DefinitionVersion { get; init; }
+    public string? Reason { get; init; }
+}
+
+/// <summary>
+/// رویداد شروع مجدد فرآیند
+/// </summary>
+public record ProcessInstanceRestarted : Events.BpmnEvent
+{
+    public string ProcessDefinitionId { get; init; } = string.Empty;
+    public string ProcessDefinitionKey { get; init; } = string.Empty;
+    public int DefinitionVersion { get; init; }
+    public string? StartElementId { get; init; }
 } 

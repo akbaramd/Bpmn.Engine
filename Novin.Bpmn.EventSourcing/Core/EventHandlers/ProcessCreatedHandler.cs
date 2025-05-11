@@ -1,190 +1,157 @@
-using Microsoft.Extensions.Logging;
-using Novin.Bpmn.EventSourcing.Contracts;
-using Novin.Bpmn.EventSourcing.Core.Models;
-using Novin.Bpmn.EventSourcing.Events;
-using Novin.Bpmn.Models;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Novin.Bpmn.EventSourcing.Contracts;
+using Novin.Bpmn.EventSourcing.Events;
+using Novin.Bpmn.Models;
+using System.Collections.Generic;
+using System.Linq;
+using Novin.Bpmn.EventSourcing.Core.Models;
 
 namespace Novin.Bpmn.EventSourcing.Core.EventHandlers;
 
 /// <summary>
 /// Handles the creation of new process instances and activates start events
 /// </summary>
-public class ProcessCreatedHandler : IBpmnEventHandler<ProcessInstanceCreated>
+public class ProcessCreatedHandler : BaseEventHandler<ProcessInstanceCreated>
 {
-    private readonly ILogger<ProcessCreatedHandler> _logger;
-    private readonly IStateStore _stateStore;
     private readonly IEventBus _eventBus;
-    private readonly IBpmnDefinitionStorage _definitionStorage;
-    
+    private readonly ILogger<ProcessCreatedHandler> _logger;
+
     public ProcessCreatedHandler(
         ILogger<ProcessCreatedHandler> logger,
         IStateStore stateStore,
-        IEventBus eventBus,
-        IBpmnDefinitionStorage definitionStorage)
+        IEventStore eventStore,
+        IDefinitionStore definitionStore,
+        IEventBus eventBus)
+        : base(stateStore, eventStore, definitionStore, logger)
     {
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
-        _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
-        _definitionStorage = definitionStorage ?? throw new ArgumentNullException(nameof(definitionStorage));
+        _eventBus = eventBus;
+        _logger = logger;
     }
-    
-    public async Task HandleAsync(ProcessInstanceCreated @event, CancellationToken cancellationToken = default)
+
+    protected override async Task ProcessEventAsync(ProcessInstanceCreated @event, CancellationToken cancellationToken)
     {
-        if (@event == null)
-        {
-            throw new ArgumentNullException(nameof(@event));
-        }
-        
         try
         {
-            _logger.LogDebug("Processing ProcessInstanceCreated event for process instance {ProcessInstanceId}", 
-                @event.ProcessInstanceId);
-            
-            // Get BPMN definition
-            var definitions = _definitionStorage.GetParsedDefinition(@event.ProcessDefinitionKey);
-            if (definitions == null)
+            // Get process definition
+            var definition = await DefinitionStore.GetParsedDefinitionAsync(
+                @event.ProcessDefinitionKey,
+                xml => ParseBpmnXml(xml),
+                cancellationToken);
+
+            if (definition == null)
             {
-                throw new InvalidOperationException($"BPMN definition not found for deployment key {@event.ProcessDefinitionKey}");
+                throw new InvalidOperationException($"Process definition {@event.ProcessDefinitionKey} not found");
             }
-            
-            // Find process definition
-            var process = FindProcess(definitions, @event.ProcessDefinitionId);
+
+            // Find process
+            var process = FindProcess(definition, @event.ProcessDefinitionId);
             if (process == null)
             {
-                throw new InvalidOperationException($"Process definition {@event.ProcessDefinitionId} not found");
+                throw new InvalidOperationException($"Process {@event.ProcessDefinitionId} not found in definition");
             }
-            
-            // Find all start events
+
+            // Find start events
             var startEvents = FindStartEvents(process);
             if (!startEvents.Any())
             {
-                throw new InvalidOperationException($"No start events found in process {process.id}");
+                throw new InvalidOperationException($"No start events found in process {@event.ProcessDefinitionId}");
             }
-            
-            // Get current state
-            var state = await _stateStore.GetStateAsync<BpmnProcessState>(@event.ProcessInstanceId);
-            if (state == null)
+
+            // Create initial state
+            var state = new BpmnProcessState
             {
-                throw new InvalidOperationException($"Process instance state not found for {@event.ProcessInstanceId}");
-            }
-            
-            // Create an initial root execution path for the process instance
-            var rootExecutionPath = new Core.Models.ExecutionPath
-            {
-                ExecutionId = Guid.NewGuid().ToString(),
-                SourceElementId = "process_start",
-                SourceElementType = "process",
-                TargetElementId = startEvents.First().id, // Use the first start event as target
-                TargetElementType = "bpmn:StartEvent",
-                Status = ExecutionStatus.Active
+                ProcessInstanceId = @event.ProcessInstanceId,
+                ProcessDefinitionId = @event.ProcessDefinitionId,
+                DeploymentKey = @event.ProcessDefinitionKey,
+                DefinitionVersion = @event.ProcessDefinitionVersion,
+                ActiveElements = new HashSet<string>(),
+                CompletedElements = new HashSet<string>(),
+                Variables = @event.Variables ?? new Dictionary<string, object>(),
+                Status = ProcessStatus.Created,
+                ExecutionPaths = new List<ExecutionPath>(),
+                ActiveExecutions = new Dictionary<string, ExecutionPath>(),
+                ElementExecutionPaths = new Dictionary<string, List<string>>(),
+                ElementToSequenceFlows = new Dictionary<string, List<string>>(),
+                ElementExecutionCounts = new Dictionary<string, int>(),
+                GatewayMergeStates = new Dictionary<string, GatewayMergeInfo>(),
+                EventToExecutionPath = new Dictionary<string, string>()
             };
-            
-            // Add the execution path to state
-            state.ExecutionPaths.Add(rootExecutionPath);
-            state.ActiveExecutions[rootExecutionPath.ExecutionId] = rootExecutionPath;
-            
-            // Add the event to the execution path
-            rootExecutionPath.AddEvent(@event);
-            state.EventToExecutionPath[@event.EventId.ToString()] = rootExecutionPath.ExecutionId;
-            
-            // Save updated state
-            await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, 1);
-            
-            // Activate each start event
-            foreach (var startEvent in startEvents)
+
+            // Save initial state
+            await SaveStateAsync(@event.ProcessInstanceId, state, null, cancellationToken);
+
+            // Save event
+            await SaveEventAsync(@event, cancellationToken);
+
+            // Publish process started event
+            await _eventBus.PublishAsync(new ProcessInstanceStarted
             {
-                _logger.LogDebug("Activating start event {StartEventId} in process {ProcessInstanceId}",
-                    startEvent.id, @event.ProcessInstanceId);
-                
-                // Add to active elements
-                state.ActiveElements.Add(startEvent.id);
-                
-                // Create a child execution path for this start event
-                var startEventExecution = new Core.Models.ExecutionPath
-                {
-                    ExecutionId = Guid.NewGuid().ToString(),
-                    SourceElementId = "process_start",
-                    SourceElementType = "process",
-                    TargetElementId = startEvent.id,
-                    TargetElementType = "bpmn:StartEvent",
-                    Status = ExecutionStatus.Active,
-                    ParentExecutionId = rootExecutionPath.ExecutionId
-                };
-                
-                // Add the execution path to state
-                state.ExecutionPaths.Add(startEventExecution);
-                state.ActiveExecutions[startEventExecution.ExecutionId] = startEventExecution;
-                
-                // Map the start event to its execution path
-                if (!state.ElementExecutionPaths.TryGetValue(startEvent.id, out var paths))
-                {
-                    paths = new List<string>();
-                    state.ElementExecutionPaths[startEvent.id] = paths;
-                }
-                paths.Add(startEventExecution.ExecutionId);
-                
-                // Save updated state
-                await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, 2);
-                
-                // Publish ElementCreated event
-                var elementCreatedEvent = new ElementCreated
-                {
-                    ProcessInstanceId = @event.ProcessInstanceId,
-                    ElementId = startEvent.id,
-                    ElementType = "bpmn:StartEvent",
-                    IsExecutable = true, // Start events are always executable
-                    ExecutionId = startEventExecution.ExecutionId
-                };
-                
-                await _eventBus.PublishAsync(elementCreatedEvent, cancellationToken);
-                
-                // Add the event to the execution path
-                state.AddEventToExecution(startEventExecution.ExecutionId, elementCreatedEvent);
-            }
-            
-            // Update statistics
-            state.UpdateExecutionStatistics();
-            await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, 4);
-            
-            _logger.LogInformation("Successfully activated {Count} start events for process instance {ProcessInstanceId}",
-                startEvents.Count, @event.ProcessInstanceId);
+                ProcessInstanceId = @event.ProcessInstanceId,
+                ProcessDefinitionId = @event.ProcessDefinitionId,
+                ProcessDefinitionKey = @event.ProcessDefinitionKey,
+                ProcessDefinitionVersion = @event.ProcessDefinitionVersion,
+                Intent = "STARTED",
+                Timestamp = DateTime.UtcNow
+            }, cancellationToken);
+
+            _logger.LogInformation("Process instance {ProcessInstanceId} created and started", @event.ProcessInstanceId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling ProcessInstanceCreated event for process instance {ProcessInstanceId}",
-                @event.ProcessInstanceId);
+            _logger.LogError(ex, "Error handling process instance creation for {ProcessInstanceId}", @event.ProcessInstanceId);
             throw;
         }
     }
-    
+
+    private BpmnDefinitions ParseBpmnXml(string xmlContent)
+    {
+        if (string.IsNullOrEmpty(xmlContent))
+            throw new ArgumentException("XML content cannot be empty", nameof(xmlContent));
+
+        try
+        {
+            var serializer = new System.Xml.Serialization.XmlSerializer(typeof(BpmnDefinitions));
+            using var reader = new System.IO.StringReader(xmlContent);
+            var definitions = (BpmnDefinitions)serializer.Deserialize(reader);
+
+            if (definitions == null)
+                throw new InvalidOperationException("Failed to deserialize BPMN XML");
+
+            return definitions;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error parsing BPMN XML content");
+            throw;
+        }
+    }
+
     private BpmnProcess FindProcess(BpmnDefinitions definitions, string processId)
     {
-        if (definitions?.Items == null || !definitions.Items.Any())
+        if (definitions.Items == null || !definitions.Items.Any())
             return null;
-            
+
         var processes = definitions.Items
             .OfType<BpmnProcess>()
             .ToList();
-            
+
         if (!processes.Any())
             return null;
-            
+
         if (string.IsNullOrEmpty(processId))
             return processes.First();
-            
+
         return processes.FirstOrDefault(p => p.id == processId);
     }
-    
+
     private List<BpmnStartEvent> FindStartEvents(BpmnProcess process)
     {
         if (process?.Items == null || !process.Items.Any())
             return new List<BpmnStartEvent>();
-            
+
         return process.Items
             .OfType<BpmnStartEvent>()
             .ToList();

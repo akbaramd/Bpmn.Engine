@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace Novin.Bpmn.EventSourcing.Core;
 
 /// <summary>
-/// پایه برای همه پردازشگران جریان رویداد
+/// Base class for all event stream processors
 /// </summary>
 public abstract class AbstractStreamProcessor
 {
@@ -16,24 +16,34 @@ public abstract class AbstractStreamProcessor
     private readonly IEventStore _eventStore;
     private readonly IEventBus _eventBus;
     private readonly ILogger _logger;
-    private readonly HashSet<Type> _interestedEventTypes = new HashSet<Type>();
+    private readonly HashSet<Type> _interestedEventTypes = new();
     private long _lastProcessedPosition = -1;
     private CancellationTokenSource? _processingCts;
-    private bool _isRunning = false;
+    private bool _isRunning;
     private string? _subscriptionId;
     
     /// <summary>
-    /// آخرین موقعیت پردازش شده
+    /// Last processed event position
     /// </summary>
     public long LastProcessedPosition => _lastProcessedPosition;
     
     /// <summary>
-    /// آیا پردازشگر در حال اجراست
+    /// Whether the processor is currently running
     /// </summary>
     public bool IsRunning => _isRunning;
+
+    /// <summary>
+    /// Gets the event store instance
+    /// </summary>
+    protected IEventStore EventStore => _eventStore;
+
+    /// <summary>
+    /// Gets the processor name
+    /// </summary>
+    protected string ProcessorName => _processorName;
     
     /// <summary>
-    /// ایجاد نمونه پردازشگر جریان
+    /// Creates a new stream processor instance
     /// </summary>
     protected AbstractStreamProcessor(
         string processorName,
@@ -48,7 +58,7 @@ public abstract class AbstractStreamProcessor
     }
     
     /// <summary>
-    /// ثبت نوع رویداد موردعلاقه
+    /// Registers an event type that this processor is interested in
     /// </summary>
     protected void RegisterInterestedEventType<T>() where T : IBpmnEvent
     {
@@ -56,7 +66,7 @@ public abstract class AbstractStreamProcessor
     }
     
     /// <summary>
-    /// بررسی اینکه آیا نوع رویداد موردعلاقه است یا خیر
+    /// Checks if the processor is interested in a specific event type
     /// </summary>
     protected bool IsInterestedIn(Type eventType)
     {
@@ -64,7 +74,7 @@ public abstract class AbstractStreamProcessor
     }
     
     /// <summary>
-    /// بررسی اینکه آیا رویداد موردعلاقه است یا خیر
+    /// Checks if the processor is interested in a specific event
     /// </summary>
     protected bool IsInterestedIn(IBpmnEvent @event)
     {
@@ -72,7 +82,7 @@ public abstract class AbstractStreamProcessor
     }
     
     /// <summary>
-    /// شروع پردازشگر و بازیابی رویدادهای قبلی
+    /// Starts the processor and replays historical events
     /// </summary>
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
@@ -86,37 +96,34 @@ public abstract class AbstractStreamProcessor
         
         try
         {
-            // ایجاد یک CancellationTokenSource متصل به توکن ورودی
             _processingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             
-            // اشتراک در IEventBus برای دریافت رویدادهای فعلی و آینده
-            // این روش از پردازش رویدادهای جدید در زمان واقعی اطمینان حاصل می‌کند
-            _eventBus.Subscribe<IBpmnEvent>(async (evt) => 
+            // First, replay historical events
+            var events = await _eventStore.ReadEventsAsync(
+                position: _lastProcessedPosition + 1,
+                count: 1000,
+                predicate: evt => IsInterestedIn(evt),
+                cancellationToken: _processingCts.Token);
+
+            foreach (var evt in events)
             {
-                try 
+                try
                 {
-                    if (IsInterestedIn(evt))
+                    if (evt.Position > _lastProcessedPosition)
                     {
-                        _logger.LogDebug("{ProcessorName} processing event {EventType} for instance {ProcessId}",
-                            _processorName, evt.EventType, evt.ProcessInstanceId);
-                            
                         await HandleEventAsync(evt);
-                        
-                        // بروزرسانی وضعیت پردازش پس از هر رویداد
-                        if (evt.Position > _lastProcessedPosition)
-                        {
-                            _lastProcessedPosition = evt.Position;
-                        }
+                        _lastProcessedPosition = evt.Position;
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "{ProcessorName} failed to process event {EventType} for instance {ProcessId}",
-                        _processorName, evt.EventType, evt.ProcessInstanceId);
+                    _logger.LogError(ex, "{ProcessorName} failed to process historical event {EventType} at position {Position}",
+                        _processorName, evt.GetType().Name, evt.Position);
+                    throw; // Re-throw to prevent processing more events after a failure
                 }
-            });
+            }
             
-            // بررسی رویدادهای تاریخی نیز انجام شود
+            // Then subscribe to new events
             _subscriptionId = await _eventStore.SubscribeToEventsAsync(
                 handler: async (evt) => 
                 {
@@ -130,8 +137,9 @@ public abstract class AbstractStreamProcessor
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "{ProcessorName} failed to process historical event {EventType} at position {Position}",
-                            _processorName, evt.EventType, evt.Position);
+                        _logger.LogError(ex, "{ProcessorName} failed to process event {EventType} at position {Position}",
+                            _processorName, evt.GetType().Name, evt.Position);
+                        throw; // Re-throw to prevent processing more events after a failure
                     }
                 },
                 predicate: evt => IsInterestedIn(evt),
@@ -146,20 +154,13 @@ public abstract class AbstractStreamProcessor
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to start stream processor {ProcessorName}", _processorName);
-            
-            // اطمینان از آزادسازی منابع در صورت خطا
-            if (_processingCts != null)
-            {
-                _processingCts.Dispose();
-                _processingCts = null;
-            }
-            
+            await CleanupResourcesAsync();
             throw;
         }
     }
     
     /// <summary>
-    /// توقف پردازشگر
+    /// Stops the processor
     /// </summary>
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
@@ -173,24 +174,7 @@ public abstract class AbstractStreamProcessor
         
         try
         {
-            // لغو اشتراک از مخزن رویداد
-            if (!string.IsNullOrEmpty(_subscriptionId))
-            {
-                await _eventStore.UnsubscribeAsync(_subscriptionId, cancellationToken);
-                _subscriptionId = null;
-            }
-            
-            // لغو اشتراک از گذرگاه رویداد
-            _eventBus.Unsubscribe<IBpmnEvent>();
-            
-            // لغو پردازش رویدادهای جدید
-            if (_processingCts != null)
-            {
-                _processingCts.Cancel();
-                _processingCts.Dispose();
-                _processingCts = null;
-            }
-            
+            await CleanupResourcesAsync();
             _isRunning = false;
             _logger.LogInformation("{ProcessorName} stopped successfully", _processorName);
         }
@@ -200,9 +184,28 @@ public abstract class AbstractStreamProcessor
             throw;
         }
     }
+
+    /// <summary>
+    /// Cleans up resources used by the processor
+    /// </summary>
+    private async Task CleanupResourcesAsync()
+    {
+        if (!string.IsNullOrEmpty(_subscriptionId))
+        {
+            await _eventStore.UnsubscribeAsync(_subscriptionId);
+            _subscriptionId = null;
+        }
+        
+        if (_processingCts != null)
+        {
+            _processingCts.Cancel();
+            _processingCts.Dispose();
+            _processingCts = null;
+        }
+    }
     
     /// <summary>
-    /// پردازش رویداد
+    /// Processes an event
     /// </summary>
     protected abstract Task HandleEventAsync(IBpmnEvent @event);
 }

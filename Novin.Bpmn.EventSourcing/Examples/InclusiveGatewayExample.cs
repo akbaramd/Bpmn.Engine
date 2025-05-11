@@ -45,7 +45,7 @@ public class InclusiveGatewayExample
     
     <!-- Addition Path -->
     <sequenceFlow id=""Flow_Addition"" name=""Addition"" sourceRef=""InclusiveGateway_Fork"" targetRef=""ScriptTask_Addition"">
-      <conditionExpression xsi:type=""tFormalExpression"">Variables[""operator""] == ""+"" || Variables[""operator""] == ""add""</conditionExpression>
+      <conditionExpression xsi:type=""tFormalExpression"">Variables[""operator""].Equals(""+"") || Variables[""operator""].Equals(""add"")</conditionExpression>
     </sequenceFlow>
     <scriptTask id=""ScriptTask_Addition"" name=""Perform Addition"">
       <incoming>Flow_Addition</incoming>
@@ -62,6 +62,7 @@ public class InclusiveGatewayExample
         // Store result and operation info
         Variables[""result_addition""] = result;
         Variables[""operation_addition""] = $""{num1} + {num2} = {result}"";
+        Variables[""final_value_addition""] = result;
         
         Log($""Addition performed: {num1} + {num2} = {result}"");
         ]]>
@@ -71,7 +72,7 @@ public class InclusiveGatewayExample
     
     <!-- Subtraction Path -->
     <sequenceFlow id=""Flow_Subtraction"" name=""Subtraction"" sourceRef=""InclusiveGateway_Fork"" targetRef=""ScriptTask_Subtraction"">
-      <conditionExpression xsi:type=""tFormalExpression"">Variables[""operator""] == ""-"" || Variables[""operator""] == ""subtract""</conditionExpression>
+      <conditionExpression xsi:type=""tFormalExpression"">Variables[""operator""].Equals(""-"") || Variables[""operator""].Equals(""subtract"")</conditionExpression>
     </sequenceFlow>
     <scriptTask id=""ScriptTask_Subtraction"" name=""Perform Subtraction"">
       <incoming>Flow_Subtraction</incoming>
@@ -88,6 +89,7 @@ public class InclusiveGatewayExample
         // Store result and operation info
         Variables[""result_subtraction""] = result;
         Variables[""operation_subtraction""] = $""{num1} - {num2} = {result}"";
+        Variables[""final_value_subtraction""] = result;
         
         Log($""Subtraction performed: {num1} - {num2} = {result}"");
         ]]>
@@ -97,7 +99,7 @@ public class InclusiveGatewayExample
     
     <!-- Multiplication Path -->
     <sequenceFlow id=""Flow_Multiplication"" name=""Multiplication"" sourceRef=""InclusiveGateway_Fork"" targetRef=""ScriptTask_Multiplication"">
-      <conditionExpression xsi:type=""tFormalExpression"">Variables[""operator""] == ""*"" || Variables[""operator""] == ""multiply""</conditionExpression>
+      <conditionExpression xsi:type=""tFormalExpression"">Variables[""operator""].Equals(""*"") || Variables[""operator""].Equals(""multiply"")</conditionExpression>
     </sequenceFlow>
     <scriptTask id=""ScriptTask_Multiplication"" name=""Perform Multiplication"">
       <incoming>Flow_Multiplication</incoming>
@@ -114,6 +116,7 @@ public class InclusiveGatewayExample
         // Store result and operation info
         Variables[""result_multiplication""] = result;
         Variables[""operation_multiplication""] = $""{num1} * {num2} = {result}"";
+        Variables[""final_value_multiplication""] = result;
         
         Log($""Multiplication performed: {num1} * {num2} = {result}"");
         ]]>
@@ -123,7 +126,7 @@ public class InclusiveGatewayExample
     
     <!-- Division Path -->
     <sequenceFlow id=""Flow_Division"" name=""Division"" sourceRef=""InclusiveGateway_Fork"" targetRef=""ScriptTask_Division"">
-      <conditionExpression xsi:type=""tFormalExpression"">Variables[""operator""] == ""/"" || Variables[""operator""] == ""divide""</conditionExpression>
+      <conditionExpression xsi:type=""tFormalExpression"">Variables[""operator""].Equals(""/"") || Variables[""operator""].Equals(""divide"")</conditionExpression>
     </sequenceFlow>
     <scriptTask id=""ScriptTask_Division"" name=""Perform Division"">
       <incoming>Flow_Division</incoming>
@@ -138,6 +141,7 @@ public class InclusiveGatewayExample
         if (num2 == 0) {
             Variables[""result_division""] = ""Error: Division by zero"";
             Variables[""operation_division""] = $""{num1} / {num2} = Error: Division by zero"";
+            Variables[""final_value_division""] = null;
             Log(""Division error: Cannot divide by zero"");
         } else {
             // Calculate result
@@ -146,6 +150,7 @@ public class InclusiveGatewayExample
             // Store result and operation info
             Variables[""result_division""] = result;
             Variables[""operation_division""] = $""{num1} / {num2} = {result}"";
+            Variables[""final_value_division""] = result;
             
             Log($""Division performed: {num1} / {num2} = {result}"");
         }
@@ -172,29 +177,36 @@ public class InclusiveGatewayExample
         <![CDATA[
         // Create a summary of all operations performed
         var summary = ""Math Operations Summary:\n"";
+        var finalValues = new Dictionary<string, object>();
         
         if (Variables.ContainsKey(""operation_addition"")) {
             summary += Variables[""operation_addition""] + ""\n"";
+            finalValues[""addition""] = Variables[""final_value_addition""];
         }
         
         if (Variables.ContainsKey(""operation_subtraction"")) {
             summary += Variables[""operation_subtraction""] + ""\n"";
+            finalValues[""subtraction""] = Variables[""final_value_subtraction""];
         }
         
         if (Variables.ContainsKey(""operation_multiplication"")) {
             summary += Variables[""operation_multiplication""] + ""\n"";
+            finalValues[""multiplication""] = Variables[""final_value_multiplication""];
         }
         
         if (Variables.ContainsKey(""operation_division"")) {
             summary += Variables[""operation_division""] + ""\n"";
+            finalValues[""division""] = Variables[""final_value_division""];
         }
         
-        // Store the final summary
+        // Store the final summary and values
         Variables[""operations_summary""] = summary;
+        Variables[""final_values""] = finalValues;
         
         // Log the summary
         Log(""Operations completed successfully"");
         Log(summary);
+        Log($""Final values: {string.Join("", "", finalValues.Select(kv => $""{kv.Key}: {kv.Value}""))}"");
         ]]>
       </script>
     </scriptTask>
@@ -226,7 +238,7 @@ public class InclusiveGatewayExample
             await host.StartAsync();
             
             var logger = host.Services.GetRequiredService<ILogger<InclusiveGatewayExample>>();
-            var bpmnProcessor = host.Services.GetRequiredService<BpmnProcessorService>();
+            var bpmnProcessor = host.Services.GetRequiredService<BpmnService>();
             var eventBus = host.Services.GetRequiredService<IEventBus>();
             var eventStore = host.Services.GetRequiredService<IEventStore>();
 
@@ -260,23 +272,23 @@ public class InclusiveGatewayExample
     }
 
     private static async Task<string> DeployProcessDefinitionAsync(
-        BpmnProcessorService bpmnProcessor,
+        BpmnService bpmnProcessor,
         string uniqueKey,
         ILogger<InclusiveGatewayExample> logger)
     {
-        string definitionId = await bpmnProcessor.DeployProcessDefinitionAsync(
+        var deploymentInfo = await bpmnProcessor.DeployProcessDefinitionAsync(
             uniqueKey, 
             InclusiveGatewayXml,
             $"Math Operations Example - {uniqueKey}");
             
         logger.LogInformation("Deployed process definition with ID {ProcessDefinitionId} and key {DeploymentKey}", 
-            definitionId, uniqueKey);
+            deploymentInfo.DefinitionId, uniqueKey);
             
-        return definitionId;
+        return deploymentInfo.DefinitionId;
     }
 
     private static async Task RunWithOperatorAsync(
-        BpmnProcessorService bpmnProcessor,
+        BpmnService bpmnProcessor,
         IEventStore eventStore,
         Dictionary<string, object> variables,
         string description,
@@ -325,14 +337,7 @@ public class InclusiveGatewayExample
                 // Get final process state to retrieve results
                 var finalState = await bpmnProcessor.GetProcessInstanceStateAsync(processInstanceId);
                 
-                if (finalState.Variables.TryGetValue("operations_summary", out var summary))
-                {
-                    logger.LogInformation("Process completed with results:\n{Summary}", summary);
-                }
-                else
-                {
-                    logger.LogInformation("Process completed successfully but no summary was found");
-                }
+                
             }
             else
             {
@@ -348,7 +353,7 @@ public class InclusiveGatewayExample
     }
 
     private static async Task<string> StartProcessInstanceWithRetryAsync(
-        BpmnProcessorService bpmnProcessor,
+        BpmnService bpmnProcessor,
         string deploymentKey,
         Dictionary<string, object> variables,
         ILogger<InclusiveGatewayExample> logger)
@@ -399,6 +404,14 @@ public class InclusiveGatewayExample
                 // Register Event Sourcing services
                 services.AddBpmnEventSourcing(options => {
                     options.AutoRegisterEventHandlers = true;
+                });
+
+                services.AddElasticsearch(options => {
+                    options.Url = "http://localhost:9200";
+                    options.Username = "elastic";
+                    options.Password = "changeme";
+                    options.EnableSsl = false;
+                    options.VerifySsl = false;
                 });
             });
     }

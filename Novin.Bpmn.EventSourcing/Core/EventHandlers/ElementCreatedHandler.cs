@@ -18,12 +18,12 @@ namespace Novin.Bpmn.EventSourcing.Core.EventHandlers;
 /// Handles the initial creation and activation of BPMN elements
 /// Manages gateway merges and transitions to processing state
 /// </summary>
-public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
+public class ElementCreatedHandler : BaseEventHandler<ElementCreated>
 {
     private readonly ILogger<ElementCreatedHandler> _logger;
     private readonly IStateStore _stateStore;
     private readonly IEventBus _eventBus;
-    private readonly IBpmnDefinitionStorage _definitionStorage;
+    private readonly IDefinitionStore _definitionStore;
     
     private const int MaxRetries = 3;
     private const int RetryDelay = 1000;
@@ -34,17 +34,18 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
     public ElementCreatedHandler(
         ILogger<ElementCreatedHandler> logger,
         IStateStore stateStore,
+        IEventStore eventStore,
         IEventBus eventBus,
-        IBpmnDefinitionStorage definitionStorage)
+        IDefinitionStore definitionStore)       : base(stateStore, eventStore, definitionStore, logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
-        _definitionStorage = definitionStorage ?? throw new ArgumentNullException(nameof(definitionStorage));
+        _definitionStore = definitionStore ?? throw new ArgumentNullException(nameof(definitionStore));
     }
     
     /// <inheritdoc />
-    public async Task HandleAsync(ElementCreated @event, CancellationToken cancellationToken = default)
+    protected override async Task ProcessEventAsync(ElementCreated @event, CancellationToken cancellationToken = default)
     {
         if (@event == null)
         {
@@ -66,7 +67,7 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
             }
             
             // Get BPMN definition using DeploymentKey or ProcessDefinitionId from state
-            var bpmnDefinition = _definitionStorage.GetParsedDefinition(state.DeploymentKey ?? state.ProcessDefinitionId);
+            var bpmnDefinition = await _definitionStore.GetParsedDefinitionAsync(state.DeploymentKey ?? state.ProcessDefinitionId, cancellationToken);
             if (bpmnDefinition == null)
             {
                 _logger.LogError("BPMN definition not found for process instance {ProcessInstanceId}",
@@ -272,7 +273,7 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
         {
             try
             {
-                return await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(processInstanceId, cancellationToken);
+                return await _stateStore.GetStateWithVersionAsync(processInstanceId, cancellationToken);
             }
             catch (Exception ex) when (ex.Message.Contains("Concurrency conflict") && retryCount < MaxRetries)
             {
@@ -390,7 +391,7 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
                 }
                 
                 // Save state after removing tokens
-                var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(@event.ProcessInstanceId);
+                var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync(@event.ProcessInstanceId);
                 await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, currentVersion);
                 
                 await TransitionToProcessingAsync(state, @event, executionId, cancellationToken);
@@ -404,7 +405,7 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
                     @event.ElementId, @event.ProcessInstanceId, mergeInfo.ReceivedIncomingFlows, mergeInfo.RequiredIncomingFlows);
                     
                 // Update gateway merge info in state
-                var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(@event.ProcessInstanceId);
+                var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync(@event.ProcessInstanceId);
                 await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, currentVersion);
             }
         }
@@ -491,7 +492,7 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
             }
             
             // Save state after removing tokens
-            var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(@event.ProcessInstanceId);
+            var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync(@event.ProcessInstanceId);
             await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, currentVersion);
             
             // Update the execution path with executable status
@@ -529,7 +530,7 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
                 @event.ElementId, @event.ProcessInstanceId, mergeInfo.ReceivedIncomingFlows, mergeInfo.RequiredIncomingFlows);
                 
             // Update gateway merge info in state
-            var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(@event.ProcessInstanceId);
+            var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync(@event.ProcessInstanceId);
             await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, currentVersion);
         }
     }
@@ -569,7 +570,7 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
                 state.CompletedElements.Remove(@event.ElementId);
                 
                 // Save state after removing token
-                var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(@event.ProcessInstanceId);
+                var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync(@event.ProcessInstanceId);
                 await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, currentVersion);
                 
                 await TransitionToProcessingAsync(state, @event, executionId, cancellationToken);
@@ -583,7 +584,7 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
                     @event.ElementId, @event.ProcessInstanceId);
                     
                 // Update gateway merge info in state
-                var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(@event.ProcessInstanceId);
+                var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync(@event.ProcessInstanceId);
                 await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, currentVersion);
             }
         }
@@ -718,7 +719,7 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
         string gatewayId,
         CancellationToken cancellationToken)
     {
-        var definitions = _definitionStorage.GetParsedDefinition(state.DeploymentKey);
+        var definitions = await _definitionStore.GetParsedDefinitionAsync(state.DeploymentKey, cancellationToken);
         if (definitions == null)
         {
             _logger.LogWarning("BPMN definition not found for deployment key {DeploymentKey}", state.DeploymentKey);
@@ -777,7 +778,7 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
         string gatewayId,
         CancellationToken cancellationToken)
     {
-        var definitions = _definitionStorage.GetParsedDefinition(state.DeploymentKey);
+        var definitions = await _definitionStore.GetParsedDefinitionAsync(state.DeploymentKey, cancellationToken);
         if (definitions == null)
         {
             _logger.LogWarning("BPMN definition not found for deployment key {DeploymentKey}", state.DeploymentKey);
@@ -994,7 +995,7 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
         _logger.LogDebug("Evaluating conditional outgoing flows from gateway {GatewayId} in process {ProcessInstanceId}",
             @event.ElementId, @event.ProcessInstanceId);
             
-        var bpmnDefinition = _definitionStorage.GetParsedDefinition(state.DeploymentKey);
+        var bpmnDefinition = await _definitionStore.GetParsedDefinitionAsync(state.DeploymentKey, cancellationToken);
         if (bpmnDefinition == null)
         {
             _logger.LogError("BPMN definition not found for process instance {ProcessInstanceId}",
@@ -1095,7 +1096,7 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
         UpdateGatewayFlowState(state, @event.ElementId, @event.ElementType, validFlows, invalidFlows);
         
         // Save state with gateway flow information
-        var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(@event.ProcessInstanceId, cancellationToken);
+        var (_, currentVersion) = await _stateStore.GetStateWithVersionAsync(@event.ProcessInstanceId, cancellationToken);
         await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, currentVersion, cancellationToken);
         
         // Process flows based on gateway type
@@ -1212,6 +1213,9 @@ public class ElementCreatedHandler : IBpmnEventHandler<ElementCreated>
             splitInfo.InvalidOutgoingFlowIds = invalidFlows.Select(f => f.id).ToList();
         }
     }
+
+  
+   
 }
 
 /// <summary>

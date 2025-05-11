@@ -126,7 +126,7 @@ public class UserTaskExample
             await host.StartAsync();
             
             var logger = host.Services.GetRequiredService<ILogger<UserTaskExample>>();
-            var bpmnProcessor = host.Services.GetRequiredService<BpmnProcessorService>();
+            var bpmnProcessor = host.Services.GetRequiredService<BpmnService>();
             var userTaskService = host.Services.GetRequiredService<IUserTaskService>();
             var eventBus = host.Services.GetRequiredService<IEventBus>();
 
@@ -159,22 +159,22 @@ public class UserTaskExample
     }
 
     private static async Task<string> DeployProcessDefinitionAsync(
-        BpmnProcessorService bpmnProcessor,
+        BpmnService bpmnProcessor,
         ILogger<UserTaskExample> logger)
     {
-        string definitionId = await bpmnProcessor.DeployProcessDefinitionAsync(
+        var  definition = await bpmnProcessor.DeployProcessDefinitionAsync(
             DeploymentKey, 
             UserTaskFlowXml,
             "User Task Workflow Example with Boundary Events");
             
         logger.LogInformation("Deployed process definition with ID {ProcessDefinitionId}", 
-            definitionId);
+            definition.DefinitionId);
             
-        return definitionId;
+        return definition.DefinitionId;
     }
 
     private static async Task RunNormalFlowExampleAsync(
-        BpmnProcessorService bpmnProcessor,
+        BpmnService bpmnProcessor,
         IUserTaskService userTaskService,
         IEventBus eventBus,
         ILogger<UserTaskExample> logger)
@@ -212,7 +212,7 @@ public class UserTaskExample
     }
 
     private static async Task<string> StartProcessInstanceWithRetryAsync(
-        BpmnProcessorService bpmnProcessor,
+        BpmnService bpmnProcessor,
         Dictionary<string, object> variables,
         ILogger<UserTaskExample> logger)
     {
@@ -288,7 +288,7 @@ public class UserTaskExample
     }
 
     private static async Task HandleSecondTaskWithMessageBoundaryAsync(
-        BpmnProcessorService bpmnProcessor,
+        BpmnService bpmnProcessor,
         IUserTaskService userTaskService,
         IEventBus eventBus,
         string processInstanceId,
@@ -337,7 +337,7 @@ public class UserTaskExample
     }
 
     private static async Task RunEscalationFlowExampleAsync(
-        BpmnProcessorService bpmnProcessor,
+        BpmnService bpmnProcessor,
         IUserTaskService userTaskService,
         IEventBus eventBus,
         ILogger<UserTaskExample> logger)
@@ -397,7 +397,7 @@ public class UserTaskExample
     }
 
     private static async Task HandleEscalationAsync(
-        BpmnProcessorService bpmnProcessor,
+        BpmnService bpmnProcessor,
         IUserTaskService userTaskService,
         IEventBus eventBus,
         string processInstanceId,

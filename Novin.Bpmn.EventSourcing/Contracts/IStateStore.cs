@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Novin.Bpmn.EventSourcing.Core;
 
 namespace Novin.Bpmn.EventSourcing.Contracts;
 
@@ -13,64 +14,60 @@ public interface IStateStore
     /// <summary>
     /// بازیابی وضعیت
     /// </summary>
-    /// <typeparam name="T">نوع وضعیت</typeparam>
-    /// <param name="key">کلید وضعیت</param>
+    /// <param name="processInstanceId">شناسه نمونه فرآیند</param>
     /// <param name="cancellationToken">توکن لغو</param>
     /// <returns>وضعیت بازیابی شده یا null اگر وجود نداشته باشد</returns>
-    Task<T?> GetStateAsync<T>(string key, CancellationToken cancellationToken = default) where T : class;
+    Task<BpmnProcessState?> GetStateAsync(string processInstanceId, CancellationToken cancellationToken = default);
     
     /// <summary>
     /// بازیابی وضعیت همراه با شماره نسخه
     /// </summary>
-    /// <typeparam name="T">نوع وضعیت</typeparam>
-    /// <param name="key">کلید وضعیت</param>
+    /// <param name="processInstanceId">شناسه نمونه فرآیند</param>
     /// <param name="cancellationToken">توکن لغو</param>
     /// <returns>وضعیت بازیابی شده و شماره نسخه، یا null اگر وجود نداشته باشد</returns>
-    Task<(T? State, long Version)> GetStateWithVersionAsync<T>(string key, CancellationToken cancellationToken = default) where T : class;
+    Task<(BpmnProcessState? State, long Version)> GetStateWithVersionAsync(string processInstanceId, CancellationToken cancellationToken = default);
     
     /// <summary>
     /// ذخیره وضعیت
     /// </summary>
-    /// <typeparam name="T">نوع وضعیت</typeparam>
-    /// <param name="key">کلید وضعیت</param>
+    /// <param name="processInstanceId">شناسه نمونه فرآیند</param>
     /// <param name="state">وضعیت برای ذخیره</param>
     /// <param name="expectedVersion">شماره نسخه مورد انتظار (null برای عدم بررسی نسخه)</param>
     /// <param name="cancellationToken">توکن لغو</param>
     /// <returns>شماره نسخه جدید</returns>
-    Task<long> SaveStateAsync<T>(string key, T state, long? expectedVersion = null, CancellationToken cancellationToken = default) where T : class;
+    Task<long> SaveStateAsync(string processInstanceId, BpmnProcessState state, long? expectedVersion = null, CancellationToken cancellationToken = default);
     
     /// <summary>
     /// حذف وضعیت
     /// </summary>
-    /// <param name="key">کلید وضعیت</param>
+    /// <param name="processInstanceId">شناسه نمونه فرآیند</param>
     /// <param name="expectedVersion">شماره نسخه مورد انتظار (null برای عدم بررسی نسخه)</param>
     /// <param name="cancellationToken">توکن لغو</param>
-    Task DeleteStateAsync(string key, long? expectedVersion = null, CancellationToken cancellationToken = default);
+    Task DeleteStateAsync(string processInstanceId, long? expectedVersion = null, CancellationToken cancellationToken = default);
     
     /// <summary>
-    /// بررسی وجود یک وضعیت با کلید مشخص
+    /// بررسی وجود یک وضعیت با شناسه نمونه فرآیند مشخص
     /// </summary>
-    /// <param name="key">کلید منحصر به فرد</param>
+    /// <param name="processInstanceId">شناسه نمونه فرآیند</param>
     /// <returns>آیا وضعیت موجود است</returns>
-    Task<bool> HasStateAsync(string key);
+    Task<bool> HasStateAsync(string processInstanceId);
     
     /// <summary>
     /// دریافت نسخه فعلی یک وضعیت
     /// </summary>
-    /// <param name="key">کلید منحصر به فرد</param>
+    /// <param name="processInstanceId">شناسه نمونه فرآیند</param>
     /// <returns>نسخه فعلی وضعیت (-1 اگر وجود نداشته باشد)</returns>
-    Task<long> GetVersionAsync(string key);
+    Task<long> GetVersionAsync(string processInstanceId);
     
     /// <summary>
     /// یافتن وضعیت‌های منطبق با الگوی مشخص و یک شرط
     /// </summary>
-    /// <typeparam name="T">نوع وضعیت</typeparam>
-    /// <param name="pattern">الگوی جستجو در کلیدها (می‌تواند * داشته باشد)</param>
+    /// <param name="pattern">الگوی جستجو در شناسه‌های نمونه فرآیند (می‌تواند * داشته باشد)</param>
     /// <param name="predicate">شرط فیلتر روی وضعیت (اختیاری)</param>
     /// <param name="cancellationToken">توکن لغو</param>
     /// <returns>لیست وضعیت‌های یافت شده</returns>
-    Task<List<T>> FindStatesByPatternAsync<T>(
+    Task<List<BpmnProcessState>> FindStatesByPatternAsync(
         string pattern,
-        Func<T, bool>? predicate = null,
-        CancellationToken cancellationToken = default) where T : class;
+        Func<BpmnProcessState, bool>? predicate = null,
+        CancellationToken cancellationToken = default);
 } 

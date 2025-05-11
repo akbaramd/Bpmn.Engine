@@ -45,7 +45,7 @@ public class BpmnProcessStreamProcessor : AbstractStreamProcessor
         var processInstanceId = @event.ProcessInstanceId;
         
         // بازیابی وضعیت فعلی فرآیند (یا ایجاد یک وضعیت جدید)
-        var (state, version) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(processInstanceId);
+        var (state, version) = await _stateStore.GetStateWithVersionAsync(processInstanceId);
         state ??= new BpmnProcessState
         {
             ProcessInstanceId = processInstanceId,

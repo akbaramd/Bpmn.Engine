@@ -1,14 +1,212 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Dynamic;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Novin.Bpmn.EventSourcing.Core.Models;
 using Novin.Bpmn.EventSourcing.Events;
 
 namespace Novin.Bpmn.EventSourcing.Core;
 
 /// <summary>
+/// JSON converter for BpmnProcessState to handle dynamic Variables property
+/// </summary>
+public class BpmnProcessStateConverter : JsonConverter<BpmnProcessState>
+{
+    public override BpmnProcessState Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            throw new JsonException();
+        }
+
+        var state = new BpmnProcessState { ProcessInstanceId = string.Empty };
+        var variables = new ExpandoObject() as IDictionary<string, object>;
+
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonTokenType.EndObject)
+            {
+                break;
+            }
+
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                throw new JsonException();
+            }
+
+            var propertyName = reader.GetString();
+            reader.Read();
+
+            switch (propertyName)
+            {
+                case "processInstanceId":
+                    state.ProcessInstanceId = reader.GetString() ?? throw new JsonException("ProcessInstanceId cannot be null");
+                    break;
+                case "processDefinitionId":
+                    state.ProcessDefinitionId = reader.GetString();
+                    break;
+                case "deploymentKey":
+                    state.DeploymentKey = reader.GetString();
+                    break;
+                case "definitionVersion":
+                    state.DefinitionVersion = reader.GetInt32();
+                    break;
+                case "status":
+                    state.Status = JsonSerializer.Deserialize<ProcessStatus>(ref reader, options);
+                    break;
+                case "activeElements":
+                    state.ActiveElements = JsonSerializer.Deserialize<HashSet<string>>(ref reader, options)!;
+                    break;
+                case "completedElements":
+                    state.CompletedElements = JsonSerializer.Deserialize<HashSet<string>>(ref reader, options)!;
+                    break;
+                case "elementStatuses":
+                    state.ElementStatuses = JsonSerializer.Deserialize<Dictionary<string, ElementStatus>>(ref reader, options)!;
+                    break;
+                case "variables":
+                    if (reader.TokenType == JsonTokenType.StartObject)
+                    {
+                        while (reader.Read())
+                        {
+                            if (reader.TokenType == JsonTokenType.EndObject)
+                            {
+                                break;
+                            }
+
+                            if (reader.TokenType != JsonTokenType.PropertyName)
+                            {
+                                throw new JsonException();
+                            }
+
+                            var varName = reader.GetString()!;
+                            reader.Read();
+                            var varValue = JsonSerializer.Deserialize<object>(ref reader, options);
+                            variables[varName] = varValue!;
+                        }
+                    }
+                    break;
+                case "executionPaths":
+                    state.ExecutionPaths = JsonSerializer.Deserialize<List<ExecutionPath>>(ref reader, options)!;
+                    break;
+                case "activeExecutions":
+                    state.ActiveExecutions = JsonSerializer.Deserialize<Dictionary<string, ExecutionPath>>(ref reader, options)!;
+                    break;
+                case "transactions":
+                    state.Transactions = JsonSerializer.Deserialize<List<TransactionRecord>>(ref reader, options)!;
+                    break;
+                case "activeTransactions":
+                    state.ActiveTransactions = JsonSerializer.Deserialize<Dictionary<string, TransactionRecord>>(ref reader, options)!;
+                    break;
+                case "eventToExecutionPath":
+                    state.EventToExecutionPath = JsonSerializer.Deserialize<Dictionary<string, string>>(ref reader, options)!;
+                    break;
+                case "elementExecutionPaths":
+                    state.ElementExecutionPaths = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(ref reader, options)!;
+                    break;
+                case "elementToSequenceFlows":
+                    state.ElementToSequenceFlows = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(ref reader, options)!;
+                    break;
+                case "tasks":
+                    state.Tasks = JsonSerializer.Deserialize<Dictionary<string, TaskInfo>>(ref reader, options)!;
+                    break;
+                case "elementExecutionCounts":
+                    state.ElementExecutionCounts = JsonSerializer.Deserialize<Dictionary<string, int>>(ref reader, options)!;
+                    break;
+                case "gatewayMergeStates":
+                    state.GatewayMergeStates = JsonSerializer.Deserialize<Dictionary<string, GatewayMergeInfo>>(ref reader, options)!;
+                    break;
+                case "executionStats":
+                    state.ExecutionStats = JsonSerializer.Deserialize<ExecutionStatistics>(ref reader, options)!;
+                    break;
+                default:
+                    reader.Skip();
+                    break;
+            }
+        }
+
+        state.Variables = variables;
+        return state;
+    }
+
+    public override void Write(Utf8JsonWriter writer, BpmnProcessState value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+
+        writer.WriteString("processInstanceId", value.ProcessInstanceId);
+        if (value.ProcessDefinitionId != null)
+            writer.WriteString("processDefinitionId", value.ProcessDefinitionId);
+        if (value.DeploymentKey != null)
+            writer.WriteString("deploymentKey", value.DeploymentKey);
+        writer.WriteNumber("definitionVersion", value.DefinitionVersion);
+        
+        writer.WritePropertyName("status");
+        JsonSerializer.Serialize(writer, value.Status, options);
+
+        writer.WritePropertyName("activeElements");
+        JsonSerializer.Serialize(writer, value.ActiveElements, options);
+
+        writer.WritePropertyName("completedElements");
+        JsonSerializer.Serialize(writer, value.CompletedElements, options);
+
+        writer.WritePropertyName("elementStatuses");
+        JsonSerializer.Serialize(writer, value.ElementStatuses, options);
+
+        writer.WritePropertyName("variables");
+        writer.WriteStartObject();
+        if (value.Variables != null)
+        {
+            var variables = value.Variables as IDictionary<string, object>;
+            foreach (var kvp in variables!)
+            {
+                writer.WritePropertyName(kvp.Key);
+                JsonSerializer.Serialize(writer, kvp.Value, options);
+            }
+        }
+        writer.WriteEndObject();
+
+        writer.WritePropertyName("executionPaths");
+        JsonSerializer.Serialize(writer, value.ExecutionPaths, options);
+
+        writer.WritePropertyName("activeExecutions");
+        JsonSerializer.Serialize(writer, value.ActiveExecutions, options);
+
+        writer.WritePropertyName("transactions");
+        JsonSerializer.Serialize(writer, value.Transactions, options);
+
+        writer.WritePropertyName("activeTransactions");
+        JsonSerializer.Serialize(writer, value.ActiveTransactions, options);
+
+        writer.WritePropertyName("eventToExecutionPath");
+        JsonSerializer.Serialize(writer, value.EventToExecutionPath, options);
+
+        writer.WritePropertyName("elementExecutionPaths");
+        JsonSerializer.Serialize(writer, value.ElementExecutionPaths, options);
+
+        writer.WritePropertyName("elementToSequenceFlows");
+        JsonSerializer.Serialize(writer, value.ElementToSequenceFlows, options);
+
+        writer.WritePropertyName("tasks");
+        JsonSerializer.Serialize(writer, value.Tasks, options);
+
+        writer.WritePropertyName("elementExecutionCounts");
+        JsonSerializer.Serialize(writer, value.ElementExecutionCounts, options);
+
+        writer.WritePropertyName("gatewayMergeStates");
+        JsonSerializer.Serialize(writer, value.GatewayMergeStates, options);
+
+        writer.WritePropertyName("executionStats");
+        JsonSerializer.Serialize(writer, value.ExecutionStats, options);
+
+        writer.WriteEndObject();
+    }
+}
+
+/// <summary>
 /// وضعیت نمونه فرآیند BPMN
 /// </summary>
+[JsonConverter(typeof(BpmnProcessStateConverter))]
 public class BpmnProcessState
 {
     /// <summary>
@@ -52,7 +250,7 @@ public class BpmnProcessState
     /// <summary>
     /// متغیرهای فرآیند
     /// </summary>
-    public Dictionary<string, object> Variables { get; set; } = new();
+    public dynamic Variables { get; set; } = new ExpandoObject();
     
     /// <summary>
     /// مسیرهای اجرای فرآیند
@@ -119,6 +317,11 @@ public class BpmnProcessState
     /// Execution statistics
     /// </summary>
     public ExecutionStatistics ExecutionStats { get; set; } = new();
+    
+    /// <summary>
+    /// نسخه تعریف فرآیند
+    /// </summary>
+    public int DefinitionVersion { get; set; }
     
     /// <summary>
     /// اضافه کردن رویداد به مسیر اجرا

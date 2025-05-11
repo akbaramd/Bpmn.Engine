@@ -3,14 +3,11 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Novin.Bpmn.EventSourcing;
 using Novin.Bpmn.EventSourcing.Contracts;
 using Novin.Bpmn.EventSourcing.Core;
 using Novin.Bpmn.EventSourcing.Examples;
 using Novin.Bpmn.Models;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Xml.Serialization;
 
 namespace Novin.Bpmn.EventSourcingApp;
 
@@ -22,21 +19,19 @@ class Program
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
             
-            // نمایش منوی گزینه‌ها
+            // Display menu if no arguments provided
             if (args.Length == 0)
             {
                 ShowMenu();
                 var choice = Console.ReadLine()?.Trim().ToLower();
                 return await RunExample(choice);
             }
-            else
-            {
-                return await RunExample(args[0].ToLower());
-            }
+            
+            return await RunExample(args[0].ToLower());
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"خطای کلی: {ex.Message}");
+            Console.WriteLine($"Error: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
             return 1;
         }
@@ -44,13 +39,13 @@ class Program
     
     private static void ShowMenu()
     {
-        Console.WriteLine("لطفاً مثال مورد نظر را انتخاب کنید:");
-        Console.WriteLine("2. مثال وظایف کاربری");
-        Console.WriteLine("3. ابزار تشخیص ثبت هندلرها");
-        Console.WriteLine("4. مثال مخزن تعاریف BPMN");
-        Console.WriteLine("5. مثال ذخیره‌سازی حافظه‌ای تعاریف BPMN");
-        Console.WriteLine("q. خروج");
-        Console.Write("انتخاب شما: ");
+        Console.WriteLine("Please select an example:");
+        Console.WriteLine("1. User Tasks Example");
+        Console.WriteLine("2. Handler Diagnostics Tool");
+        Console.WriteLine("3. BPMN Definition Store Example");
+        Console.WriteLine("4. In-Memory BPMN Storage Example");
+        Console.WriteLine("q. Exit");
+        Console.Write("Your choice: ");
     }
     
     private static async Task<int> RunExample(string? choice)
@@ -58,41 +53,25 @@ class Program
         switch (choice)
         {
             case "1":
-                await InclusiveGatewayExample.RunAsync();
-                break;
-            
-            case "2":
-            case "usertask":
-            case "task":
                 await UserTaskExample.RunAsync();
                 break;
                 
-            case "3":
-            case "diagnostics":
-            case "handlers":
+            case "2":
                 await HandlerDiagnosticsTool.RunAsync();
                 break;
-                
-            case "4":
-            case "definition":
-            case "store":
-                await BpmnDefinitionStoreExample.RunAsync();
+            case "3":
+                await InclusiveGatewayExample.RunAsync();
                 break;
-                
-            case "5":
-            case "storage":
-            case "memory":
-                await BpmnStorageExample.RunAsync();
-                break;
+
                 
             case "q":
             case "exit":
             case "quit":
-                Console.WriteLine("خروج از برنامه");
+                Console.WriteLine("Exiting program");
                 return 0;
                 
             default:
-                Console.WriteLine("گزینه نامعتبر. لطفاً دوباره امتحان کنید.");
+                Console.WriteLine("Invalid option. Please try again.");
                 return 1;
         }
         
@@ -111,8 +90,7 @@ class Program
             .ConfigureServices((hostContext, services) =>
             {
                 services.AddBpmnEventSourcing();
-                
-                // Explicitly register event handlers from the current assembly
+                services.AddBpmnEventSourcing();
                 services.AddBpmnEventHandlers(typeof(Program).Assembly);
             })
             .Build();

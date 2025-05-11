@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Nest;
 using Novin.Bpmn.EventSourcing.Contracts;
 using Novin.Bpmn.EventSourcing.Core;
 using Novin.Bpmn.EventSourcing.Core.EventHandlers;
@@ -7,7 +8,6 @@ using Novin.Bpmn.EventSourcing.Events;
 using System;
 using System.Linq;
 using System.Reflection;
-using Novin.Bpmn.EventSourcing.Core.Deployment;
 using Microsoft.Extensions.Logging;
 
 namespace Novin.Bpmn.EventSourcing;
@@ -34,33 +34,18 @@ public static class BpmnEventSourcingServiceCollectionExtensions
         configuration?.Invoke(options);
         
         // پایه Event Sourcing
-        services.AddSingleton<IEventStore, InMemoryEventStore>();
+        services.AddSingleton<IEventStore, ElasticsearchEventStore>();
+        services.AddSingleton<IDefinitionStore, ElasticsearchDefinitionStore>();
         services.AddSingleton<IEventBus, ServiceProviderEventBus>();
-        services.AddSingleton<IStateStore, InMemoryStateStore>();
-        
-        // ذخیره‌سازی حافظه‌ای تعاریف BPMN (مستقل)
-        services.AddSingleton<IBpmnDefinitionStorage, InMemoryBpmnDefinitionStorage>();
-        
-        // مخزن تعاریف BPMN
-        services.AddSingleton<IBpmnDefinitionStore>(sp => 
-        {
-            var stateStore = sp.GetRequiredService<IStateStore>();
-            var logger = sp.GetRequiredService<ILogger<BpmnDefinitionStore>>();
-            
-            return new BpmnDefinitionStore(
-                stateStore, 
-                logger,
-                definitionsDirectory: options.DefinitionsDirectory);
-        });
+        services.AddSingleton<IStateStore, ElasticsearchStateStore>();
+
         
         // سرویس BpmnProcessor
-        services.AddSingleton<BpmnProcessorService>();
+        services.AddSingleton<BpmnService>();
         services.AddSingleton<BpmnProcessStreamProcessor>();
         services.AddHostedService<BpmnProcessStreamProcessorHostedService>();
         
-        // راه‌انداز مخزن تعاریف BPMN
-        services.AddHostedService<BpmnDefinitionStorageInitializer>();
-        
+
         // سرویس UserTask
         services.AddSingleton<IUserTaskStore, InMemoryUserTaskStore>();
         services.AddSingleton<IUserTaskService, UserTaskService>();
@@ -85,6 +70,49 @@ public static class BpmnEventSourcingServiceCollectionExtensions
             services.AddBpmnEventHandlers(assembly);
         }
         
+        return services;
+    }
+
+    /// <summary>
+    /// افزودن سرویس‌های Elasticsearch به کانتینر DI
+    /// </summary>
+    /// <param name="services">مجموعه سرویس‌ها</param>
+    /// <param name="configuration">تنظیمات Elasticsearch</param>
+    /// <returns>مجموعه سرویس‌ها</returns>
+    public static IServiceCollection AddElasticsearch(
+        this IServiceCollection services,
+        Action<ElasticsearchOptions> configuration)
+    {
+        if (services == null) throw new ArgumentNullException(nameof(services));
+        if (configuration == null) throw new ArgumentNullException(nameof(configuration));
+
+        var options = new ElasticsearchOptions();
+        configuration(options);
+
+        var settings = new ConnectionSettings(new Uri(options.Url))
+            .DefaultIndex(options.IndexPrefix)
+            .EnableDebugMode()
+            .PrettyJson()
+            .RequestTimeout(options.ConnectionTimeout)
+            .MaximumRetries(options.MaxRetries);
+
+        if (options.EnableSsl)
+        {
+            settings.EnableApiVersioningHeader();
+            if (!options.VerifySsl)
+            {
+                settings.ServerCertificateValidationCallback((sender, certificate, chain, sslPolicyErrors) => true);
+            }
+        }
+
+        if (!string.IsNullOrEmpty(options.Username) && !string.IsNullOrEmpty(options.Password))
+        {
+            settings.BasicAuthentication(options.Username, options.Password);
+        }
+
+        var client = new ElasticClient(settings);
+        services.AddSingleton<IElasticClient>(client);
+
         return services;
     }
     
