@@ -5,7 +5,7 @@ using System.Collections.Generic;
 namespace Novin.Bpmn.EventSourcing.Events;
 
 /// <summary>
-/// رویداد ایجاد کار جدید
+/// رویداد ایجاد کار
 /// </summary>
 public record JobCreatedEvent : BpmnEvent
 {
@@ -30,7 +30,7 @@ public record JobCreatedEvent : BpmnEvent
     public required string JobType { get; init; }
     
     /// <summary>
-    /// تعداد مجدد تلاش‌ها
+    /// تعداد تلاش مجدد
     /// </summary>
     public int Retries { get; init; } = 3;
     
@@ -53,12 +53,17 @@ public record JobCreatedEvent : BpmnEvent
     /// تنظیمات اختصاصی کار
     /// </summary>
     public Dictionary<string, object>? JobConfig { get; init; }
+    
+    /// <summary>
+    /// شناسه مسیر اجرا
+    /// </summary>
+    public string? ExecutionId { get; init; }
 }
 
 /// <summary>
-/// رویداد فعال‌سازی کار
+/// رویداد شروع اجرای کار
 /// </summary>
-public record JobActivatedEvent : BpmnEvent
+public record JobStartedEvent : BpmnEvent
 {
     /// <summary>
     /// شناسه کار
@@ -66,18 +71,28 @@ public record JobActivatedEvent : BpmnEvent
     public required string JobId { get; init; }
     
     /// <summary>
-    /// شناسه کارگر
+    /// شناسه المان
     /// </summary>
-    public required string WorkerId { get; init; }
+    public required string ElementId { get; init; }
     
     /// <summary>
-    /// ضرب‌الاجل جدید
+    /// نوع المان
     /// </summary>
-    public DateTime Deadline { get; init; }
+    public required string ElementType { get; init; }
+    
+    /// <summary>
+    /// نوع کار
+    /// </summary>
+    public required string JobType { get; init; }
+    
+    /// <summary>
+    /// شناسه مسیر اجرا
+    /// </summary>
+    public string? ExecutionId { get; init; }
 }
 
 /// <summary>
-/// رویداد تکمیل کار
+/// رویداد تکمیل اجرای کار
 /// </summary>
 public record JobCompletedEvent : BpmnEvent
 {
@@ -87,13 +102,33 @@ public record JobCompletedEvent : BpmnEvent
     public required string JobId { get; init; }
     
     /// <summary>
-    /// متغیرهای خروجی
+    /// شناسه المان
     /// </summary>
-    public Dictionary<string, object>? Variables { get; init; }
+    public required string ElementId { get; init; }
+    
+    /// <summary>
+    /// نوع المان
+    /// </summary>
+    public required string ElementType { get; init; }
+    
+    /// <summary>
+    /// نوع کار
+    /// </summary>
+    public required string JobType { get; init; }
+    
+    /// <summary>
+    /// نتیجه کار
+    /// </summary>
+    public object? Result { get; init; }
+    
+    /// <summary>
+    /// شناسه مسیر اجرا
+    /// </summary>
+    public string? ExecutionId { get; init; }
 }
 
 /// <summary>
-/// رویداد شکست کار
+/// رویداد شکست اجرای کار
 /// </summary>
 public record JobFailedEvent : BpmnEvent
 {
@@ -103,12 +138,32 @@ public record JobFailedEvent : BpmnEvent
     public required string JobId { get; init; }
     
     /// <summary>
-    /// پیام خطا
+    /// شناسه المان
     /// </summary>
-    public string? ErrorMessage { get; init; }
+    public required string ElementId { get; init; }
     
     /// <summary>
-    /// تلاش‌های باقی‌مانده
+    /// نوع المان
+    /// </summary>
+    public required string ElementType { get; init; }
+    
+    /// <summary>
+    /// نوع کار
+    /// </summary>
+    public required string JobType { get; init; }
+    
+    /// <summary>
+    /// کد خطا
+    /// </summary>
+    public required string ErrorCode { get; init; }
+    
+    /// <summary>
+    /// پیام خطا
+    /// </summary>
+    public required string ErrorMessage { get; init; }
+    
+    /// <summary>
+    /// تعداد تلاش باقیمانده
     /// </summary>
     public int RemainingRetries { get; init; }
     
@@ -116,6 +171,11 @@ public record JobFailedEvent : BpmnEvent
     /// زمان کاری بعدی
     /// </summary>
     public DateTime? RetryBackOff { get; init; }
+    
+    /// <summary>
+    /// شناسه مسیر اجرا
+    /// </summary>
+    public string? ExecutionId { get; init; }
 }
 
 /// <summary>

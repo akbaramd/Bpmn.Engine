@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Novin.Bpmn.EventSourcing.Contracts;
+using Novin.Bpmn.EventSourcing.Core.Models;
 using Novin.Bpmn.EventSourcing.Events;
 using Novin.Bpmn.Models;
 using System;
@@ -72,6 +73,28 @@ public class ProcessCreatedHandler : IBpmnEventHandler<ProcessInstanceCreated>
                 throw new InvalidOperationException($"Process instance state not found for {@event.ProcessInstanceId}");
             }
             
+            // Create an initial root execution path for the process instance
+            var rootExecutionPath = new Core.Models.ExecutionPath
+            {
+                ExecutionId = Guid.NewGuid().ToString(),
+                SourceElementId = "process_start",
+                SourceElementType = "process",
+                TargetElementId = startEvents.First().id, // Use the first start event as target
+                TargetElementType = "bpmn:StartEvent",
+                Status = ExecutionStatus.Active
+            };
+            
+            // Add the execution path to state
+            state.ExecutionPaths.Add(rootExecutionPath);
+            state.ActiveExecutions[rootExecutionPath.ExecutionId] = rootExecutionPath;
+            
+            // Add the event to the execution path
+            rootExecutionPath.AddEvent(@event);
+            state.EventToExecutionPath[@event.EventId.ToString()] = rootExecutionPath.ExecutionId;
+            
+            // Save updated state
+            await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, 1);
+            
             // Activate each start event
             foreach (var startEvent in startEvents)
             {
@@ -81,19 +104,52 @@ public class ProcessCreatedHandler : IBpmnEventHandler<ProcessInstanceCreated>
                 // Add to active elements
                 state.ActiveElements.Add(startEvent.id);
                 
+                // Create a child execution path for this start event
+                var startEventExecution = new Core.Models.ExecutionPath
+                {
+                    ExecutionId = Guid.NewGuid().ToString(),
+                    SourceElementId = "process_start",
+                    SourceElementType = "process",
+                    TargetElementId = startEvent.id,
+                    TargetElementType = "bpmn:StartEvent",
+                    Status = ExecutionStatus.Active,
+                    ParentExecutionId = rootExecutionPath.ExecutionId
+                };
+                
+                // Add the execution path to state
+                state.ExecutionPaths.Add(startEventExecution);
+                state.ActiveExecutions[startEventExecution.ExecutionId] = startEventExecution;
+                
+                // Map the start event to its execution path
+                if (!state.ElementExecutionPaths.TryGetValue(startEvent.id, out var paths))
+                {
+                    paths = new List<string>();
+                    state.ElementExecutionPaths[startEvent.id] = paths;
+                }
+                paths.Add(startEventExecution.ExecutionId);
+                
                 // Save updated state
-                await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, 1);
+                await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, 2);
                 
                 // Publish ElementCreated event
-                await _eventBus.PublishAsync(new ElementCreated
+                var elementCreatedEvent = new ElementCreated
                 {
                     ProcessInstanceId = @event.ProcessInstanceId,
                     ElementId = startEvent.id,
-                    ElementType = "bpmn:StartEvent"
-                }, cancellationToken);
+                    ElementType = "bpmn:StartEvent",
+                    IsExecutable = true, // Start events are always executable
+                    ExecutionId = startEventExecution.ExecutionId
+                };
                 
-       
+                await _eventBus.PublishAsync(elementCreatedEvent, cancellationToken);
+                
+                // Add the event to the execution path
+                state.AddEventToExecution(startEventExecution.ExecutionId, elementCreatedEvent);
             }
+            
+            // Update statistics
+            state.UpdateExecutionStatistics();
+            await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, 4);
             
             _logger.LogInformation("Successfully activated {Count} start events for process instance {ProcessInstanceId}",
                 startEvents.Count, @event.ProcessInstanceId);

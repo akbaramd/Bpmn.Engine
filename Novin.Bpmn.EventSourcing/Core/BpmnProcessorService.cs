@@ -10,7 +10,7 @@ using Novin.Bpmn.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-
+using Novin.Bpmn.EventSourcing.Core.Models;
 namespace Novin.Bpmn.EventSourcing.Core;
 
 /// <summary>
@@ -165,7 +165,15 @@ public class BpmnProcessorService
                 ActiveElements = new HashSet<string>(),
                 CompletedElements = new HashSet<string>(),
                 Variables = initialVariables,
-                Status = ProcessStatus.Created
+                Status = ProcessStatus.Created,
+                // Initialize collections for execution tracking
+                ExecutionPaths = new List<Models.ExecutionPath>(),
+                ActiveExecutions = new Dictionary<string, Models.ExecutionPath>(),
+                ElementExecutionPaths = new Dictionary<string, List<string>>(),
+                ElementToSequenceFlows = new Dictionary<string, List<string>>(),
+                ElementExecutionCounts = new Dictionary<string, int>(),
+                GatewayMergeStates = new Dictionary<string, Models.GatewayMergeInfo>(),
+                EventToExecutionPath = new Dictionary<string, string>()
             };
 
             // Save initial state
@@ -243,7 +251,7 @@ public class BpmnProcessorService
             return new Dictionary<string, TaskInfo>();
             
         return state.Tasks
-            .Where(t => t.Value.TaskType == "UserTask" && t.Value.Status == TaskStatus.Active)
+            .Where(t => t.Value.TaskType == "UserTask" && t.Value.Status.ToString() == "Active")
             .ToDictionary(t => t.Key, t => t.Value);
     }
     
@@ -421,9 +429,18 @@ public class BpmnProcessorService
             {
                 state.CompletedElements.Add(taskId);
             }
+            
+            // Update task status
+            if (taskInfo != null)
+            {
+                // Set to Completed (value = 2)
+                taskInfo.Status = TaskStatus.Processing; 
+                taskInfo.CompletedAt = DateTime.UtcNow;
+                taskInfo.FormData = finalFormData;
+            }
 
             // Save updated state
-            await _stateStore.SaveStateAsync(processInstanceId, state, version + 1);
+            await _stateStore.SaveStateAsync(processInstanceId, state, version);
                 
             // ارسال رویداد کامل شدن وظیفه کاربری
             await _eventBus.PublishAsync(new Events.UserTaskCompletedEvent
@@ -439,7 +456,9 @@ public class BpmnProcessorService
             {
                 ProcessInstanceId = processInstanceId,
                 ElementId = taskId,
-                ElementType = "bpmn:UserTask"
+                ElementType = "bpmn:UserTask",
+                ExecutionId = taskInfo.ExecutionId,
+                IsExecutable = true // User tasks are always executable when completed by a user
             }, cancellationToken);
             
             _logger.LogInformation("Completed user task {TaskId} in process instance {ProcessInstanceId}", 
@@ -489,13 +508,13 @@ public class BpmnProcessorService
         if (state == null)
             throw new BpmnProcessorException($"Process instance {processInstanceId} not found");
         
-        if (state.Status == ProcessStatus.Completed || state.Status == ProcessStatus.Deleted)
+        if (state.Status == ProcessStatus.Completed || state.Status == ProcessStatus.Terminated)
             throw new BpmnProcessorException($"Process instance {processInstanceId} is already terminated");
             
         try
         {
             // Update state
-            state.Status = ProcessStatus.Deleted;
+            state.Status = ProcessStatus.Terminated;
             state.ActiveElements.Clear();
             
             // Save updated state

@@ -18,4 +18,6 @@ public record SubProcessStartingEvent : BpmnEvent
     /// اطلاعات اضافی درباره زیرفرآیند
     /// </summary>
     public Dictionary<string, object>? Metadata { get; init; }
+
+    public string? ExecutionId { get; set; }
 } 

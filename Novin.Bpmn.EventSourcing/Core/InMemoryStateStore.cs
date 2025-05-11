@@ -1,10 +1,12 @@
 using Microsoft.Extensions.Logging;
 using Novin.Bpmn.EventSourcing.Contracts;
+using Novin.Bpmn.EventSourcing.Events;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -39,6 +41,10 @@ public class InMemoryStateStore : IStateStore
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             PropertyNameCaseInsensitive = true
         };
+        
+        // Add converter for the IBpmnEvent interface
+        _jsonOptions.Converters.Add(new JsonStringEnumConverter());
+        _jsonOptions.Converters.Add(new BpmnEventConverter());
     }
 
     /// <inheritdoc />
@@ -316,6 +322,59 @@ public class InMemoryStateStore : IStateStore
     {
         _states.Clear();
         _logger.LogInformation("Cleared all states");
+    }
+}
+
+/// <summary>
+/// BpmnEventConverter for handling IBpmnEvent interface serialization
+/// </summary>
+public class BpmnEventConverter : JsonConverter<IBpmnEvent>
+{
+    public override IBpmnEvent Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        // Save the reader position
+        var readerAtStart = reader;
+        
+        // First try to read the document as a JsonDocument
+        using var jsonDoc = JsonDocument.ParseValue(ref reader);
+        var rootElement = jsonDoc.RootElement;
+        
+        // Check for EventType property to determine the concrete type
+        if (rootElement.TryGetProperty("eventType", out var eventTypeProperty))
+        {
+            var eventTypeName = eventTypeProperty.GetString();
+            if (!string.IsNullOrEmpty(eventTypeName))
+            {
+                // Get the concrete type based on the event type name
+                var concreteType = GetConcreteEventType(eventTypeName);
+                if (concreteType != null)
+                {
+                    // Reset the reader and deserialize to the concrete type
+                    var jsonString = rootElement.GetRawText();
+                    return (IBpmnEvent)JsonSerializer.Deserialize(jsonString, concreteType, options)!;
+                }
+            }
+        }
+        
+        throw new JsonException($"Could not deserialize {typeToConvert.Name}. EventType property not found or invalid.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, IBpmnEvent value, JsonSerializerOptions options)
+    {
+        // Directly serialize the concrete implementation
+        JsonSerializer.Serialize(writer, value, value.GetType(), options);
+    }
+    
+    private Type? GetConcreteEventType(string eventTypeName)
+    {
+        // Map event type names to their concrete types
+        // First check in the Events namespace
+        var eventType = Type.GetType($"Novin.Bpmn.EventSourcing.Events.{eventTypeName}");
+        if (eventType != null)
+            return eventType;
+            
+        // Support for fully qualified type names
+        return Type.GetType(eventTypeName);
     }
 }
 

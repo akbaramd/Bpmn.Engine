@@ -162,6 +162,7 @@ public class UserTaskInfo
     /// زمان آخرین خطا
     /// </summary>
     public DateTime? LastErrorAt { get; set; }
+    public string? ExecutionId { get;  set; }
 }
 
 /// <summary>

@@ -38,6 +38,11 @@ public record TimerSubscriptionCreatedEvent : BpmnEvent
     /// آیا این تایمر وقفه‌دهنده است
     /// </summary>
     public bool IsInterrupting { get; init; }
+    
+    /// <summary>
+    /// شناسه مسیر اجرا
+    /// </summary>
+    public string? ExecutionId { get; init; }
 }
 
 /// <summary>
@@ -87,6 +92,11 @@ public record MessageSubscriptionCreatedEvent : BpmnEvent
     public required string MessageName { get; init; }
     
     /// <summary>
+    /// کلید همبستگی
+    /// </summary>
+    public string? CorrelationKey { get; init; }
+    
+    /// <summary>
     /// شناسه المانی که رویداد پیام به آن متصل شده (برای رویدادهای مرزی)
     /// </summary>
     public string? AttachedToElementId { get; init; }
@@ -95,6 +105,11 @@ public record MessageSubscriptionCreatedEvent : BpmnEvent
     /// آیا این رویداد پیام وقفه‌دهنده است
     /// </summary>
     public bool IsInterrupting { get; init; }
+    
+    /// <summary>
+    /// شناسه مسیر اجرا
+    /// </summary>
+    public string? ExecutionId { get; init; }
 }
 
 /// <summary>
@@ -173,4 +188,36 @@ public record EscalationSubscriptionCreatedEvent : BpmnEvent
     /// آیا این رویداد escalation وقفه‌دهنده است
     /// </summary>
     public bool IsInterrupting { get; init; }
-} 
+}
+
+/// <summary>
+/// رویداد دریافت پیام
+/// </summary>
+public record MessageReceivedEvent : BpmnEvent
+{
+    /// <summary>
+    /// شناسه المان
+    /// </summary>
+    public string ElementId { get; init; }
+    
+    /// <summary>
+    /// نام پیام
+    /// </summary>
+    public string MessageName { get; init; }
+    
+    /// <summary>
+    /// کلید همبستگی
+    /// </summary>
+    public string? CorrelationKey { get; init; }
+    
+    /// <summary>
+    /// محتوای پیام
+    /// </summary>
+    public object? MessageContent { get; init; }
+    
+    /// <summary>
+    /// شناسه مسیر اجرا
+    /// </summary>
+    public string? ExecutionId { get; init; }
+}
+

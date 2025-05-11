@@ -9,6 +9,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Novin.Bpmn.Models;
+using Microsoft.CodeAnalysis.CSharp.Scripting;
+using Microsoft.CodeAnalysis.Scripting;
+using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace Novin.Bpmn.EventSourcing.Core.EventHandlers;
 
@@ -49,7 +53,14 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
         _logger.LogDebug("Processing element {ElementId} of type {ElementType} in process {ProcessInstanceId}", 
             @event.ElementId, @event.ElementType, @event.ProcessInstanceId);
         
-        var (state, version) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(@event.ProcessInstanceId);
+        // Get state asynchronously while preparing for processing
+        var stateTask = _stateStore.GetStateWithVersionAsync<BpmnProcessState>(@event.ProcessInstanceId);
+        
+        // While fetching state, prepare for element-specific processing
+        var elementHandler = DetermineElementHandler(@event.ElementType);
+        
+        // Wait for state
+        var (state, version) = await stateTask;
         
         if (state == null)
         {
@@ -59,58 +70,18 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
 
         try
         {
-            switch (@event.ElementType)
-        {
-            case "bpmn:UserTask":
-                    await ProcessUserTaskAsync(@event, state, version, cancellationToken);
-                break;
+            // Track event in execution path if execution ID is provided
+            if (!string.IsNullOrEmpty(@event.ExecutionId))
+            {
+                state.AddEventToExecution(@event.ExecutionId, @event);
                 
-            case "bpmn:ServiceTask":
-                    await ProcessServiceTaskAsync(@event, state, version, cancellationToken);
-                break;
-                
-            case "bpmn:ScriptTask":
-                    await ProcessScriptTaskAsync(@event, state, version, cancellationToken);
-                break;
-                
-            case "bpmn:BusinessRuleTask":
-                    await ProcessBusinessRuleTaskAsync(@event, state, version, cancellationToken);
-                break;
-                
-            case "bpmn:SendTask":
-                    await ProcessSendTaskAsync(@event, state, version, cancellationToken);
-                break;
-                
-            case "bpmn:ReceiveTask":
-                    await ProcessReceiveTaskAsync(@event, state, version, cancellationToken);
-                break;
-                
-            case "bpmn:IntermediateCatchEvent":
-                    await ProcessIntermediateCatchEventAsync(@event, state, version, cancellationToken);
-                break;
-                
-            case "bpmn:IntermediateThrowEvent":
-                    await ProcessIntermediateThrowEventAsync(@event, state, version, cancellationToken);
-                break;
-                
-            case "bpmn:BoundaryEvent":
-                    await ProcessBoundaryEventAsync(@event, state, version, cancellationToken);
-                break;
-                
-            case "bpmn:CallActivity":
-                    await ProcessCallActivityAsync(@event, state, version, cancellationToken);
-                break;
-                
-            case "bpmn:SubProcess":
-                    await ProcessSubProcessAsync(@event, state, version, cancellationToken);
-                break;
-
-                default:
-                    _logger.LogDebug("Processing element {ElementId} of type {ElementType}", 
-                        @event.ElementId, @event.ElementType);
-                    await CompleteElementAsync(@event, state, version, cancellationToken);
-                break;
+                // Save state with the added event
+                await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, version);
+                version++; // Increment version after save
             }
+            
+            // Dispatch to appropriate element handler
+            await elementHandler(@event, state, version, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -123,8 +94,113 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
                 ElementId = @event.ElementId,
                 ElementType = @event.ElementType,
                 ErrorCode = "PROCESSING_ERROR",
-                ErrorMessage = ex.Message
+                ErrorMessage = ex.Message,
+                ExecutionId = @event.ExecutionId // Pass execution ID to failure event
             }, cancellationToken);
+        }
+    }
+    
+    /// <summary>
+    /// Determine the appropriate handler for the element type
+    /// </summary>
+    private Func<ElementProcessing, BpmnProcessState, long, CancellationToken, Task> DetermineElementHandler(string elementType)
+    {
+        switch (elementType)
+        {
+            case "bpmn:UserTask": 
+                return ProcessUserTaskAsync;
+            case "bpmn:ServiceTask": 
+                return ProcessServiceTaskAsync;
+            case "bpmn:ScriptTask": 
+                return ProcessScriptTaskAsync;
+            case "bpmn:BusinessRuleTask": 
+                return ProcessBusinessRuleTaskAsync;
+            case "bpmn:SendTask": 
+                return ProcessSendTaskAsync;
+            case "bpmn:ReceiveTask": 
+                return ProcessReceiveTaskAsync;
+            case "bpmn:IntermediateCatchEvent": 
+                return ProcessIntermediateCatchEventAsync;
+            case "bpmn:IntermediateThrowEvent": 
+                return ProcessIntermediateThrowEventAsync;
+            case "bpmn:BoundaryEvent": 
+                return ProcessBoundaryEventAsync;
+            case "bpmn:CallActivity": 
+                return ProcessCallActivityAsync;
+            case "bpmn:SubProcess": 
+                return ProcessSubProcessAsync;
+            default: 
+                return async (e, s, v, ct) => await CompleteElementAsync(e, s, v, ct);
+        }
+    }
+    
+    /// <summary>
+    /// Evaluate a script asynchronously with all necessary context
+    /// </summary>
+    private async Task<object> EvaluateScriptAsync(
+        string scriptContent,
+        string scriptLanguage,
+        ScriptContext context,
+        CancellationToken cancellationToken)
+    {
+        // Configure script options with references to commonly needed assemblies
+        var scriptOptions = ScriptOptions.Default
+            .WithReferences(
+                typeof(System.Linq.Enumerable).Assembly,
+                typeof(System.Collections.Generic.List<>).Assembly,
+                typeof(System.Console).Assembly,
+                typeof(System.Collections.Generic.Dictionary<,>).Assembly,
+                typeof(ScriptContext).Assembly)
+            .WithImports(
+                "System",
+                "System.Linq", 
+                "System.Collections.Generic",
+                "System.Text");
+                
+        if (scriptLanguage == "csharp" || scriptLanguage == "c#" || scriptLanguage == "text/csharp")
+        {
+            // Execute the script with the context
+            return await CSharpScript.EvaluateAsync(
+                scriptContent, 
+                scriptOptions, 
+                context, 
+                typeof(ScriptContext), 
+                cancellationToken);
+        }
+        else if (scriptLanguage == "expression" || scriptLanguage == "text/expression")
+        {
+            // Simple expression language - just evaluate as C# expression
+            return await CSharpScript.EvaluateAsync(
+                scriptContent,
+                scriptOptions.WithImports("System", "System.Linq", "System.Collections.Generic"),
+                context,
+                typeof(ScriptContext),
+                cancellationToken);
+        }
+        else if (scriptLanguage == "javascript" || scriptLanguage == "js" || scriptLanguage == "text/javascript")
+        {
+            // Try to handle simple expressions via C# evaluation
+            if (scriptContent.EndsWith(";"))
+            {
+                scriptContent = scriptContent.TrimEnd(';');
+            }
+            
+            return await CSharpScript.EvaluateAsync(
+                scriptContent,
+                scriptOptions.WithImports("System", "System.Linq", "System.Collections.Generic"),
+                context,
+                typeof(ScriptContext),
+                cancellationToken);
+        }
+        else
+        {
+            // Default to C# for any other language
+            return await CSharpScript.EvaluateAsync(
+                scriptContent,
+                scriptOptions.WithImports("System", "System.Linq", "System.Collections.Generic"),
+                context,
+                typeof(ScriptContext),
+                cancellationToken);
         }
     }
     
@@ -161,7 +237,8 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
                 Priority = 0,
                 Status = UserTaskStatus.Active,
                 CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                UpdatedAt = DateTime.UtcNow,
+                ExecutionId = @event.ExecutionId // Track execution ID in task
             };
 
             if (!string.IsNullOrEmpty(userTask.candidateUsers))
@@ -203,7 +280,8 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
             JobType = "service-task",
             Retries = 3,
             Intent = "CREATED",
-            Timestamp = DateTime.UtcNow
+            Timestamp = DateTime.UtcNow,
+            ExecutionId = @event.ExecutionId // Track execution ID in job
         }, cancellationToken);
     }
     
@@ -213,18 +291,194 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
         long version,
         CancellationToken cancellationToken)
     {
-        await _eventBus.PublishAsync(new JobCreatedEvent
+        try
         {
-            EventId = Guid.NewGuid(),
-            ProcessInstanceId = @event.ProcessInstanceId,
-            JobId = Guid.NewGuid().ToString(),
-            ElementId = @event.ElementId,
-            ElementType = @event.ElementType,
-            JobType = "script-task",
-            Retries = 3,
-            Intent = "CREATED",
-            Timestamp = DateTime.UtcNow
-        }, cancellationToken);
+            // Get the script task definition from BPMN model
+            var definition = _bpmnDefinitionStorage.GetParsedDefinition(state.DeploymentKey);
+            if (definition == null)
+            {
+                throw new InvalidOperationException($"BPMN definition not found for deployment key {state.DeploymentKey}");
+            }
+
+            var scriptTask = FindScriptTask(definition, @event.ElementId);
+            if (scriptTask == null)
+            {
+                throw new InvalidOperationException($"ScriptTask {@event.ElementId} not found in definition");
+            }
+
+            // Determine script language (default to C#)
+            string scriptLanguage = scriptTask.scriptFormat?.ToLowerInvariant() ?? "csharp";
+            
+            // Extract script content from the task and ensure it's a string
+            string scriptContent = string.Empty;
+            
+            if (scriptTask.script != null)
+            {
+                // Simply convert to string, whatever the type is
+                scriptContent = scriptTask.script.InnerText;
+                
+                // If it looks like XML, try to extract just the text content
+            }
+            
+            if (string.IsNullOrWhiteSpace(scriptContent))
+            {
+                _logger.LogWarning("Empty script content for task {TaskId} in process {ProcessInstanceId}", 
+                    @event.ElementId, @event.ProcessInstanceId);
+                
+                // Even with empty script, we complete the task
+                await CompleteElementAsync(@event, state, version, cancellationToken);
+                return;
+            }
+            
+            _logger.LogDebug("Executing {Language} script for task {TaskId} in process {ProcessInstanceId}: {ScriptContent}", 
+                scriptLanguage, @event.ElementId, @event.ProcessInstanceId, scriptContent);
+            
+            // Create a ScriptContext object to pass process variables to the script
+            var scriptContext = new ScriptContext 
+            { 
+                Variables = state.Variables,
+                ProcessInstanceId = @event.ProcessInstanceId,
+                ElementId = @event.ElementId
+            };
+            
+            // Process the script based on the language
+            object result = null;
+            
+            if (scriptLanguage == "csharp" || scriptLanguage == "c#" || scriptLanguage == "text/csharp")
+            {
+                // Configure script options with references to commonly needed assemblies
+                var scriptOptions = ScriptOptions.Default
+                    .WithReferences(
+                        typeof(System.Linq.Enumerable).Assembly,
+                        typeof(System.Collections.Generic.List<>).Assembly,
+                        typeof(System.Console).Assembly,
+                        typeof(ScriptContext).Assembly)
+                    .WithImports(
+                        "System",
+                        "System.Linq", 
+                        "System.Collections.Generic",
+                        "System.Text");
+                
+                // Execute the script with the context
+                result = await CSharpScript.EvaluateAsync(
+                    scriptContent, 
+                    scriptOptions, 
+                    scriptContext, 
+                    typeof(ScriptContext), 
+                    cancellationToken);
+            }
+            else if (scriptLanguage == "expression" || scriptLanguage == "text/expression")
+            {
+                // Simple expression language - just evaluate as C# expression
+                result = await CSharpScript.EvaluateAsync(
+                    scriptContent,
+                    ScriptOptions.Default
+                        .WithImports("System", "System.Linq", "System.Collections.Generic"),
+                    scriptContext,
+                    typeof(ScriptContext),
+                    cancellationToken);
+            }
+            else if (scriptLanguage == "javascript" || scriptLanguage == "js" || scriptLanguage == "text/javascript")
+            {
+                // Not directly supported - log a warning
+                _logger.LogWarning("JavaScript scripts are not natively supported. Task: {TaskId}", @event.ElementId);
+                
+                // Try to handle simple expressions via C# evaluation
+                if (scriptContent.EndsWith(";"))
+                {
+                    scriptContent = scriptContent.TrimEnd(';');
+                }
+                
+                try
+                {
+                    result = await CSharpScript.EvaluateAsync(
+                        scriptContent,
+                        ScriptOptions.Default
+                            .WithImports("System", "System.Linq", "System.Collections.Generic"),
+                        scriptContext,
+                        typeof(ScriptContext),
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Failed to evaluate JavaScript as C# expression: {Error}", ex.Message);
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Unsupported script language: {Language} for task {TaskId}. Using as C# script.",
+                    scriptLanguage, @event.ElementId);
+                
+                // Try as C# anyway
+                result = await CSharpScript.EvaluateAsync(
+                    scriptContent,
+                    ScriptOptions.Default
+                        .WithImports("System", "System.Linq", "System.Collections.Generic"),
+                    scriptContext,
+                    typeof(ScriptContext),
+                    cancellationToken);
+            }
+            
+            // Update state with any variables changed by the script
+            bool variablesChanged = false;
+            foreach (var variable in scriptContext.Variables)
+            {
+                // Check if variable is new or changed
+                if (!state.Variables.ContainsKey(variable.Key) || 
+                    !object.Equals(state.Variables[variable.Key], variable.Value))
+                {
+                    state.Variables[variable.Key] = variable.Value;
+                    variablesChanged = true;
+                }
+            }
+            
+            // Add any output result from the script to variables if present
+            if (result != null && !scriptContext.Variables.ContainsKey("result"))
+            {
+                state.Variables["result"] = result;
+                variablesChanged = true;
+            }
+            
+            if (variablesChanged)
+            {
+                // Save the updated state with new variables
+                var (currentState, currentVersion) = await _stateStore.GetStateWithVersionAsync<BpmnProcessState>(
+                    @event.ProcessInstanceId, cancellationToken);
+                
+                if (currentState != null)
+                {
+                    // Update variables but preserve other state properties
+                    foreach (var variable in state.Variables)
+                    {
+                        currentState.Variables[variable.Key] = variable.Value;
+                    }
+                    
+                    await _stateStore.SaveStateAsync(
+                        @event.ProcessInstanceId, currentState, currentVersion, cancellationToken);
+                }
+            }
+            
+            // Complete the script task
+            await CompleteElementAsync(@event, state, variablesChanged ? version + 1 : version, cancellationToken);
+            
+            _logger.LogDebug("Script task {TaskId} executed successfully in process {ProcessInstanceId}", 
+                @event.ElementId, @event.ProcessInstanceId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error executing script for task {TaskId} in process {ProcessInstanceId}: {ErrorMessage}", 
+                @event.ElementId, @event.ProcessInstanceId, ex.Message);
+                
+            await _eventBus.PublishAsync(new ElementFailed
+            {
+                ProcessInstanceId = @event.ProcessInstanceId,
+                ElementId = @event.ElementId,
+                ElementType = @event.ElementType,
+                ErrorCode = "SCRIPT_ERROR",
+                ErrorMessage = ex.Message,
+                ExecutionId = @event.ExecutionId
+            }, cancellationToken);
+        }
     }
     
     private async Task ProcessBusinessRuleTaskAsync(
@@ -243,7 +497,8 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
             JobType = "business-rule-task",
             Retries = 3,
             Intent = "CREATED",
-            Timestamp = DateTime.UtcNow
+            Timestamp = DateTime.UtcNow,
+            ExecutionId = @event.ExecutionId // Track execution ID in job
         }, cancellationToken);
     }
     
@@ -263,7 +518,8 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
             JobType = "send-task",
             Retries = 3,
             Intent = "CREATED",
-            Timestamp = DateTime.UtcNow
+            Timestamp = DateTime.UtcNow,
+            ExecutionId = @event.ExecutionId // Track execution ID in job
         }, cancellationToken);
     }
     
@@ -280,7 +536,8 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
             ElementId = @event.ElementId,
             MessageName = @event.ElementId,
             Intent = "CREATED",
-            Timestamp = DateTime.UtcNow
+            Timestamp = DateTime.UtcNow,
+            ExecutionId = @event.ExecutionId // Track execution ID in subscription
         }, cancellationToken);
     }
     
@@ -297,7 +554,8 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
             ElementId = @event.ElementId,
             MessageName = @event.ElementId,
             Intent = "CREATED",
-            Timestamp = DateTime.UtcNow
+            Timestamp = DateTime.UtcNow,
+            ExecutionId = @event.ExecutionId // Track execution ID in subscription
         }, cancellationToken);
     }
     
@@ -317,7 +575,8 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
             JobType = "throw-event",
             Retries = 3,
             Intent = "CREATED",
-            Timestamp = DateTime.UtcNow
+            Timestamp = DateTime.UtcNow,
+            ExecutionId = @event.ExecutionId // Track execution ID in job
         }, cancellationToken);
     }
     
@@ -376,7 +635,8 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
             JobType = "call-activity",
             Retries = 3,
             Intent = "CREATED",
-            Timestamp = DateTime.UtcNow
+            Timestamp = DateTime.UtcNow,
+            ExecutionId = @event.ExecutionId // Track execution ID in job
         }, cancellationToken);
     }
     
@@ -391,7 +651,8 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
             EventId = Guid.NewGuid(),
             ProcessInstanceId = @event.ProcessInstanceId,
             SubProcessId = @event.ElementId,
-            Timestamp = DateTime.UtcNow
+            Timestamp = DateTime.UtcNow,
+            ExecutionId = @event.ExecutionId // Track execution ID in subprocess
         }, cancellationToken);
     }
     
@@ -405,7 +666,8 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
         {
             ProcessInstanceId = @event.ProcessInstanceId,
             ElementId = @event.ElementId,
-            ElementType = @event.ElementType
+            ElementType = @event.ElementType,
+            ExecutionId = @event.ExecutionId // Pass the execution ID to ElementCompleted
         }, cancellationToken);
     }
     
@@ -418,6 +680,36 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
                 
             if (task != null)
                 return task;
+        }
+        
+        return null;
+    }
+    
+    private BpmnScriptTask FindScriptTask(BpmnDefinitions definitions, string taskId)
+    {
+        foreach (var process in definitions.Items.OfType<BpmnProcess>())
+        {
+            var task = process.Items?.OfType<BpmnScriptTask>()
+                .FirstOrDefault(t => t.id == taskId);
+                
+            if (task != null)
+                return task;
+                
+            // Also search in subprocesses
+            if (process.Items != null)
+            {
+                foreach (var item in process.Items)
+                {
+                    if (item is BpmnSubProcess subProcess && subProcess.Items != null)
+                    {
+                        var subTask = subProcess.Items.OfType<BpmnScriptTask>()
+                            .FirstOrDefault(t => t.id == taskId);
+                            
+                        if (subTask != null)
+                            return subTask;
+                    }
+                }
+            }
         }
         
         return null;
@@ -473,7 +765,8 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
             AttachedToElementId = boundaryEvent.attachedToRef?.Name,
             IsInterrupting = boundaryEvent.cancelActivity,
             Intent = "CREATED",
-            Timestamp = DateTime.UtcNow
+            Timestamp = DateTime.UtcNow,
+            ExecutionId = @event.ExecutionId // Track execution ID in timer subscription
         }, cancellationToken);
     }
     
@@ -494,7 +787,8 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
             AttachedToElementId = boundaryEvent.attachedToRef?.Name,
             IsInterrupting = boundaryEvent.cancelActivity,
             Intent = "CREATED",
-            Timestamp = DateTime.UtcNow
+            Timestamp = DateTime.UtcNow,
+            ExecutionId = @event.ExecutionId // Track execution ID in message subscription
         }, cancellationToken);
     }
     
@@ -511,13 +805,14 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
                 EventId = Guid.NewGuid(),
                 ProcessInstanceId = @event.ProcessInstanceId,
                 ElementId = @event.ElementId,
-            TimerId = errorRef,
-            TimerType = "error",
-            TimerValue = errorRef,
-            AttachedToElementId = boundaryEvent.attachedToRef?.Name,
-            IsInterrupting = true,
+                TimerId = errorRef,
+                TimerType = "error",
+                TimerValue = errorRef,
+                AttachedToElementId = boundaryEvent.attachedToRef?.Name,
+                IsInterrupting = true,
                 Intent = "CREATED",
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
+                ExecutionId = @event.ExecutionId // Track execution ID in error subscription
         }, cancellationToken);
     }
     
@@ -529,20 +824,110 @@ public class ElementProcessingHandler : IBpmnEventHandler<ElementProcessing>
     {
         string signalRef = signalEvent.signalRef?.Name ?? "unknown-signal";
         
-            await _eventBus.PublishAsync(new MessageSubscriptionCreatedEvent
-            {
-                EventId = Guid.NewGuid(),
-                ProcessInstanceId = @event.ProcessInstanceId,
-                ElementId = @event.ElementId,
+        await _eventBus.PublishAsync(new MessageSubscriptionCreatedEvent
+        {
+            EventId = Guid.NewGuid(),
+            ProcessInstanceId = @event.ProcessInstanceId,
+            ElementId = @event.ElementId,
             MessageName = "signal:" + signalRef,
             AttachedToElementId = boundaryEvent.attachedToRef?.Name,
             IsInterrupting = boundaryEvent.cancelActivity,
-                Intent = "CREATED",
-                Timestamp = DateTime.UtcNow
+            Intent = "CREATED",
+            Timestamp = DateTime.UtcNow,
+            ExecutionId = @event.ExecutionId // Track execution ID in signal subscription
         }, cancellationToken);
     }
 }
 
 /// <summary>
-/// رویداد ایجاد کار جدید
+/// Context class for passing variables to scripts
 /// </summary>
+public class ScriptContext
+{
+    /// <summary>
+    /// Process variables accessible to the script
+    /// </summary>
+    public Dictionary<string, object> Variables { get; set; } = new Dictionary<string, object>();
+    
+    /// <summary>
+    /// Process instance ID
+    /// </summary>
+    public string ProcessInstanceId { get; set; }
+    
+    /// <summary>
+    /// Element ID of the script task
+    /// </summary>
+    public string ElementId { get; set; }
+    
+    /// <summary>
+    /// Sets a variable in the context
+    /// </summary>
+    public void SetVariable(string name, object value)
+    {
+        Variables[name] = value;
+    }
+    
+    /// <summary>
+    /// Gets a variable from the context
+    /// </summary>
+    public T GetVariable<T>(string name, T defaultValue = default)
+    {
+        if (Variables.TryGetValue(name, out var value) && value is T typedValue)
+        {
+            return typedValue;
+        }
+        return defaultValue;
+    }
+    
+    /// <summary>
+    /// Evaluates an expression with the current variables
+    /// </summary>
+    public T Evaluate<T>(string expression)
+    {
+        // This will use CSharpScript to evaluate the expression in the current context
+        var result = CSharpScript.EvaluateAsync<T>(
+            expression,
+            ScriptOptions.Default
+                .WithImports("System", "System.Linq", "System.Collections.Generic"),
+            this).Result;
+        return result;
+    }
+    
+    /// <summary>
+    /// Evaluates an expression (non-generic version)
+    /// </summary>
+    public object Evaluate(string expression)
+    {
+        var result = CSharpScript.EvaluateAsync(
+            expression,
+            ScriptOptions.Default
+                .WithImports("System", "System.Linq", "System.Collections.Generic"),
+            this).Result;
+        return result;
+    }
+    
+    /// <summary>
+    /// Logs a message to the console
+    /// </summary>
+    public void Log(string message)
+    {
+        Console.WriteLine($"[Script {ElementId}] {message}");
+    }
+    
+    /// <summary>
+    /// Formats a string with variable placeholders
+    /// </summary>
+    public string Format(string template)
+    {
+        // Replace ${varName} with variable values
+        return Regex.Replace(template, @"\$\{([^}]+)\}", match =>
+        {
+            var varName = match.Groups[1].Value;
+            if (Variables.TryGetValue(varName, out var value))
+            {
+                return value?.ToString() ?? "";
+            }
+            return match.Value; // Keep original if not found
+        });
+    }
+}

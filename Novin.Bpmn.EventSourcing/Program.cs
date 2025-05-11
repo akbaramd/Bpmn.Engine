@@ -45,7 +45,6 @@ class Program
     private static void ShowMenu()
     {
         Console.WriteLine("لطفاً مثال مورد نظر را انتخاب کنید:");
-        Console.WriteLine("1. مثال پایه BPMN Processor");
         Console.WriteLine("2. مثال وظایف کاربری");
         Console.WriteLine("3. ابزار تشخیص ثبت هندلرها");
         Console.WriteLine("4. مثال مخزن تعاریف BPMN");
@@ -59,11 +58,9 @@ class Program
         switch (choice)
         {
             case "1":
-            case "bpmn":
-            case "processor":
-                await BpmnProcessorExample.RunAsync();
+                await InclusiveGatewayExample.RunAsync();
                 break;
-                
+            
             case "2":
             case "usertask":
             case "task":

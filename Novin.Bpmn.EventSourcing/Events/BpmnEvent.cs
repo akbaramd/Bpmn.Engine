@@ -6,7 +6,7 @@ namespace Novin.Bpmn.EventSourcing.Events;
 /// <summary>
 /// پیاده‌سازی پایه برای تمام رویدادهای BPMN
 /// </summary>
-public abstract record BpmnEvent : IBpmnEvent
+public  record BpmnEvent : IBpmnEvent
 {
     /// <inheritdoc />
     public Guid EventId { get; init; } = Guid.NewGuid();
