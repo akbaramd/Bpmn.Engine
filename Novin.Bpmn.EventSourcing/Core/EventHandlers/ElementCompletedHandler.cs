@@ -164,8 +164,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
                 await HandleStandardElementCompletionAsync(context, @event, definitionExplorer, cancellationToken);
             }
             
-            // Mark the execution as completed
-            execution.Complete();
+          
             
             // Sync variables from execution to process instance
             context.State.SyncVariablesFromExecution(execution);
@@ -515,7 +514,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
         // It should find the element with the specified ID and determine its type
         
         var targetElement = definitionExplorer.FindTargetElement(processId, elementId);
-        return (targetElement.id, BpmnElementType.FromName(targetElement.name));
+        return (targetElement.id, definitionExplorer.ConvertBpmnNodeToElementType(targetElement));
     }
     
     /// <summary>

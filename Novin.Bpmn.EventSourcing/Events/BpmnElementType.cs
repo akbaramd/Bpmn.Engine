@@ -22,6 +22,7 @@ namespace Novin.Bpmn.EventSourcing.Events
         // Core Properties
         public int Id { get; }
         public string Name { get; }
+        public string NameWithNamespace => $"bpmn:{Name}";
         public BpmnCategory Category { get; }
 
         private BpmnElementType(int id, string name, BpmnCategory category)
@@ -41,6 +42,10 @@ namespace Novin.Bpmn.EventSourcing.Events
             var type = new BpmnElementType(id, name, category);
             _byId[id] = type;
             _byName[name] = type;
+            
+            // Also register with namespace prefix for lookup
+            _byName[$"bpmn:{name}"] = type;
+            
             return type;
         }
 
@@ -72,10 +77,50 @@ namespace Novin.Bpmn.EventSourcing.Events
         public static readonly BpmnElementType SendTask = Register(23, "SendTask", BpmnCategory.Task);
         public static readonly BpmnElementType ReceiveTask = Register(24, "ReceiveTask", BpmnCategory.Task);
         public static readonly BpmnElementType Task = Register(25, "Task", BpmnCategory.Task);
+        public static readonly BpmnElementType EventBasedGateway = Register(26, "EventBasedGateway", BpmnCategory.Gateway);
      
         public static BpmnElementType FromId(int id) => _byId.TryGetValue(id, out var type) ? type : Unknown;
-        public static BpmnElementType FromName(string name) => _byName.TryGetValue(name, out var type) ? type : Unknown;
-        public override string ToString() => Name;
+        
+        public static BpmnElementType FromName(string name)
+        {
+            // Allow lookup with or without namespace prefix
+            return _byName.TryGetValue(name, out var type) ? type : Unknown;
+        }
+        
+        /// <summary>
+        /// Get BPMN element type from XML local name (with or without namespace)
+        /// </summary>
+        public static BpmnElementType FromXmlName(string xmlName)
+        {
+            if (string.IsNullOrEmpty(xmlName))
+                return Unknown;
+                
+            // Handle full namespace formats like {http://www.omg.org/spec/BPMN/20100524/MODEL}serviceTask
+            int colonIndex = xmlName.LastIndexOf(':');
+            int braceIndex = xmlName.LastIndexOf('}');
+            
+            string localName;
+            if (braceIndex > 0 && braceIndex < xmlName.Length - 1)
+            {
+                // Extract local name from namespace format {ns}localName
+                localName = xmlName.Substring(braceIndex + 1);
+            }
+            else if (colonIndex > 0 && colonIndex < xmlName.Length - 1)
+            {
+                // Extract local name from prefix:localName format
+                localName = xmlName.Substring(colonIndex + 1);
+            }
+            else
+            {
+                // Use as-is if no namespace or prefix
+                localName = xmlName;
+            }
+            
+            // Return the type based on the local name
+            return FromName(localName);
+        }
+        
+        public override string ToString() => NameWithNamespace;
 
         public bool Equals(BpmnElementType? other) => other != null && Id == other.Id;
         public override bool Equals(object? obj) => obj is BpmnElementType other && Equals(other);
@@ -95,7 +140,7 @@ namespace Novin.Bpmn.EventSourcing.Events
 
         public override void Write(Utf8JsonWriter writer, BpmnElementType value, JsonSerializerOptions options)
         {
-            writer.WriteStringValue(value.Name);
+            writer.WriteStringValue(value.NameWithNamespace);
         }
     }
 }

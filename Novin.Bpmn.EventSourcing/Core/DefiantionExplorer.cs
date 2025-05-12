@@ -1,4 +1,5 @@
 // create class
+using Novin.Bpmn.EventSourcing.Events;
 using Novin.Bpmn.Models;
 
 public class DefiantionExplorer
@@ -210,5 +211,46 @@ public class DefiantionExplorer
             return null;
 
         return process.Items.OfType<BpmnFlowNode>().FirstOrDefault(t => t.id == elementId);
+    }
+
+    // convert bpmnnodeelelemtn to elemetntype 
+    public virtual BpmnElementType ConvertBpmnNodeToElementType(BpmnFlowNode node)
+    {
+        // use switchcase  with 
+        switch (node)
+        {
+            case BpmnStartEvent:
+                return BpmnElementType.StartEvent;
+            case BpmnEndEvent:
+                return BpmnElementType.EndEvent;
+            case BpmnScriptTask:
+                return BpmnElementType.ScriptTask;
+            case BpmnUserTask:
+                return BpmnElementType.UserTask;
+            case BpmnServiceTask:
+                return BpmnElementType.ServiceTask; 
+            case BpmnBusinessRuleTask:
+                return BpmnElementType.BusinessRuleTask;
+            case BpmnReceiveTask:
+                return BpmnElementType.ReceiveTask;
+            case BpmnSendTask:
+                return BpmnElementType.SendTask;        
+            case BpmnManualTask:
+                return BpmnElementType.ManualTask;
+            case BpmnExclusiveGateway:
+                return BpmnElementType.ExclusiveGateway;
+            case BpmnInclusiveGateway:
+                return BpmnElementType.InclusiveGateway;    
+            case BpmnParallelGateway:
+                return BpmnElementType.ParallelGateway;
+            case BpmnEventBasedGateway:
+                return BpmnElementType.EventBasedGateway;   
+            case BpmnComplexGateway:
+                return BpmnElementType.ComplexGateway;
+            case BpmnSubProcess:
+                return BpmnElementType.SubProcess;
+            default:
+                return BpmnElementType.Unknown;
+        }
     }
 }
