@@ -15,10 +15,11 @@ public interface IBpmnEvent
     /// <summary>
     /// شناسه نمونه فرآیند
     /// </summary>
-    string ProcessInstanceId { get; }
+    string InstanceId { get; }
     
-    public string ProcessDefinitionKey { get;   }
-
+    public string DeploymentKey { get; }
+    public Guid DeploymentId { get; }
+    public string? CorrelationId { get; }
     /// <summary>
     /// نوع رویداد
     /// </summary>

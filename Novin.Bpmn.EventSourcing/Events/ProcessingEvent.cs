@@ -24,6 +24,10 @@ namespace Novin.Bpmn.EventSourcing.Events
         /// The user assigned to this task, if any.
         /// </summary>
         public string? Assignee { get; init; }
+
+        public string? CandidateGroups { get; init; }
+
+        public string? CandidateUsers { get; init; }
     }
 
     /// <summary>
@@ -34,16 +38,10 @@ namespace Novin.Bpmn.EventSourcing.Events
     {
         public override string EventType => nameof(ServiceTaskProcessing);
 
-
-        /// <summary>
-        /// Logical name of the service to invoke.
-        /// </summary>
-        public required string ServiceName { get; init; }
-
         /// <summary>
         /// Optional URI endpoint for the service.
         /// </summary>
-        public string? Endpoint { get; init; }
+        public string? Implementation { get; init; }
     }
 
     /// <summary>
@@ -91,7 +89,26 @@ namespace Novin.Bpmn.EventSourcing.Events
         /// <summary>
         /// Optional instructions for manual execution.
         /// </summary>
-        public string? Instruction { get; init; }
+    }
+
+
+    
+    /// <summary>   
+    /// Fired when a ManualTask begins its processing phase.
+    /// Includes element, execution, and optional instructions.
+    /// </summary>
+    public record ReceivedTaskProcessing : ElementProcessing
+    {
+        public override string EventType => nameof(ReceivedTaskProcessing);
+    }
+
+    /// <summary>
+    /// Fired when a ManualTask begins its processing phase.
+    /// Includes element, execution, and optional instructions.
+    /// </summary>
+    public record SentTaskProcessing : ElementProcessing
+    {
+        public override string EventType => nameof(SentTaskProcessing);
     }
 
     /// <summary>
@@ -102,10 +119,6 @@ namespace Novin.Bpmn.EventSourcing.Events
     {
         public override string EventType => nameof(ReceiveTaskProcessing);
 
-        /// <summary>
-        /// The message name or signal to listen for.
-        /// </summary>
-        public required string MessageName { get; init; }
     }
 
     /// <summary>
@@ -116,15 +129,6 @@ namespace Novin.Bpmn.EventSourcing.Events
     {
         public override string EventType => nameof(SendTaskProcessing);
 
-        /// <summary>
-        /// The message name or signal to send.
-        /// </summary>
-        public required string MessageName { get; init; }
-
-        /// <summary>
-        /// Optional message payload.
-        /// </summary>
-        public string? Payload { get; init; }
     }
 
     /// <summary>

@@ -4,6 +4,7 @@ using Novin.Bpmn.EventSourcing.Core.Models;
 using Novin.Bpmn.EventSourcing.Events;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -26,15 +27,20 @@ public class ElementCreatedHandler : BaseEventHandler<ElementCreated>
         IProcessDeploymentStore definitionStore,
         IEventBus eventBus,
         ILogger<ElementCreatedHandler> logger)
-        : base(stateStore, eventStore, definitionStore, logger)
+        : base(stateStore, eventStore, definitionStore, eventBus, logger)
     {
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
     }
 
     /// <inheritdoc />
+    /// 
+    // before presse event
+    // 1. check if the element is already in the state
+
+ 
     protected override async Task ProcessEventAsync(
         ElementCreated @event,
-        ProcessInstanceState state,
+        EventHandlerContext context,
         CancellationToken cancellationToken)
     {
         if (@event == null)
@@ -43,240 +49,408 @@ public class ElementCreatedHandler : BaseEventHandler<ElementCreated>
         }
 
         Logger.LogInformation("Handling ElementCreated event for process instance {ProcessInstanceId}, element {ElementId}",
-            @event.ProcessInstanceId, @event.ElementId);
+            @event.InstanceId, @event.ElementId);
 
         try
         {
-            // Record the event in state history
-            state.RecordEvent(@event);
+            // Get process definition using the process definition ID from the event
+            var definition = await GetDefinitionsAsync(@event.DeploymentId, cancellationToken);
 
-            // 1. Generate a unique execution ID
-            var executionId = Guid.NewGuid().ToString();
-            
-            // 2. Build the ElementExecution and add to state
-            var execution = ElementExecutionBuilder.Init()
-                .WithProcessInstanceId(@event.ProcessInstanceId)
-                .WithElementId(@event.ElementId)
-                .WithElementType(@event.ElementType)
-                .Executable(@event.IsExecutable)
-                .Build()
-                .BuildResult();
+            if (definition == null)
+            {
+                throw new InvalidOperationException($"Process definition {@event.DeploymentKey} not found");
+            }
 
-            state.AddExecution(execution);
+            var definitionExplorer = GetDefiantionExplorer(definition);
             
-            // 3. Handle based on element type and whether it's executable
-            if (@event.IsExecutable)
+            // Get the execution from context - it should have been created in PrepareContextAsync in BaseEventHandler
+            var execution = context.CurrentExecution;
+            if (execution == null)
+            {
+                throw new InvalidOperationException($"Execution not found for element {@event.ElementId}");
+            }
+            
+            Logger.LogDebug("Found execution {ExecutionId} for element {ElementId}", 
+                execution.ExecutionId, @event.ElementId);
+                
+            // Save the initial executable status from the event
+            bool initialIsExecutable = @event.IsExecutable;
+            
+            // Handle gateway merges
+            if (await HandleMergeGatewayIfNeededAsync(@event, context, definitionExplorer, cancellationToken))
+            {
+                // Merge gateway handling complete
+                return;
+            }
+       
+            // Handle based on element type and whether it's executable
+            // Check the execution.IsExecutable which may have been updated by the gateway merge logic
+            if (execution.IsExecutable)
             {
                 // For executable elements, determine handling based on element type
-                Logger.LogDebug("Processing executable element {ElementId} of type {ElementType}", 
+                Logger.LogDebug("Processing executable element {ElementId} of type {ElementType}",
                     @event.ElementId, @event.ElementType);
-                
+
                 // Create and publish the appropriate processing event based on element type
                 await PublishSpecializedProcessingEvent(
-                    @event, 
-                    execution.ExecutionId, 
-                    GetElementProperties(state, @event.ElementId), 
+                    @event,
+                    execution.ExecutionId,
+                    definitionExplorer,
                     cancellationToken);
             }
             else
             {
-                // For non-executable elements, complete immediately
-                Logger.LogDebug("Element {ElementId} is non-executable, completing immediately", @event.ElementId);
-                
-                // Mark execution as complete in the state
-                execution.Complete();
-                
-                // Publish completion event
-                await _eventBus.PublishAsync(new ElementCompleted
+                // Publish completion event for non-executable paths
+                PublishLater(new ElementCompleted
                 {
-                    ProcessInstanceId = @event.ProcessInstanceId,
-                    ProcessDefinitionId = @event.ProcessDefinitionId,
+                    ProcessId = @event.ProcessId,
+                    InstanceId = @event.InstanceId,
+                    DeploymentKey = @event.DeploymentKey,
+                    DeploymentId = @event.DeploymentId,
                     ElementId = @event.ElementId,
                     ElementType = @event.ElementType,
                     ExecutionId = execution.ExecutionId,
                     IsExecutable = false,
                     Timestamp = DateTimeOffset.UtcNow
-                }, cancellationToken);
+                });
+                
+                Logger.LogDebug("Element {ElementId} is non-executable, completing immediately", @event.ElementId);
             }
-            
+
             Logger.LogDebug("Successfully processed ElementCreated event for {ElementId}", @event.ElementId);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error handling ElementCreated event for element {ElementId} in process {ProcessInstanceId}",
-                @event.ElementId, @event.ProcessInstanceId);
+                @event.ElementId, @event.InstanceId);
             throw;
         }
     }
 
     /// <summary>
-    /// Gets the element properties from the state or definition
+    /// Handles merge logic for gateway elements that join multiple incoming flows
     /// </summary>
-    private Dictionary<string, string> GetElementProperties(ProcessInstanceState state, string elementId)
+    /// <returns>True if the gateway is in a waiting state, false if processing should continue</returns>
+    private async Task<bool> HandleMergeGatewayIfNeededAsync(
+        ElementCreated @event,
+        EventHandlerContext context,
+        DefiantionExplorer definitionExplorer,
+        CancellationToken cancellationToken)
     {
-        // In a real implementation, we would retrieve properties from the process definition
-        // or from the state if it stores element metadata
-        var properties = new Dictionary<string, string>();
+        var execution = context.CurrentExecution;
         
-        // Try to get properties from the state's variables
-        if (state.Variables.TryGetValue($"element.{elementId}.properties", out var propsObj) &&
-            propsObj is Dictionary<string, string> props)
+        // Only handle gateway types that can act as merges
+        if (!(@event.ElementType == BpmnElementType.ParallelGateway ||
+              @event.ElementType == BpmnElementType.InclusiveGateway ||
+              @event.ElementType == BpmnElementType.ExclusiveGateway))
         {
-            return props;
+            return false; // Not a gateway that needs merge handling
         }
         
-        // Default properties for testing/development
-        return properties;
+        Logger.LogDebug("Checking merge requirements for gateway {ElementId} of type {ElementType}",
+            @event.ElementId, @event.ElementType);
+        
+        // Find all incoming flows for this gateway
+        var incomingFlows = await FindIncomingFlowsAsync(
+            definitionExplorer, 
+            @event.ProcessId,
+            @event.ElementId);
+            
+        // If there's only one incoming flow, no merge is needed
+        if (incomingFlows.Count <= 1)
+        {
+            Logger.LogDebug("Gateway {ElementId} has only one incoming flow, no merge needed",
+                @event.ElementId);
+            return false;
+        }
+        
+        // Get all ElementCreated events for this execution
+        var receivedEvents = context.CurrentExecution.Events
+            .OfType<SerializableBpmnEvent>()
+            .Where(e => e.EventType == "ElementCreated" && !string.IsNullOrEmpty(e.SequenceFlowId))
+            .ToList();
+        
+        // Count the unique sequence flow IDs we've received
+        var receivedFlowIds = new HashSet<string>();
+        foreach (var evt in receivedEvents)
+        {
+            if (!string.IsNullOrEmpty(evt.SequenceFlowId))
+            {
+                receivedFlowIds.Add(evt.SequenceFlowId);
+            }
+        }
+        
+        // Check if any of the incoming flows are executable
+        // Since we can't directly access IsExecutable on SerializableBpmnEvent,
+        // we'll use the current event's IsExecutable as a proxy
+        bool hasExecutableFlow = @event.IsExecutable;
+        
+        // Log the current state
+        Logger.LogDebug("Gateway {ElementId} received {ReceivedCount}/{TotalCount} flows, executable: {HasExecutable}", 
+            @event.ElementId, receivedFlowIds.Count, incomingFlows.Count, hasExecutableFlow);
+        
+        bool canContinue = false;
+        
+        // Check if the merge requirements are satisfied based on gateway type
+        if (@event.ElementType == BpmnElementType.ExclusiveGateway)
+        {
+            // Exclusive gateway always continues on the first activated flow
+            canContinue = true;
+            Logger.LogDebug("Exclusive gateway {ElementId} can continue with flow {FlowId}",
+                @event.ElementId, @event.SequenceFlowId);
+        }
+        else if (@event.ElementType == BpmnElementType.ParallelGateway)
+        {
+            // Parallel gateway requires all incoming flows to be activated
+            canContinue = receivedFlowIds.Count >= incomingFlows.Count;
+            Logger.LogDebug("Parallel gateway {ElementId} activated flows: {Current}/{Required}, can continue: {CanContinue}",
+                @event.ElementId, receivedFlowIds.Count, incomingFlows.Count, canContinue);
+        }
+        else if (@event.ElementType == BpmnElementType.InclusiveGateway)
+        {
+            // Inclusive gateway is more complex - needs to determine which flows are active
+            // For simplicity, we'll use a similar approach to parallel gateway for now
+            canContinue = receivedFlowIds.Count >= incomingFlows.Count;
+            Logger.LogDebug("Inclusive gateway {ElementId} activated flows: {Current}/{Required}, can continue: {CanContinue}",
+                @event.ElementId, receivedFlowIds.Count, incomingFlows.Count, canContinue);
+        }
+        
+        if (!canContinue)
+        {
+            // Gateway needs to wait for more flows to be activated
+            execution.Status = ExecutionStatus.Waiting;
+            
+            // Store the current state with the waiting execution
+            await StateStore.UpsertAsync(context.State, ct: cancellationToken);
+            
+            Logger.LogInformation("Gateway {ElementId} of type {ElementType} is waiting for more flows ({Current}/{Required})",
+                @event.ElementId, @event.ElementType, receivedFlowIds.Count, incomingFlows.Count);
+                
+            return true; // Indicate that processing should stop here
+        }
+        
+        // Set the executable flag for the current execution based on received events
+        // If any of the incoming flows are executable, this execution should be executable
+        execution.IsExecutable = hasExecutableFlow;
+        
+        // If we get here, the gateway merge is complete and we can continue processing
+        Logger.LogInformation("Gateway {ElementId} merge complete, continuing with processing as {ExecutableStatus}",
+            @event.ElementId, execution.IsExecutable ? "executable" : "non-executable");
+        
+        // Update the current event's executable flag to match the execution
+        if (@event is ElementCreated elementCreated)
+        {
+            // Using reflection since ElementCreated might be immutable
+            try
+            {
+                var prop = elementCreated.GetType().GetProperty("IsExecutable");
+                if (prop != null && prop.CanWrite)
+                {
+                    prop.SetValue(elementCreated, execution.IsExecutable);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Could not update IsExecutable flag on event");
+            }
+        }
+        
+        // Store updated state
+        await StateStore.UpsertAsync(context.State, ct: cancellationToken);
+        
+        return false; // Indicate that processing should continue
+    }
+
+    /// <summary>
+    /// Finds all incoming sequence flows for a specific element
+    /// </summary>
+    private async Task<List<string>> FindIncomingFlowsAsync(
+        DefiantionExplorer definitionExplorer,
+        string processId,
+        string elementId)
+    {
+       
+        var incomingFlows = definitionExplorer.FindIncommingSequenceFlows(processId, elementId);
+        
+        return incomingFlows.Select(x => x.id).ToList();
     }
 
     /// <summary>
     /// Publishes the appropriate specialized processing event based on the element type
     /// </summary>
     private async Task PublishSpecializedProcessingEvent(
-        ElementCreated @event, 
-        string executionId, 
-        Dictionary<string, string> properties, 
+        ElementCreated @event,
+        string executionId,
+        DefiantionExplorer defiantionExplorer,
         CancellationToken cancellationToken)
     {
         // Common properties for all processing events
         var now = DateTimeOffset.UtcNow;
         var commonProps = new
         {
-            ProcessInstanceId = @event.ProcessInstanceId,
-            ProcessDefinitionId = @event.ProcessDefinitionId,
+            ProcessInstanceId = @event.InstanceId,
+            ProcessId = @event.ProcessId,
+            DeploymentKey = @event.DeploymentKey,
+            DeploymentId = @event.DeploymentId,
             ElementId = @event.ElementId,
             ElementType = @event.ElementType,
             ExecutionId = executionId,
             Timestamp = now
         };
 
-        // Helper function to get property with default
-        string GetProperty(string key, string defaultValue) =>
-            properties.TryGetValue(key, out var value) ? value : defaultValue;
 
         // We need to use object.Equals for comparison since BpmnElementType is a class, not an enum
         // Determine which specialized event to publish based on element type
-        
+
         if (Equals(@event.ElementType, BpmnElementType.UserTask))
         {
-            await _eventBus.PublishAsync(new UserTaskProcessing
+
+            var userTask = defiantionExplorer.FindUserTask(@event.ProcessId, @event.ElementId);
+
+            PublishLater(new UserTaskProcessing
             {
-                ProcessInstanceId = commonProps.ProcessInstanceId,
-                ProcessDefinitionId = commonProps.ProcessDefinitionId,
+                InstanceId = commonProps.ProcessInstanceId,
+                DeploymentKey = commonProps.DeploymentKey,
+                ProcessId = commonProps.ProcessId,
+                DeploymentId = commonProps.DeploymentId,
                 ElementId = commonProps.ElementId,
                 ElementType = commonProps.ElementType,
                 ExecutionId = commonProps.ExecutionId,
                 Timestamp = commonProps.Timestamp,
-                FormId = GetProperty("formKey", "default-form"),
-                Assignee = GetProperty("assignee", null)
-            }, cancellationToken);
+                FormId = userTask?.formId,
+                Assignee = userTask?.assignee,
+                CandidateGroups = userTask?.candidateGroups,
+                CandidateUsers = userTask?.candidateUsers,
+            });
         }
         else if (Equals(@event.ElementType, BpmnElementType.ServiceTask))
         {
-            await _eventBus.PublishAsync(new ServiceTaskProcessing
+            var serviceTask = defiantionExplorer.FindServiceTask(@event.ProcessId, @event.ElementId);
+
+            PublishLater(new ServiceTaskProcessing
             {
-                ProcessInstanceId = commonProps.ProcessInstanceId,
-                ProcessDefinitionId = commonProps.ProcessDefinitionId,
+                ProcessId = commonProps.ProcessId,
+                InstanceId = commonProps.ProcessInstanceId,
+                DeploymentKey = commonProps.DeploymentKey,
+                DeploymentId = commonProps.DeploymentId,
                 ElementId = commonProps.ElementId,
                 ElementType = commonProps.ElementType,
                 ExecutionId = commonProps.ExecutionId,
                 Timestamp = commonProps.Timestamp,
-                ServiceName = GetProperty("serviceName", @event.ElementId),
-                Endpoint = GetProperty("endpoint", null)
-            }, cancellationToken);
+                Implementation = serviceTask?.implementation,
+            });
         }
         else if (Equals(@event.ElementType, BpmnElementType.ScriptTask))
         {
-            await _eventBus.PublishAsync(new ScriptTaskProcessing
+            var scriptTask = defiantionExplorer.FindScriptTask(@event.ProcessId, @event.ElementId);
+
+            PublishLater(new ScriptTaskProcessing
             {
-                ProcessInstanceId = commonProps.ProcessInstanceId,
-                ProcessDefinitionId = commonProps.ProcessDefinitionId,
+                ProcessId = commonProps.ProcessId,
+                InstanceId = commonProps.ProcessInstanceId,
+                DeploymentKey = commonProps.DeploymentKey,
+                DeploymentId = commonProps.DeploymentId,
                 ElementId = commonProps.ElementId,
                 ElementType = commonProps.ElementType,
                 ExecutionId = commonProps.ExecutionId,
                 Timestamp = commonProps.Timestamp,
-                Script = GetProperty("script", ""),
-                ScriptFormat = GetProperty("scriptFormat", null)
-            }, cancellationToken);
+                Script = scriptTask?.script.InnerText,
+                ScriptFormat = scriptTask?.scriptFormat,
+            });
         }
         else if (Equals(@event.ElementType, BpmnElementType.BusinessRuleTask))
         {
-            await _eventBus.PublishAsync(new BusinessRuleTaskProcessing
+            var businessRuleTask = defiantionExplorer.FindBusinessRuleTask(@event.ProcessId, @event.ElementId);
+
+            PublishLater(new BusinessRuleTaskProcessing
             {
-                ProcessInstanceId = commonProps.ProcessInstanceId,
-                ProcessDefinitionId = commonProps.ProcessDefinitionId,
+                ProcessId = commonProps.ProcessId,
+                InstanceId = commonProps.ProcessInstanceId,
+                DeploymentKey = commonProps.DeploymentKey,
+                DeploymentId = commonProps.DeploymentId,
                 ElementId = commonProps.ElementId,
                 ElementType = commonProps.ElementType,
                 ExecutionId = commonProps.ExecutionId,
                 Timestamp = commonProps.Timestamp,
-                DecisionKey = GetProperty("decisionRef", @event.ElementId)
-            }, cancellationToken);
+                DecisionKey = businessRuleTask?.implementation,
+            });
         }
         else if (Equals(@event.ElementType, BpmnElementType.ManualTask))
         {
-            await _eventBus.PublishAsync(new ManualTaskProcessing
+            var manualTask = defiantionExplorer.FindManualTask(@event.ProcessId, @event.ElementId);
+
+            PublishLater(new ManualTaskProcessing
             {
-                ProcessInstanceId = commonProps.ProcessInstanceId,
-                ProcessDefinitionId = commonProps.ProcessDefinitionId,
+                ProcessId = commonProps.ProcessId,
+                InstanceId = commonProps.ProcessInstanceId,
+                DeploymentKey = commonProps.DeploymentKey,
+                DeploymentId = commonProps.DeploymentId,
                 ElementId = commonProps.ElementId,
                 ElementType = commonProps.ElementType,
                 ExecutionId = commonProps.ExecutionId,
                 Timestamp = commonProps.Timestamp,
-                Instruction = GetProperty("instruction", null)
-            }, cancellationToken);
+            });
         }
         else if (Equals(@event.ElementType, BpmnElementType.ReceiveTask))
         {
-            await _eventBus.PublishAsync(new ReceiveTaskProcessing
+            var receiveTask = defiantionExplorer.FindReceiveTask(@event.ProcessId, @event.ElementId);
+            PublishLater(new ReceivedTaskProcessing
             {
-                ProcessInstanceId = commonProps.ProcessInstanceId,
-                ProcessDefinitionId = commonProps.ProcessDefinitionId,
+                InstanceId = commonProps.ProcessInstanceId,
+                DeploymentKey = commonProps.DeploymentKey,
+                DeploymentId = commonProps.DeploymentId,
+                ProcessId = commonProps.ProcessId,
                 ElementId = commonProps.ElementId,
                 ElementType = commonProps.ElementType,
                 ExecutionId = commonProps.ExecutionId,
                 Timestamp = commonProps.Timestamp,
-                MessageName = GetProperty("messageName", @event.ElementId)
-            }, cancellationToken);
+            });
         }
         else if (Equals(@event.ElementType, BpmnElementType.SendTask))
         {
-            await _eventBus.PublishAsync(new SendTaskProcessing
+            var sendTask = defiantionExplorer.FindSendTask(@event.ProcessId, @event.ElementId);
+            PublishLater(new SendTaskProcessing
             {
-                ProcessInstanceId = commonProps.ProcessInstanceId,
-                ProcessDefinitionId = commonProps.ProcessDefinitionId,
+                InstanceId = commonProps.ProcessInstanceId,
+                DeploymentKey = commonProps.DeploymentKey,
+                DeploymentId = commonProps.DeploymentId,
                 ElementId = commonProps.ElementId,
+                ProcessId = commonProps.ProcessId,
                 ElementType = commonProps.ElementType,
                 ExecutionId = commonProps.ExecutionId,
                 Timestamp = commonProps.Timestamp,
-                MessageName = GetProperty("messageName", @event.ElementId),
-                Payload = GetProperty("payload", null)
-            }, cancellationToken);
+            });
         }
         else if (Equals(@event.ElementType, BpmnElementType.Task))
         {
-            await _eventBus.PublishAsync(new TaskProcessing
+            PublishLater(new ElementProcessing
             {
-                ProcessInstanceId = commonProps.ProcessInstanceId,
-                ProcessDefinitionId = commonProps.ProcessDefinitionId,
+                ProcessId = commonProps.ProcessId,
+                InstanceId = commonProps.ProcessInstanceId,
+                DeploymentKey = commonProps.DeploymentKey,
+                DeploymentId = commonProps.DeploymentId,
                 ElementId = commonProps.ElementId,
                 ElementType = commonProps.ElementType,
                 ExecutionId = commonProps.ExecutionId,
                 Timestamp = commonProps.Timestamp,
-                Implementation = GetProperty("implementation", null)
-            }, cancellationToken);
+            });
         }
         else
         {
             // For other types, publish the generic ElementProcessing event
-            await _eventBus.PublishAsync(new ElementProcessing
+            PublishLater(new ElementProcessing
             {
-                ProcessInstanceId = commonProps.ProcessInstanceId,
-                ProcessDefinitionId = commonProps.ProcessDefinitionId,
+                ProcessId = commonProps.ProcessId,
+                InstanceId = commonProps.ProcessInstanceId,
+                DeploymentKey = commonProps.DeploymentKey,
+                DeploymentId = commonProps.DeploymentId,
                 ElementId = commonProps.ElementId,
                 ElementType = commonProps.ElementType,
                 ExecutionId = commonProps.ExecutionId,
                 Timestamp = commonProps.Timestamp
-            }, cancellationToken);
+            });
         }
+        
+        await Task.CompletedTask;
     }
-} 
+}

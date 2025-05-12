@@ -10,6 +10,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Novin.Bpmn.EventSourcing.Core.Models;
 
+
 namespace Novin.Bpmn.EventSourcing.Examples;
 
 /// <summary>
@@ -272,7 +273,7 @@ public class InclusiveGatewayExample
         }
     }
 
-    private static async Task<string> DeployProcessDefinitionAsync(
+    private static async Task<Guid> DeployProcessDefinitionAsync(
         BpmnService bpmnProcessor,
         string uniqueKey,
         ILogger<InclusiveGatewayExample> logger)
@@ -283,9 +284,9 @@ public class InclusiveGatewayExample
             $"Math Operations Example - {uniqueKey}");
             
         logger.LogInformation("Deployed process definition with ID {ProcessDefinitionId} and key {DeploymentKey}", 
-            deploymentInfo.DefinitionId, uniqueKey);
+            deploymentInfo.DeploymentId, uniqueKey);
             
-        return deploymentInfo.DefinitionId;
+        return deploymentInfo.DeploymentId;
     }
 
     private static async Task RunWithOperatorAsync(
@@ -298,16 +299,16 @@ public class InclusiveGatewayExample
         logger.LogInformation("=== {Description} ===", description);
         
         // Create a unique deployment key for each run to avoid concurrency issues
-        string uniqueDeploymentKey = $"{DeploymentKeyBase}-{Guid.NewGuid().ToString("N").Substring(0, 8)}";
+     
         
         try
         {
             // Deploy a fresh definition for each run
-            await DeployProcessDefinitionAsync(bpmnProcessor, uniqueDeploymentKey, logger);
+           var res=   await DeployProcessDefinitionAsync(bpmnProcessor, DeploymentKeyBase, logger);
             
             // Start process instance with the given variables
             var processInstanceId = await StartProcessInstanceWithRetryAsync(
-                bpmnProcessor, uniqueDeploymentKey, variables, logger);
+                bpmnProcessor, res, variables, logger);
                 
             logger.LogInformation("Created process instance with ID {ProcessInstanceId}", 
                 processInstanceId);
@@ -323,7 +324,7 @@ public class InclusiveGatewayExample
                 
                 // Check if process has completed
                 var state = await bpmnProcessor.GetProcessInstanceStateAsync(processInstanceId);
-                isCompleted = state.Status == ProcessInstanceStatus.Completed;
+                isCompleted = state.State.Status == ProcessInstanceStatus.Completed;
                 
                 if (!isCompleted)
                 {
@@ -355,7 +356,7 @@ public class InclusiveGatewayExample
 
     private static async Task<string> StartProcessInstanceWithRetryAsync(
         BpmnService bpmnProcessor,
-        string deploymentKey,
+        Guid deploymentKey,
         Dictionary<string, object> variables,
         ILogger<InclusiveGatewayExample> logger)
     {

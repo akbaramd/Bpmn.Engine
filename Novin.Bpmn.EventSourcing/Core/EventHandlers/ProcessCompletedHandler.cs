@@ -24,7 +24,7 @@ public class ProcessCompletedHandler : BaseEventHandler<ProcessCompleted>
         IProcessDeploymentStore definitionStore,
         IEventBus eventBus,
         ILogger<ProcessCompletedHandler> logger)
-        : base(stateStore, eventStore, definitionStore, logger)
+        : base(stateStore, eventStore, definitionStore, eventBus, logger)
     {
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
     }
@@ -32,7 +32,7 @@ public class ProcessCompletedHandler : BaseEventHandler<ProcessCompleted>
     /// <inheritdoc />
     protected override async Task ProcessEventAsync(
         ProcessCompleted @event, 
-        ProcessInstanceState state,
+        EventHandlerContext context,
         CancellationToken cancellationToken)
     {
         if (@event == null)
@@ -43,21 +43,19 @@ public class ProcessCompletedHandler : BaseEventHandler<ProcessCompleted>
         try
         {
             Logger.LogDebug("Processing ProcessCompleted event for process instance {ProcessInstanceId}", 
-                @event.ProcessInstanceId);
+                @event.InstanceId);
             
-            // Record the event in state history
-            state.RecordEvent(@event);
-            
+
             // Update process state to completed
-            state.Complete(@event);
+            context.State.Complete(@event);
             
             Logger.LogInformation("Successfully completed process instance {ProcessInstanceId}",
-                @event.ProcessInstanceId);
+                @event.InstanceId);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error handling ProcessCompleted event for process instance {ProcessInstanceId}",
-                @event.ProcessInstanceId);
+                @event.InstanceId);
             throw;
         }
     }

@@ -15,11 +15,6 @@ namespace Novin.Bpmn.EventSourcing.Events
         public override string EventType => nameof(ProcessStarted);
 
         /// <summary>
-        /// The process definition key or ID that this instance is based on.
-        /// </summary>
-        public required string ProcessDefinitionId { get; init; }
-
-        /// <summary>
         /// The version of the process definition.
         /// </summary>
         public int DefinitionVersion { get; init; } = 1;
@@ -38,6 +33,18 @@ namespace Novin.Bpmn.EventSourcing.Events
         /// </summary>
         public string? ResumeReason { get; init; }
     }
+
+
+    // cancle
+    public record ProcessCancelled : BpmnEvent
+    {
+        public override string EventType => nameof(ProcessCancelled);
+
+        /// <summary>
+        /// Reason for cancellation (e.g., user-cancellation, system-shutdown). 
+        /// </summary>
+        public required string Reason { get; init; }
+    }       
 
     /// <summary>
     /// Fired when a process instance completes normally.
@@ -93,4 +100,9 @@ public record ProcessSuspended : BpmnEvent
         /// </summary>
         public string? ErrorDetails { get; init; }
     }
+
+    public record ProcessRestarted : BpmnEvent
+    {
+        public override string EventType => nameof(ProcessRestarted);
+    }   
 }

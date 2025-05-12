@@ -36,8 +36,12 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
             { Terminated.Name,   Terminated },
             { Failed.Name,       Failed     }
         };
-
-        public string Name { get; }
+        //ctor
+        public ProcessInstanceStatus()
+        {
+            
+        }
+        public string Name { get; } = null!;
 
         private ProcessInstanceStatus(string name) => Name = name;
 

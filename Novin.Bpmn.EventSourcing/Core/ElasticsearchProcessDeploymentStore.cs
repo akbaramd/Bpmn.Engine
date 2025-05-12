@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Serialization;
 using Elasticsearch.Net;
 using Microsoft.Extensions.Logging;
 using Nest;
@@ -59,7 +60,7 @@ namespace Novin.Bpmn.EventSourcing.Core
                         .Keyword(k => k.Name(nameof(ProcessDeploymentState.Label)).IgnoreAbove(256))
                         .Object<Dictionary<string,string>>(o => o.Name("metadata").Dynamic())
                         .Text(t => t.Name(nameof(ProcessDeploymentState.XmlContent)).Index(false))
-                        .Object<object>(o => o.Name("definitions").Dynamic())
+                        .Text(t => t.Name("definitions").Index(false))         
                         .Date(d => d.Name(nameof(ProcessDeploymentState.DeploymentTime)))
                     )
                 )
@@ -74,21 +75,23 @@ namespace Novin.Bpmn.EventSourcing.Core
 
         public async Task<ProcessDeploymentState> DeployAsync(
             string deploymentKey,
+            Guid deploymentId,
             string xmlContent,
             BpmnDefinitions definitions,
             string? label = null,
             IDictionary<string, string>? metadata = null,
             CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrWhiteSpace(deploymentKey))
-                throw new ArgumentException("deploymentKey is required", nameof(deploymentKey));
+            var deploymentstrings = deploymentId.ToString();
+            if (string.IsNullOrWhiteSpace(deploymentstrings))
+                throw new ArgumentException("deploymentKey is required", nameof(deploymentstrings));
             if (string.IsNullOrWhiteSpace(xmlContent))
                 throw new ArgumentException("xmlContent is required", nameof(xmlContent));
             if (definitions is null)
                 throw new ArgumentNullException(nameof(definitions));
 
             // Fetch existing to determine next version
-            var get = await _elasticClient.GetAsync<Dictionary<string, object>>(deploymentKey, g => g
+            var get = await _elasticClient.GetAsync<Dictionary<string, object>>(deploymentstrings, g => g
                 .Index(IndexName),
                 cancellationToken);
 
@@ -102,30 +105,30 @@ namespace Novin.Bpmn.EventSourcing.Core
             var document = new
             {
                 DeploymentKey = deploymentKey,
+                DeploymentId = deploymentId,
                 Version       = nextVersion,
                 Label         = label,
                 metadata      = metadata,
                 XmlContent    = xmlContent,
-                definitions   = JsonConvert.SerializeObject(definitions, _jsonSettings),
                 DeploymentTime = now
             };
 
             var indexResp = await _elasticClient.IndexAsync(document, i => i
                 .Index(IndexName)
-                .Id(deploymentKey)
+                .Id(deploymentstrings)
                 .Refresh(Refresh.True),
                 cancellationToken);
 
             if (!indexResp.IsValid)
             {
-                _logger.LogError("Error deploying key '{Key}': {Error}", deploymentKey, indexResp.DebugInformation);
+                _logger.LogError("Error deploying key '{Key}': {Error}", deploymentstrings, indexResp.DebugInformation);
                 throw new ElasticsearchClientException($"DeployAsync failed: {indexResp.DebugInformation}");
             }
 
             // Return the stored state
             return new ProcessDeploymentState
             {
-                DeploymentId   = Guid.Parse(indexResp.Id),
+                DeploymentId   = deploymentId,
                 DeploymentKey  = deploymentKey,
                 Version        = nextVersion,
                 Label          = label,
@@ -135,20 +138,21 @@ namespace Novin.Bpmn.EventSourcing.Core
         }
 
         public async Task<ProcessDeploymentState?> GetDeploymentAsync(
-            string deploymentKey,
+            Guid deploymentId,
             CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrWhiteSpace(deploymentKey))
-                throw new ArgumentException("deploymentKey is required", nameof(deploymentKey));
+            var deploymentIdStrings = deploymentId.ToString();
+            if (string.IsNullOrWhiteSpace(deploymentIdStrings))
+                throw new ArgumentException("deploymentKey is required", nameof(deploymentIdStrings));
 
-            var get = await _elasticClient.GetAsync<Dictionary<string, object>>(deploymentKey, g => g
+            var get = await _elasticClient.GetAsync<Dictionary<string, object>>(deploymentIdStrings, g => g
                 .Index(IndexName),
                 cancellationToken);
 
             if (!get.IsValid)
             {
                 if (get.ApiCall.HttpStatusCode == 404) return null;
-                _logger.LogError("Error fetching deployment '{Key}': {Error}", deploymentKey, get.DebugInformation);
+                _logger.LogError("Error fetching deployment '{Key}': {Error}", deploymentIdStrings, get.DebugInformation);
                 throw new ElasticsearchClientException($"GetDeploymentAsync failed: {get.DebugInformation}");
             }
 
@@ -157,45 +161,50 @@ namespace Novin.Bpmn.EventSourcing.Core
             var src = get.Source;
             return new ProcessDeploymentState
             {
-                DeploymentId   = Guid.Parse(deploymentKey),
-                DeploymentKey  = src["DeploymentKey"]?.ToString() ?? deploymentKey,
-                Version        = Convert.ToInt32(src["Version"]),
-                Label          = src["Label"]?.ToString(),
-                XmlContent     = src["XmlContent"]?.ToString() ?? string.Empty,
-                DeploymentTime = DateTime.Parse(src["DeploymentTime"].ToString()!)
+                DeploymentId   = Guid.Parse(src["deploymentId"].ToString()),
+                DeploymentKey  = src["deploymentKey"]?.ToString() ,
+                Version        = Convert.ToInt32(src["version"]),
+                Label          = src["label"]?.ToString(),
+                XmlContent     = src["xmlContent"]?.ToString() ?? string.Empty,
+                DeploymentTime = DateTime.Parse(src["deploymentTime"].ToString()!)
             };
         }
 
         public async Task<string?> GetRawXmlAsync(
-            string deploymentKey,
+            Guid deploymentId,
             CancellationToken cancellationToken = default)
         {
-            var d = await GetDeploymentAsync(deploymentKey, cancellationToken);
+            var d = await GetDeploymentAsync(deploymentId, cancellationToken);
             return d?.XmlContent;
         }
 
         public async Task<BpmnDefinitions?> GetDefinitionsAsync(
-            string deploymentKey,
+            Guid deploymentId,
             CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrWhiteSpace(deploymentKey))
-                throw new ArgumentException("deploymentKey is required", nameof(deploymentKey));
+            if (string.IsNullOrWhiteSpace(deploymentId.ToString()))
+                throw new ArgumentException("deploymentKey is required", nameof(deploymentId));
 
-            var get = await _elasticClient.GetAsync<Dictionary<string, object>>(deploymentKey, g => g
+            var get = await _elasticClient.GetAsync<Dictionary<string, object>>(deploymentId, g => g
                 .Index(IndexName),
                 cancellationToken);
 
-            if (!get.IsValid || !get.Found || !get.Source.TryGetValue("definitions", out var raw)) 
+            if (!get.IsValid || !get.Found || !get.Source.TryGetValue("xmlContent", out var raw)) 
                 return null;
 
             try
             {
-                return JsonConvert.DeserializeObject<BpmnDefinitions>(
-                    raw.ToString()!, _jsonSettings);
+                // convert xml content to object
+                var xmlContent = raw.ToString()!;
+                var serializer = new XmlSerializer(typeof(BpmnDefinitions));
+                using (var reader = new StringReader(xmlContent))
+                {
+                    return (BpmnDefinitions?)serializer.Deserialize(reader);
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error deserializing definitions for '{Key}'", deploymentKey);
+                _logger.LogError(ex, "Error deserializing definitions for '{Key}'", deploymentId);
                 throw;
             }
         }
@@ -243,5 +252,7 @@ namespace Novin.Bpmn.EventSourcing.Core
             }
             return list;
         }
+
+     
     }
 }

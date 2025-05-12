@@ -1,139 +1,86 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Diagnostics.CodeAnalysis;
 using Novin.Bpmn.EventSourcing.Core.Models;
 
-namespace Novin.Bpmn.EventSourcing.Contracts
+public sealed class InstanceQuery
+{
+    public string? InstanceId   { get; init; }
+    public string? DeploymentId { get; init; }
+    public string? Status       { get; init; }
+    public string? Pattern      { get; init; }   // supports * wildcard
+    public int     Size         { get; init; } = 1000;
+}
+
+/// <summary>
+/// Wraps a state payload together with the optimistic-locking version
+/// number that was stored alongside it.
+/// </summary>
+/// <typeparam name="TState">The CLR type of the state payload.</typeparam>
+public readonly record struct StateWithVersion<TState>(
+    [property: MaybeNull]   TState State,
+    [property: NotNull]     long   Version)
+    : IComparable<StateWithVersion<TState>>, IEquatable<StateWithVersion<TState>>
 {
     /// <summary>
-    /// Result of getting a state with version
+    /// Indicates whether this wrapper is “empty” (no state persisted yet).
     /// </summary>
-    /// <typeparam name="T">Type of state</typeparam>
-    public class StateWithVersion<T>
-    {
-        /// <summary>
-        /// The state object
-        /// </summary>
-        public T? State { get; set; }
-        
-        /// <summary>
-        /// Version of the state
-        /// </summary>
-        public long Version { get; set; }
-    }
-    
+    public bool IsEmpty => Version == 0;
+
     /// <summary>
-    /// قرارداد مخزن حالت نمونه‌های فرآیند BPMN
+    /// Convenience factory for the common “not found” case.
     /// </summary>
-    public interface IProcessInstanceStateStore
+    public static StateWithVersion<TState> Empty { get; } = new(default, 0);
+
+    #region Comparison helpers (optional but nice to have)
+
+    /// <inheritdoc/>
+    public int CompareTo(StateWithVersion<TState> other) =>
+        Version.CompareTo(other.Version);
+
+    /// <inheritdoc/>
+    public bool Equals(StateWithVersion<TState> other) =>
+        Version == other.Version &&
+        EqualityComparer<TState>.Default.Equals(State, other.State);
+
+    #endregion
+
+    /// <summary>
+    /// Deconstruct pattern support:
+    /// <code>
+    /// var (state, version) = await store.GetAsync(id);
+    /// </code>
+    /// </summary>
+    public void Deconstruct(out TState? state, out long version)
     {
-        /// <summary>
-        /// واکشی وضعیت نمونه فرآیند بر اساس شناسه
-        /// </summary>
-        Task<ProcessInstanceState?> GetAsync(
-            string processInstanceId,
-            CancellationToken cancellationToken = default);
-
-        /// <summary>
-        /// درج یا به‌روزرسانی وضعیت نمونه فرآیند
-        /// </summary>
-        Task SaveAsync(
-            ProcessInstanceState state,
-            CancellationToken cancellationToken = default);
-
-        /// <summary>
-        /// حذف وضعیت نمونه فرآیند
-        /// </summary>
-        Task DeleteAsync(
-            string processInstanceId,
-            CancellationToken cancellationToken = default);
-
-        /// <summary>
-        /// بررسی وجود یک وضعیت نمونه فرآیند
-        /// </summary>
-        Task<bool> ExistsAsync(
-            string processInstanceId,
-            CancellationToken cancellationToken = default);
-
-        /// <summary>
-        /// جستجو بر اساس شناسه نمونه فرآیند (instanceId)
-        /// </summary>
-        Task<IReadOnlyList<ProcessInstanceState>> QueryByInstanceIdAsync(
-            string instanceId,
-            CancellationToken cancellationToken = default);
-
-        /// <summary>
-        /// جستجو بر اساس شناسه استقرار (deploymentId)
-        /// </summary>
-        Task<IReadOnlyList<ProcessInstanceState>> QueryByDeploymentIdAsync(
-            string deploymentId,
-            CancellationToken cancellationToken = default);
-
-        /// <summary>
-        /// جستجو بر اساس وضعیت (status)
-        /// </summary>
-        Task<IReadOnlyList<ProcessInstanceState>> QueryByStatusAsync(
-            string status,
-            CancellationToken cancellationToken = default);
-
-        /// <summary>
-        /// جستجوی انعطاف‌پذیر با استفاده از یک تابع شرطی دلخواه
-        /// </summary>
-
-        /// <summary>
-        /// Get the state for a process instance
-        /// </summary>
-        /// <typeparam name="T">Type of state to return</typeparam>
-        /// <param name="processInstanceId">Process instance ID</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        /// <returns>State object or null if not found</returns>
-        Task<T?> GetStateAsync<T>(string processInstanceId, CancellationToken cancellationToken = default);
-        
-        /// <summary>
-        /// Get the state for a process instance
-        /// </summary>
-        /// <param name="processInstanceId">Process instance ID</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        /// <returns>State object or null if not found</returns>
-        Task<object?> GetStateAsync(string processInstanceId, CancellationToken cancellationToken = default);
-        
-        /// <summary>
-        /// Get the state for a process instance with its version
-        /// </summary>
-        /// <typeparam name="T">Type of state to return</typeparam>
-        /// <param name="processInstanceId">Process instance ID</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        /// <returns>State object with version or null if not found</returns>
-        Task<StateWithVersion<T>> GetStateWithVersionAsync<T>(string processInstanceId, CancellationToken cancellationToken = default);
-        
-        /// <summary>
-        /// Save the state for a process instance
-        /// </summary>
-        /// <param name="processInstanceId">Process instance ID</param>
-        /// <param name="state">State object</param>
-        /// <param name="expectedVersion">Expected version (for optimistic concurrency)</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        Task SaveStateAsync(string processInstanceId, object state, long? expectedVersion = null, CancellationToken cancellationToken = default);
-        
-        /// <summary>
-        /// Delete the state for a process instance
-        /// </summary>
-        /// <param name="processInstanceId">Process instance ID</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        Task DeleteStateAsync(string processInstanceId, CancellationToken cancellationToken = default);
-        
-        /// <summary>
-        /// Find states matching a pattern
-        /// </summary>
-        /// <typeparam name="T">Type of state to return</typeparam>
-        /// <param name="pattern">Instance ID pattern (supports * wildcard)</param>
-        /// <param name="predicate">Optional predicate to filter results</param>
-        /// <param name="cancellationToken">Cancellation token</param>
-        /// <returns>List of matching states</returns>
-        Task<IReadOnlyList<T>> FindStatesByPatternAsync<T>(
-            string pattern, 
-            Func<T, bool>? predicate = null, 
-            CancellationToken cancellationToken = default);
+        state   = State;
+        version = Version;
     }
+
+    public override string ToString() =>
+        $"Version {Version} – {(State is null ? "null" : State.ToString())}";
+}
+
+/// <summary>Main entry-point for persisting / retrieving process-instance state.</summary>
+public interface IProcessInstanceStateStore
+{
+    /// <summary>Create or update the whole state document (optimistic concurrency optional).</summary>
+    Task UpsertAsync(ProcessInstanceState state,
+        long? expectedVersion = null,
+        CancellationToken ct  = default);
+
+    /// <summary>Retrieve a state; returns <c>null</c> when not found.</summary>
+    Task<StateWithVersion<ProcessInstanceState>?> GetAsync(string instanceId,
+        CancellationToken ct = default);
+
+    /// <summary>Remove a state. Returns <c>true</c> when something was deleted.</summary>
+    Task<bool> DeleteAsync(string instanceId,
+        long? expectedVersion = null,
+        CancellationToken ct = default);
+
+    /// <summary>Lightweight existence check.</summary>
+    Task<bool> ExistsAsync(string instanceId,
+        CancellationToken ct = default);
+
+    /// <summary>Run a query – any combination of filters is allowed.</summary>
+    Task<IReadOnlyList<ProcessInstanceState>> QueryAsync(InstanceQuery query,
+        CancellationToken ct = default);
 }

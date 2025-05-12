@@ -54,7 +54,7 @@ namespace Novin.Bpmn.EventSourcing.Core
             return new SerializedEvent
             {
                 Id                = Guid.NewGuid().ToString(),
-                ProcessInstanceId = @event.ProcessInstanceId,
+                ProcessInstanceId = @event.InstanceId,
                 TypeName          = eventType.Name,
                 Namespace         = eventType.Namespace ?? string.Empty,
                 Payload           = payload,

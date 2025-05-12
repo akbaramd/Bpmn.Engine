@@ -43,7 +43,7 @@ public class ServiceProviderEventBus : IEventBus
             throw new ArgumentNullException(nameof(@event));
 
         _logger.LogDebug("Publishing event {EventType} with ID {EventId} for process instance {ProcessInstanceId}",
-            @event.EventType, @event.EventId, @event.ProcessInstanceId);
+            @event.EventType, @event.EventId, @event.InstanceId);
 
         // رسیدگی به اشتراک‌های مستقیم
         var eventType = @event.GetType();
@@ -183,7 +183,7 @@ public class ServiceProviderEventBus : IEventBus
             throw new ArgumentNullException(nameof(@event));
 
         _logger.LogDebug("Publishing strongly-typed event {EventType} with ID {EventId} for process instance {ProcessInstanceId}",
-            @event.EventType, @event.EventId, @event.ProcessInstanceId);
+            @event.EventType, @event.EventId, @event.InstanceId);
 
         // رسیدگی به اشتراک‌های نوع خاص
         if (_subscriptions.TryGetValue(typeof(TEvent), out var eventSubscriptions))

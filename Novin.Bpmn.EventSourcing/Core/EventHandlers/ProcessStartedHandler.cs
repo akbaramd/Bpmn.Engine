@@ -14,20 +14,20 @@ namespace Novin.Bpmn.EventSourcing.Core.EventHandlers;
 /// <summary>
 /// Handles the creation of new process instances and activates start events
 /// </summary>
-public class ProcessCreatedHandler : BaseEventHandler<ProcessStarted>
+public class ProcessStartedHandler : BaseEventHandler<ProcessStarted>
 {
     private readonly IEventBus _eventBus;
 
     /// <summary>
     /// Creates a new instance of ProcessCreatedHandler
     /// </summary>
-    public ProcessCreatedHandler(
+    public ProcessStartedHandler(
         IProcessInstanceStateStore stateStore,
         IEventStore eventStore,
         IProcessDeploymentStore definitionStore,
         IEventBus eventBus,
-        ILogger<ProcessCreatedHandler> logger)
-        : base(stateStore, eventStore, definitionStore, logger)
+        ILogger<ProcessStartedHandler> logger)
+        : base(stateStore, eventStore, definitionStore, eventBus, logger)
     {
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
     }
@@ -35,7 +35,7 @@ public class ProcessCreatedHandler : BaseEventHandler<ProcessStarted>
     /// <inheritdoc />
     protected override async Task ProcessEventAsync(
         ProcessStarted @event, 
-        ProcessInstanceState state,
+        EventHandlerContext context,
         CancellationToken cancellationToken)
     {
         if (@event == null)
@@ -46,26 +46,26 @@ public class ProcessCreatedHandler : BaseEventHandler<ProcessStarted>
         try
         {
             Logger.LogInformation("Handling process creation for instance {ProcessInstanceId}", 
-                @event.ProcessInstanceId);
+                @event.InstanceId);
 
-            // Record the event in state history
-            state.RecordEvent(@event);
+          
 
             // Get process definition using the process definition ID from the event
-            var definition = await DefinitionStore.GetDefinitionsAsync(
-                @event.ProcessDefinitionId, 
-                cancellationToken);
+            var definition = await GetDefinitionsAsync(@event.DeploymentId, cancellationToken);
 
             if (definition == null)
             {
-                throw new InvalidOperationException($"Process definition {@event.ProcessDefinitionId} not found");
+                throw new InvalidOperationException($"Process definition {@event.DeploymentKey} not found");
             }
 
+            var defiantionExplorer = GetDefiantionExplorer(definition);
+
             // Find start events in the definition
-            var startEvents = FindStartEvents(definition);
+            var startEvents = defiantionExplorer.FindStartEvents();
+
             if (!startEvents.Any())
             {
-                throw new InvalidOperationException($"No start events found in process {@event.ProcessDefinitionId}");
+                throw new InvalidOperationException($"No start events found in process {@event.DeploymentKey}");
             }
 
             // Create activation events for each start event
@@ -73,55 +73,41 @@ public class ProcessCreatedHandler : BaseEventHandler<ProcessStarted>
             {
                 Logger.LogDebug("Creating element for start event {StartEventId}", startEvent.id);
                 
-                await _eventBus.PublishAsync(new ElementCreated
+                PublishLater(new ElementCreated
                 {
-                    ProcessInstanceId = @event.ProcessInstanceId,
-                    ProcessDefinitionId = @event.ProcessDefinitionId,
+                    InstanceId = @event.InstanceId,
+                    DeploymentKey = @event.DeploymentKey,
+                    DeploymentId = @event.DeploymentId,
+                    ProcessId = @event.ProcessId,
                     ElementId = startEvent.id,
                     ElementType = BpmnElementType.StartEvent,
                     IsExecutable = true,
                     Timestamp = DateTimeOffset.UtcNow
-                }, cancellationToken);
+                });
             }
 
             Logger.LogInformation("Process instance {ProcessInstanceId} started successfully with {StartEventCount} start events", 
-                @event.ProcessInstanceId, startEvents.Count);
+                @event.InstanceId, startEvents.Count);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error handling process creation for {ProcessInstanceId}", 
-                @event.ProcessInstanceId);
+                @event.InstanceId);
             
             // Publish failure event
-            await _eventBus.PublishAsync(new ProcessFailed
+            PublishLater(new ProcessFailed
             {
-                ProcessInstanceId = @event.ProcessInstanceId,
+                InstanceId = @event.InstanceId,
+                DeploymentKey = @event.DeploymentKey,
+                DeploymentId = @event.DeploymentId,
+                ProcessId = @event.ProcessId,
                 ErrorMessage = ex.Message,
                 ErrorDetails = ex.StackTrace
-            }, cancellationToken);
+            });
             
             throw;
         }
     }
 
-    private List<BpmnStartEvent> FindStartEvents(BpmnDefinitions definition)
-    {
-        var startEvents = new List<BpmnStartEvent>();
-        
-        if (definition?.Items == null)
-            return startEvents;
-            
-        // First find all processes
-        var processes = definition.Items.OfType<BpmnProcess>().ToList();
-        
-        foreach (var process in processes)
-        {
-            if (process.Items == null)
-                continue;
-                
-            startEvents.AddRange(process.Items.OfType<BpmnStartEvent>());
-        }
-        
-        return startEvents;
-    }
+   
 }

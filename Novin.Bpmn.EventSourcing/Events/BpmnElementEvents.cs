@@ -13,8 +13,7 @@ public abstract record ElementEvent : BpmnEvent
       public Guid EventId { get; init; } = Guid.NewGuid();
         public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
 
-        public required string ProcessDefinitionId { get; init; }
-        public string?       CorrelationId         { get; init; }
+     
 
         public required string          ElementId     { get; init; }
         public required BpmnElementType ElementType   { get; init; }  // نوع المان :contentReference[oaicite:4]{index=4}:contentReference[oaicite:5]{index=5}

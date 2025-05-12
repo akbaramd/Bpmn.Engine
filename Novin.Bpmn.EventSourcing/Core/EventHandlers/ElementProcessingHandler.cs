@@ -24,7 +24,7 @@ public class ElementProcessingHandler : BaseEventHandler<ElementProcessing>
         IProcessDeploymentStore definitionStore,
         IEventBus eventBus,
         ILogger<ElementProcessingHandler> logger)
-        : base(stateStore, eventStore, definitionStore, logger)
+        : base(stateStore, eventStore, definitionStore, eventBus, logger)
     {
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
     }
@@ -32,7 +32,7 @@ public class ElementProcessingHandler : BaseEventHandler<ElementProcessing>
     /// <inheritdoc />
     protected override async Task ProcessEventAsync(
         ElementProcessing @event,
-        ProcessInstanceState state,
+        EventHandlerContext context,
         CancellationToken cancellationToken)
     {
         if (@event == null)
@@ -43,15 +43,12 @@ public class ElementProcessingHandler : BaseEventHandler<ElementProcessing>
         try
         {
             Logger.LogInformation("Processing element {ElementId} of type {ElementType} in process {ProcessInstanceId}",
-                @event.ElementId, @event.ElementType, @event.ProcessInstanceId);
-
-            // Record the event in state history
-            state.RecordEvent(@event);
+                @event.ElementId, @event.ElementType, @event.InstanceId);
 
             // Check if we have an execution ID and update the execution status
             if (!string.IsNullOrEmpty(@event.ExecutionId))
             {
-                var execution = state.GetExecution(@event.ExecutionId);
+                var execution = context.State.GetExecution(@event.ExecutionId);
                 // Mark execution as Active/Processing if it exists
                 if (execution != null)
                 {
@@ -61,28 +58,30 @@ public class ElementProcessingHandler : BaseEventHandler<ElementProcessing>
             }
 
             // Determine the type of element being processed and handle it accordingly
-            await HandleElementTypeAsync(@event, state, cancellationToken);
+            await HandleElementTypeAsync(@event, context, cancellationToken);
             
             Logger.LogDebug("Successfully processed element {ElementId} in process {ProcessInstanceId}",
-                @event.ElementId, @event.ProcessInstanceId);
+                @event.ElementId, @event.InstanceId);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error processing element {ElementId} in process {ProcessInstanceId}",
-                @event.ElementId, @event.ProcessInstanceId);
+                @event.ElementId, @event.InstanceId);
                 
             // Create failed event 
-            await _eventBus.PublishAsync(new ElementFailed
+            PublishLater(new ElementFailed
             {
-                ProcessInstanceId = @event.ProcessInstanceId,
-                ProcessDefinitionId = @event.ProcessDefinitionId,
+                InstanceId = @event.InstanceId,
+                ProcessId = @event.ProcessId,
+                DeploymentId = @event.DeploymentId,
+                DeploymentKey = @event.DeploymentKey,
                 ElementId = @event.ElementId,
                 ElementType = @event.ElementType,
                 ExecutionId = @event.ExecutionId,
                 ErrorCode = "PROCESSING_ERROR",
                 ErrorMessage = ex.Message,
                 Timestamp = DateTimeOffset.UtcNow
-            }, cancellationToken);
+            });
             
             throw;
         }
@@ -93,7 +92,7 @@ public class ElementProcessingHandler : BaseEventHandler<ElementProcessing>
     /// </summary>
     private async Task HandleElementTypeAsync(
         ElementProcessing @event,
-        ProcessInstanceState state,
+        EventHandlerContext context,
         CancellationToken cancellationToken)
     {
         // Log the element type being processed
@@ -101,14 +100,16 @@ public class ElementProcessingHandler : BaseEventHandler<ElementProcessing>
             @event.ElementId, @event.ElementType);
 
         // Create a completed event
-        await _eventBus.PublishAsync(new ElementCompleted
+        PublishLater(new ElementCompleted
         {
-            ProcessInstanceId = @event.ProcessInstanceId,
-            ProcessDefinitionId = @event.ProcessDefinitionId,
+            InstanceId = @event.InstanceId,
+            ProcessId = @event.ProcessId,
+            DeploymentId = @event.DeploymentId,
+            DeploymentKey = @event.DeploymentKey,
             ElementId = @event.ElementId,
             ElementType = @event.ElementType,
             ExecutionId = @event.ExecutionId,
             Timestamp = DateTimeOffset.UtcNow
-        }, cancellationToken);
+        });
     }
 }

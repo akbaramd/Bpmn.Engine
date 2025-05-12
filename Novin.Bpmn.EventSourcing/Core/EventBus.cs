@@ -64,7 +64,7 @@ public class EventBus : IEventBus
             throw new ArgumentNullException(nameof(@event));
         
         _logger.LogDebug("Publishing event {@EventType} for process {ProcessInstanceId}",
-            @event.EventType, @event.ProcessInstanceId);
+            @event.EventType, @event.InstanceId);
         
         try
         {
@@ -77,7 +77,7 @@ public class EventBus : IEventBus
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error publishing event {@EventType} for process {ProcessInstanceId}",
-                @event.EventType, @event.ProcessInstanceId);
+                @event.EventType, @event.InstanceId);
             throw;
         }
     }

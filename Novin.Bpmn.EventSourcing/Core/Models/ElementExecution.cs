@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using Novin.Bpmn.EventSourcing.Contracts;
 using Novin.Bpmn.EventSourcing.Events;
 
@@ -18,23 +19,32 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
         /// <summary>
         /// Unique identifier for this execution instance
         /// </summary>
-        public string ExecutionId { get; private set; }
+        public string ExecutionId { get; set; }
 
         /// <summary>
         /// The process instance this execution belongs to
         /// </summary>
-        public string ProcessInstanceId { get; private set; }
+        public string ProcessInstanceId { get; set; }
 
         /// <summary>
         /// The BPMN element being executed
         /// </summary>
-        public string ElementId { get; private set; }
+        public string ElementId { get; set; }
+
+        /// <summary>
+        /// The type of the BPMN element as a string for serialization
+        /// </summary>
+        public string ElementTypeName { get; set; }
 
         /// <summary>
         /// The type of the BPMN element (task, gateway, event, etc.)
         /// </summary>
-        public BpmnElementType ElementType { get; private set; }
-
+        [JsonIgnore]
+        public BpmnElementType ElementType 
+        { 
+            get => BpmnElementType.FromName(ElementTypeName); 
+            set => ElementTypeName = value?.Name ?? "Unknown";
+        }
 
         // ───────────────────────────────────────────────────────────────────────
         // Lifecycle Timestamps
@@ -43,13 +53,12 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
         /// <summary>
         /// When execution started
         /// </summary>
-        public DateTime StartedAt { get; private set; }
+        public DateTime StartedAt { get; set; }
 
         /// <summary>
         /// When execution completed (success, failure, or termination)
         /// </summary>
-        public DateTime? CompletedAt { get; private set; }
-
+        public DateTime? CompletedAt { get; set; }
 
         // ───────────────────────────────────────────────────────────────────────
         // Status & Control
@@ -58,19 +67,18 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
         /// <summary>
         /// Current status of this execution
         /// </summary>
-        public ExecutionStatus Status { get; private set; }
+        public ExecutionStatus Status { get; set; }
 
         /// <summary>
         /// If failed, the reason for failure
         /// </summary>
-        public string? FailureReason { get; private set; }
+        public string? FailureReason { get; set; }
 
         /// <summary>
         /// Indicates whether this execution should run its business logic.
         /// If false, this execution only routes tokens and emits routing events.
         /// </summary>
-        public bool IsExecutable { get; private set; }
-
+        public bool IsExecutable { get; set; }
 
         // ───────────────────────────────────────────────────────────────────────
         // Event Tracking
@@ -79,18 +87,17 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
         /// <summary>
         /// IDs of BPMN events attached to this execution
         /// </summary>
-        public List<string> EventIds { get; private set; } = new();
+        public List<string> EventIds { get; set; } = new();
 
         /// <summary>
-        /// Chronological list of full event objects (in-memory only)
+        /// Chronological list of serializable event objects
         /// </summary>
-        public List<IBpmnEvent> Events { get; } = new();
+        public List<SerializableBpmnEvent> Events { get; set; } = new();
 
         /// <summary>
         /// Counts of each event type seen in this execution
         /// </summary>
-        public Dictionary<string, int> EventTypeCounts { get; private set; } = new();
-
+        public Dictionary<string, int> EventTypeCounts { get; set; } = new();
 
         // ───────────────────────────────────────────────────────────────────────
         // Extension Data
@@ -99,19 +106,18 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
         /// <summary>
         /// Local variables scoped to this execution
         /// </summary>
-        public Dictionary<string, object>? LocalVariables { get; private set; }
+        public Dictionary<string, object> LocalVariables { get; set; } = new();
 
         /// <summary>
         /// Arbitrary additional properties
         /// </summary>
-        public Dictionary<string, string> Properties { get; private set; } = new();
-
+        public Dictionary<string, string> Properties { get; set; } = new();
 
         // ───────────────────────────────────────────────────────────────────────
         // Construction & Factory
         // ───────────────────────────────────────────────────────────────────────
 
-        protected ElementExecution() { }
+        public ElementExecution() { }
 
         /// <summary>
         /// Create and start a new element execution.
@@ -125,7 +131,7 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
             string processInstanceId,
             string elementId,
             BpmnElementType elementType,
-            Dictionary<string, object>? localVariables = null,
+            Dictionary<string, object> localVariables = null,
             bool isExecutable = true)
         {
             if (string.IsNullOrWhiteSpace(processInstanceId))
@@ -135,17 +141,16 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
 
             return new ElementExecution
             {
-                ExecutionId        = Guid.NewGuid().ToString(),
-                ProcessInstanceId  = processInstanceId,
-                ElementId          = elementId,
-                ElementType        = elementType,
-                StartedAt          = DateTime.UtcNow,
-                Status             = ExecutionStatus.Active,
-                IsExecutable       = isExecutable,
-                LocalVariables     = localVariables
+                ExecutionId = Guid.NewGuid().ToString(),
+                ProcessInstanceId = processInstanceId,
+                ElementId = elementId,
+                ElementType = elementType,
+                StartedAt = DateTime.UtcNow,
+                Status = ExecutionStatus.Active,
+                IsExecutable = isExecutable,
+                LocalVariables = localVariables ?? new Dictionary<string, object>()
             };
         }
-
 
         // ───────────────────────────────────────────────────────────────────────
         // Domain Behaviors
@@ -175,7 +180,9 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
             else
                 EventTypeCounts[bpmnEvent.EventType] = 1;
 
-            Events.Add(bpmnEvent);
+            // Convert to serializable event
+            var serializableEvent = SerializableBpmnEvent.FromEvent(bpmnEvent);
+            Events.Add(serializableEvent);
         }
 
         /// <summary>
@@ -243,6 +250,31 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
                 throw new InvalidOperationException($"Cannot resume when status is {Status}.");
 
             Status = ExecutionStatus.Active;
+        }
+
+        /// <summary>
+        /// Set a local variable value
+        /// </summary>
+        public void SetVariable(string name, object value)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("Variable name required", nameof(name));
+
+            LocalVariables[name] = value;
+        }
+
+        /// <summary>
+        /// Get a local variable value
+        /// </summary>
+        public bool TryGetVariable<T>(string name, out T value)
+        {
+            if (LocalVariables.TryGetValue(name, out var obj) && obj is T cast)
+            {
+                value = cast;
+                return true;
+            }
+            value = default!;
+            return false;
         }
 
         private void EnsureActive()

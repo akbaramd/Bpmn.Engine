@@ -11,11 +11,100 @@ using System.Threading.Tasks;
 namespace Novin.Bpmn.EventSourcing.Core.EventHandlers;
 
 /// <summary>
+/// Script executor for evaluating conditional expressions
+/// </summary>
+public class ScriptExecuter
+{
+    private readonly ILogger _logger;
+
+    public ScriptExecuter(ILogger logger)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    /// <summary>
+    /// Evaluates a conditional expression against process variables
+    /// </summary>
+    /// <param name="condition">The condition expression to evaluate</param>
+    /// <param name="variables">The variables to use for evaluation</param>
+    /// <returns>True if the condition evaluates to true, false otherwise</returns>
+    public bool EvaluateCondition(string condition, Dictionary<string, object> variables)
+    {
+        if (string.IsNullOrWhiteSpace(condition))
+        {
+            // No condition means it's always valid
+            return true;
+        }
+
+        try
+        {
+            _logger.LogDebug("Evaluating condition: {Condition}", condition);
+            
+            // This is a placeholder for actual expression evaluation
+            // In a real implementation, you would use a script engine to evaluate the expression
+            // For now, we'll implement some basic condition parsing
+            
+            // Simple variable substitution
+            foreach (var variable in variables)
+            {
+                condition = condition.Replace("${" + variable.Key + "}", variable.Value?.ToString() ?? "null");
+            }
+            
+            // Handle simple boolean expressions
+            if (condition.Trim().Equals("true", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            
+            if (condition.Trim().Equals("false", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            
+            // Handle basic comparisons (equals, not equals)
+            if (condition.Contains("=="))
+            {
+                var parts = condition.Split(new[] { "==" }, StringSplitOptions.None);
+                if (parts.Length == 2)
+                {
+                    var left = parts[0].Trim();
+                    var right = parts[1].Trim();
+                    return left == right;
+                }
+            }
+            
+            if (condition.Contains("!="))
+            {
+                var parts = condition.Split(new[] { "!=" }, StringSplitOptions.None);
+                if (parts.Length == 2)
+                {
+                    var left = parts[0].Trim();
+                    var right = parts[1].Trim();
+                    return left != right;
+                }
+            }
+            
+            // For more complex expressions, you would use a proper script engine
+            // such as Jint for JavaScript or Microsoft.CodeAnalysis.CSharp.Scripting
+            
+            _logger.LogWarning("Unable to evaluate condition: {Condition}, defaulting to true", condition);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error evaluating condition: {Condition}", condition);
+            return false;
+        }
+    }
+}
+
+/// <summary>
 /// Handles the completion of BPMN elements in a process instance
 /// </summary>
 public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
 {
     private readonly IEventBus _eventBus;
+    private readonly ScriptExecuter _scriptExecuter;
 
     /// <summary>
     /// Creates a new instance of ElementCompletedHandler
@@ -26,15 +115,16 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
         IProcessDeploymentStore definitionStore, 
         IEventBus eventBus,
         ILogger<ElementCompletedHandler> logger)
-        : base(stateStore, eventStore, definitionStore, logger)
+        : base(stateStore, eventStore, definitionStore, eventBus, logger)
     {
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+        _scriptExecuter = new ScriptExecuter(logger);
     }
 
     /// <inheritdoc />
     protected override async Task ProcessEventAsync(
         ElementCompleted @event, 
-        ProcessInstanceState state, 
+        EventHandlerContext context, 
         CancellationToken cancellationToken)
     {
         if (@event == null)
@@ -45,123 +135,428 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
         try
         {
             Logger.LogDebug("Processing ElementCompleted event for element {ElementId} in process {ProcessInstanceId}", 
-                @event.ElementId, @event.ProcessInstanceId);
+                @event.ElementId, @event.InstanceId);
 
-            // Record the event in state history
-            state.RecordEvent(@event);
-
-            // If we have an execution ID, mark that execution as completed
-            if (!string.IsNullOrEmpty(@event.ExecutionId))
+            // The execution should be in the context
+            var execution = context.CurrentExecution;
+            if (execution == null)
             {
-                try 
-                {
-                    var execution = state.GetExecution(@event.ExecutionId);
-                    execution.Complete();
-                    Logger.LogDebug("Marked execution {ExecutionId} as completed for element {ElementId}", 
-                        @event.ExecutionId, @event.ElementId);
-                } 
-                catch (KeyNotFoundException)
-                {
-                    Logger.LogWarning("Could not find execution {ExecutionId} for element {ElementId}",
-                        @event.ExecutionId, @event.ElementId);
-                }
+                throw new InvalidOperationException($"Execution not found for element {@event.ElementId}");
             }
             
-            // Handle special element types
-            if (@event.ElementType == BpmnElementType.EndEvent)
+            // Get process definition using the deployment ID from the event
+            var definition = await GetDefinitionsAsync(@event.DeploymentId, cancellationToken);
+            if (definition == null)
             {
-                await HandleEndEventAsync(state, @event, cancellationToken);
+                throw new InvalidOperationException($"Process definition {@event.DeploymentKey} not found");
             }
-            else if (@event.ElementType == BpmnElementType.Task || 
-                     @event.ElementType == BpmnElementType.UserTask ||
-                     @event.ElementType == BpmnElementType.ServiceTask ||
-                     @event.ElementType == BpmnElementType.ScriptTask ||
-                     @event.ElementType == BpmnElementType.BusinessRuleTask ||
-                     @event.ElementType == BpmnElementType.SendTask ||
-                     @event.ElementType == BpmnElementType.ReceiveTask)
+
+            var definitionExplorer = GetDefiantionExplorer(definition);
+            
+            // Handle special element types with fork behavior
+            if (IsGateway(@event.ElementType))
             {
-                await HandleTaskCompletionAsync(state, @event, cancellationToken);
-            }
-            else if (@event.ElementType == BpmnElementType.ParallelGateway ||
-                     @event.ElementType == BpmnElementType.ExclusiveGateway ||
-                     @event.ElementType == BpmnElementType.InclusiveGateway)
-            {
-                await HandleGatewayCompletionAsync(state, @event, cancellationToken);
+                await HandleGatewayForkAsync(context, @event, definitionExplorer, cancellationToken);
             }
             else
             {
-                Logger.LogInformation("Element {ElementId} of type {ElementType} completed successfully in process {ProcessInstanceId}",
-                    @event.ElementId, @event.ElementType, @event.ProcessInstanceId);
-                await ScheduleOutgoingFlowsAsync(state, @event, cancellationToken);
+                // For non-gateway elements, just activate all outgoing flows
+                await HandleStandardElementCompletionAsync(context, @event, definitionExplorer, cancellationToken);
+            }
+            
+            // Mark the execution as completed
+            execution.Complete();
+            
+            // Sync variables from execution to process instance
+            context.State.SyncVariablesFromExecution(execution);
+            
+            // Persist the updated state
+            await StateStore.UpsertAsync(context.State, ct: cancellationToken);
+            
+            Logger.LogInformation("Element {ElementId} completed in process {ProcessInstanceId}", 
+                @event.ElementId, @event.InstanceId);
+                
+            // Check if this is an end event and if the process is now complete
+            if (@event.ElementType == BpmnElementType.EndEvent)
+            {
+                await CheckProcessCompletionAsync(context, @event, cancellationToken);
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error handling ElementCompleted event for element {ElementId} in process {ProcessInstanceId}",
-                @event.ElementId, @event.ProcessInstanceId);
+                @event.ElementId, @event.InstanceId);
             throw;
         }
     }
-
-    private async Task HandleEndEventAsync(
-        ProcessInstanceState state, 
-        ElementCompleted @event, 
+    
+    /// <summary>
+    /// Handles the completion of a standard BPMN element (not a gateway)
+    /// </summary>
+    private async Task HandleStandardElementCompletionAsync(
+        EventHandlerContext context,
+        ElementCompleted @event,
+        DefiantionExplorer definitionExplorer,
         CancellationToken cancellationToken)
     {
-        Logger.LogDebug("Processing completion of end event {ElementId} in process {ProcessInstanceId}",
-            @event.ElementId, @event.ProcessInstanceId);
-            
-        // Publish a process completed event
-        await _eventBus.PublishAsync(new ProcessCompleted
+        // Find all outgoing sequence flows for this element
+        var outgoingFlows = await FindOutgoingFlowsAsync(
+            definitionExplorer, 
+            @event.ProcessId, 
+            @event.ElementId);
+        
+        if (outgoingFlows.Count == 0)
         {
-            ProcessInstanceId = @event.ProcessInstanceId,
-            CompletedAt = DateTime.UtcNow
-        }, cancellationToken);
+            Logger.LogDebug("Element {ElementId} has no outgoing flows", @event.ElementId);
+            return;
+        }
         
-        Logger.LogInformation("Process {ProcessInstanceId} completed with end event {ElementId}",
-            @event.ProcessInstanceId, @event.ElementId);
+        // For standard elements, activate all outgoing flows
+        foreach (var flow in outgoingFlows)
+        {
+            await CreateTargetElementAsync(
+                @event, 
+                flow, 
+                context.State.Variables, 
+                isExecutable: true, 
+                definitionExplorer, 
+                cancellationToken);
+        }
     }
     
-    private async Task HandleTaskCompletionAsync(
-        ProcessInstanceState state, 
-        ElementCompleted @event, 
+    /// <summary>
+    /// Handles fork behavior for BPMN gateways
+    /// </summary>
+    private async Task HandleGatewayForkAsync(
+        EventHandlerContext context,
+        ElementCompleted @event,
+        DefiantionExplorer definitionExplorer,
         CancellationToken cancellationToken)
     {
-        Logger.LogDebug("Processing completion of task {ElementId} in process {ProcessInstanceId}",
-            @event.ElementId, @event.ProcessInstanceId);
+        Logger.LogDebug("Handling fork for gateway {ElementId} of type {ElementType}", 
+            @event.ElementId, @event.ElementType);
             
-        // Schedule processing of outgoing flows
-        await ScheduleOutgoingFlowsAsync(state, @event, cancellationToken);
-    }
-    
-    private async Task HandleGatewayCompletionAsync(
-        ProcessInstanceState state, 
-        ElementCompleted @event, 
-        CancellationToken cancellationToken)
-    {
-        Logger.LogDebug("Processing completion of gateway {ElementId} of type {ElementType} in process {ProcessInstanceId}",
-            @event.ElementId, @event.ElementType, @event.ProcessInstanceId);
+        // Find all outgoing sequence flows for this gateway
+        var outgoingFlows = await FindOutgoingFlowsAsync(
+            definitionExplorer, 
+            @event.ProcessId, 
+            @event.ElementId);
             
-        // This would handle gateway-specific logic based on gateway type
-        // For now, we'll just schedule outgoing flows
-        await ScheduleOutgoingFlowsAsync(state, @event, cancellationToken);
-    }
-    
-    private async Task ScheduleOutgoingFlowsAsync(
-        ProcessInstanceState state, 
-        ElementCompleted @event, 
-        CancellationToken cancellationToken)
-    {
-        Logger.LogDebug("Scheduling processing of outgoing flows for element {ElementId} in process {ProcessInstanceId}",
-            @event.ElementId, @event.ProcessInstanceId);
-            
-        // This would typically:
-        // 1. Query the BPMN definition for outgoing sequence flows
-        // 2. Apply gateway-specific logic (exclusive, inclusive, parallel)
-        // 3. Create activation events for next elements
+        if (outgoingFlows.Count == 0)
+        {
+            Logger.LogDebug("Gateway {ElementId} has no outgoing flows", @event.ElementId);
+            return;
+        }
         
-        // For now, just log the action
-        Logger.LogInformation("Outgoing flows scheduled for processing from element {ElementId} in process {ProcessInstanceId}",
-            @event.ElementId, @event.ProcessInstanceId);
+        // Handle the gateway based on its type
+        if (@event.ElementType == BpmnElementType.ParallelGateway)
+        {
+            // Parallel Gateway: Activate all outgoing flows
+            foreach (var flow in outgoingFlows)
+            {
+                await CreateTargetElementAsync(
+                    @event, 
+                    flow, 
+                    context.State.Variables, 
+                    isExecutable: true, 
+                    definitionExplorer, 
+                    cancellationToken);
+            }
+        }
+        else if (@event.ElementType == BpmnElementType.ExclusiveGateway)
+        {
+            // Exclusive Gateway: Evaluate conditions and activate the first valid flow
+            bool foundValidPath = false;
+            
+            // First, check for default flow
+            var defaultFlow = outgoingFlows.FirstOrDefault(f => f.IsDefault);
+            
+            // Then check all flows with conditions
+            foreach (var flow in outgoingFlows.Where(f => !f.IsDefault && !string.IsNullOrEmpty(f.Condition)))
+            {
+                // Evaluate the condition
+                bool isValid = _scriptExecuter.EvaluateCondition(flow.Condition, context.State.Variables);
+                
+                if (isValid)
+                {
+                    // Create the target element with executable flag set to true
+                    await CreateTargetElementAsync(
+                        @event, 
+                        flow, 
+                        context.State.Variables, 
+                        isExecutable: true, 
+                        definitionExplorer, 
+                        cancellationToken);
+                        
+                    foundValidPath = true;
+                    break;  // Stop after the first valid path
+                }
+            }
+            
+            // If no valid conditional path was found, use the default flow
+            if (!foundValidPath && defaultFlow != null)
+            {
+                await CreateTargetElementAsync(
+                    @event, 
+                    defaultFlow, 
+                    context.State.Variables, 
+                    isExecutable: true, 
+                    definitionExplorer, 
+                    cancellationToken);
+            }
+            
+            // For all other flows, create non-executable elements
+            foreach (var flow in outgoingFlows.Where(f => 
+                (f != defaultFlow) && 
+                (!foundValidPath || string.IsNullOrEmpty(f.Condition))))
+            {
+                await CreateTargetElementAsync(
+                    @event, 
+                    flow, 
+                    context.State.Variables, 
+                    isExecutable: false, 
+                    definitionExplorer, 
+                    cancellationToken);
+            }
+        }
+        else if (@event.ElementType == BpmnElementType.InclusiveGateway)
+        {
+            // Inclusive Gateway: Evaluate all conditions and activate all valid flows
+            bool foundAnyValidPath = false;
+            
+            // First, evaluate all conditional flows
+            foreach (var flow in outgoingFlows.Where(f => !string.IsNullOrEmpty(f.Condition)))
+            {
+                // Evaluate the condition
+                bool isValid = _scriptExecuter.EvaluateCondition(flow.Condition, context.State.Variables);
+                
+                if (isValid)
+                {
+                    // Create the target element with executable flag set to true
+                    await CreateTargetElementAsync(
+                        @event, 
+                        flow, 
+                        context.State.Variables, 
+                        isExecutable: true, 
+                        definitionExplorer, 
+                        cancellationToken);
+                        
+                    foundAnyValidPath = true;
+                }
+                else
+                {
+                    // Create the target element with executable flag set to false
+                    await CreateTargetElementAsync(
+                        @event, 
+                        flow, 
+                        context.State.Variables, 
+                        isExecutable: false, 
+                        definitionExplorer, 
+                        cancellationToken);
+                }
+            }
+            
+            // If no path was valid, use the default flow
+            var defaultFlow = outgoingFlows.FirstOrDefault(f => f.IsDefault);
+            if (!foundAnyValidPath && defaultFlow != null)
+            {
+                await CreateTargetElementAsync(
+                    @event, 
+                    defaultFlow, 
+                    context.State.Variables, 
+                    isExecutable: true, 
+                    definitionExplorer, 
+                    cancellationToken);
+            }
+            
+            // Activate all flows without conditions (unconditional flows)
+            foreach (var flow in outgoingFlows.Where(f => string.IsNullOrEmpty(f.Condition) && !f.IsDefault))
+            {
+                await CreateTargetElementAsync(
+                    @event, 
+                    flow, 
+                    context.State.Variables, 
+                    isExecutable: true, 
+                    definitionExplorer, 
+                    cancellationToken);
+            }
+        }
+        else
+        {
+            // For other gateway types or unknown gateways, activate all outgoing flows
+            foreach (var flow in outgoingFlows)
+            {
+                await CreateTargetElementAsync(
+                    @event, 
+                    flow, 
+                    context.State.Variables, 
+                    isExecutable: true, 
+                    definitionExplorer, 
+                    cancellationToken);
+            }
+        }
     }
+    
+    /// <summary>
+    /// Creates a target element for a sequence flow
+    /// </summary>
+    private async Task CreateTargetElementAsync(
+        ElementCompleted sourceEvent,
+        SequenceFlow flow,
+        Dictionary<string, object> variables,
+        bool isExecutable,
+        DefiantionExplorer definitionExplorer,
+        CancellationToken cancellationToken)
+    {
+        // Find the target element
+        var targetElementResult = await FindTargetElementAsync(
+            definitionExplorer, 
+            sourceEvent.ProcessId, 
+            flow.TargetId);
+            
+        if (targetElementResult.ElementId == null)
+        {
+            Logger.LogWarning("Target element {TargetId} not found for flow {FlowId}", 
+                flow.TargetId, flow.Id);
+            return;
+        }
+        
+        // Create and publish the ElementCreated event
+        var createdEvent = new ElementCreated
+        {
+            InstanceId = sourceEvent.InstanceId,
+            DeploymentKey = sourceEvent.DeploymentKey,
+            DeploymentId = sourceEvent.DeploymentId,
+            ProcessId = sourceEvent.ProcessId,
+            ElementId = flow.TargetId,
+            ElementType = targetElementResult.ElementType,
+            SourceElementId = sourceEvent.ElementId,
+            SequenceFlowId = flow.Id,
+            IsExecutable = isExecutable,
+            Timestamp = DateTimeOffset.UtcNow
+        };
+        
+        // Publish the event to create the target element
+        PublishLater(createdEvent);
+        
+        Logger.LogDebug("Created {ExecutableStatus} element for target {TargetId} via flow {FlowId}",
+            isExecutable ? "executable" : "non-executable",
+            flow.TargetId,
+            flow.Id);
+    }
+    
+    /// <summary>
+    /// Checks if the process is complete after an end event is reached
+    /// </summary>
+    private async Task CheckProcessCompletionAsync(
+        EventHandlerContext context,
+        ElementCompleted @event,
+        CancellationToken cancellationToken)
+    {
+        // If we have no active executions left, complete the process
+        if (!context.State.ActiveExecutions.Any())
+        {
+            Logger.LogInformation("All executions completed in process {ProcessInstanceId}, marking process as completed", 
+                @event.InstanceId);
+            
+            // Publish process completed event
+            PublishLater(new ProcessCompleted
+            {
+                InstanceId = @event.InstanceId,
+                DeploymentKey = @event.DeploymentKey,
+                DeploymentId = @event.DeploymentId,
+                ProcessId = @event.ProcessId,
+                Timestamp = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            Logger.LogDebug("Process {ProcessInstanceId} still has {Count} active executions", 
+                @event.InstanceId, context.State.ActiveExecutions.Count);
+        }
+        
+        await Task.CompletedTask;
+    }
+    
+    /// <summary>
+    /// Finds all outgoing sequence flows for a specific element
+    /// </summary>
+    private async Task<List<SequenceFlow>> FindOutgoingFlowsAsync(
+        DefiantionExplorer definitionExplorer,
+        string processId,
+        string elementId)
+    {
+        // This is a placeholder method - implement based on your definition explorer
+        var result = new List<SequenceFlow>();
+        
+        // TODO: Implement this method using your definition explorer
+        // It should find all sequence flows that have the specified elementId as their source
+        var outgoingFlows = definitionExplorer.FindOutgoingSequenceFlows(processId, elementId); 
+        await Task.CompletedTask;
+        return outgoingFlows.Select(x => new SequenceFlow
+        {
+            Id = x.id,
+            SourceId = x.sourceRef,
+            TargetId = x.targetRef,
+        }).ToList();
+    }
+    
+    /// <summary>
+    /// Finds a target element by its ID
+    /// </summary>
+    private async Task<(string ElementId, BpmnElementType ElementType)> FindTargetElementAsync(
+        DefiantionExplorer definitionExplorer,
+        string processId,
+        string elementId)
+    {
+        // This is a placeholder method - implement based on your definition explorer
+        
+        // TODO: Implement this method using your definition explorer
+        // It should find the element with the specified ID and determine its type
+        
+        var targetElement = definitionExplorer.FindTargetElement(processId, elementId);
+        return (targetElement.id, BpmnElementType.FromName(targetElement.name));
+    }
+    
+    /// <summary>
+    /// Checks if the element type is a gateway
+    /// </summary>
+    private bool IsGateway(BpmnElementType elementType)
+    {
+        return 
+            elementType == BpmnElementType.ParallelGateway ||
+            elementType == BpmnElementType.ExclusiveGateway ||
+            elementType == BpmnElementType.InclusiveGateway;
+    }
+}
+
+/// <summary>
+/// Represents a BPMN sequence flow with its properties
+/// </summary>
+public class SequenceFlow
+{
+    /// <summary>
+    /// The ID of the sequence flow
+    /// </summary>
+    public string Id { get; set; }
+    
+    /// <summary>
+    /// The ID of the source element
+    /// </summary>
+    public string SourceId { get; set; }
+    
+    /// <summary>
+    /// The ID of the target element
+    /// </summary>
+    public string TargetId { get; set; }
+    
+    /// <summary>
+    /// The condition expression for the flow
+    /// </summary>
+    public string Condition { get; set; }
+    
+    /// <summary>
+    /// Whether this is the default flow for a gateway
+    /// </summary>
+    public bool IsDefault { get; set; }
 }
