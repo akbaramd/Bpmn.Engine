@@ -6,7 +6,7 @@ namespace Novin.Bpmn.EventSourcing.Events;
 /// <summary>
 /// پیاده‌سازی پایه برای تمام رویدادهای BPMN
 /// </summary>
-public  record BpmnEvent : IBpmnEvent
+public record BpmnEvent : IBpmnEvent
 {
     /// <inheritdoc />
     public Guid EventId { get; init; } = Guid.NewGuid();
@@ -14,26 +14,12 @@ public  record BpmnEvent : IBpmnEvent
     /// <inheritdoc />
     public required string ProcessInstanceId { get; init; }
     
-    /// <inheritdoc />
-    public string EventType => GetType().Name;
-    
-    /// <inheritdoc />
-    public DateTime Timestamp { get; init; } = DateTime.UtcNow;
-    
-    /// <inheritdoc />
-    public string? UserId { get; init; }
-    
-    /// <inheritdoc />
-    public long Position { get; init; }
-    
-    /// <inheritdoc />
-    public long Key { get; init; }
-    
-    /// <inheritdoc />
-    public string Intent { get; init; } = "CREATED";
-    
-    /// <inheritdoc />
-    public int ProcessVersion { get; init; } = 1;
+    public string ProcessDefinitionKey { get; init ; }
 
+    /// <inheritdoc />
+    public virtual string EventType => GetType().Name;
+    public DateTime Timestamp { get; internal set; }
 
+    
+    
 } 

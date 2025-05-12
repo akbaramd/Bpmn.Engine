@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Novin.Bpmn.EventSourcing.Core.Models;
 
 namespace Novin.Bpmn.EventSourcing.Examples;
 
@@ -322,7 +323,7 @@ public class InclusiveGatewayExample
                 
                 // Check if process has completed
                 var state = await bpmnProcessor.GetProcessInstanceStateAsync(processInstanceId);
-                isCompleted = state.Status == ProcessStatus.Completed;
+                isCompleted = state.Status == ProcessInstanceStatus.Completed;
                 
                 if (!isCompleted)
                 {

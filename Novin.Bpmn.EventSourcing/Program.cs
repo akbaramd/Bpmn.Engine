@@ -40,10 +40,7 @@ class Program
     private static void ShowMenu()
     {
         Console.WriteLine("Please select an example:");
-        Console.WriteLine("1. User Tasks Example");
-        Console.WriteLine("2. Handler Diagnostics Tool");
-        Console.WriteLine("3. BPMN Definition Store Example");
-        Console.WriteLine("4. In-Memory BPMN Storage Example");
+        Console.WriteLine("1. Inclusive Gateway");
         Console.WriteLine("q. Exit");
         Console.Write("Your choice: ");
     }
@@ -53,23 +50,8 @@ class Program
         switch (choice)
         {
             case "1":
-                await UserTaskExample.RunAsync();
-                break;
-                
-            case "2":
-                await HandlerDiagnosticsTool.RunAsync();
-                break;
-            case "3":
                 await InclusiveGatewayExample.RunAsync();
                 break;
-
-                
-            case "q":
-            case "exit":
-            case "quit":
-                Console.WriteLine("Exiting program");
-                return 0;
-                
             default:
                 Console.WriteLine("Invalid option. Please try again.");
                 return 1;

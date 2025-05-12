@@ -9,6 +9,7 @@ using System;
 using System.Linq;
 using System.Reflection;
 using Microsoft.Extensions.Logging;
+using System.Threading.Tasks;
 
 namespace Novin.Bpmn.EventSourcing;
 
@@ -35,20 +36,18 @@ public static class BpmnEventSourcingServiceCollectionExtensions
         
         // پایه Event Sourcing
         services.AddSingleton<IEventStore, ElasticsearchEventStore>();
-        services.AddSingleton<IDefinitionStore, ElasticsearchDefinitionStore>();
+        services.AddSingleton<IEventSerializer, JsonEventSerializer>();
+        services.AddSingleton<IProcessDeploymentStore, ElasticsearchProcessDeploymentStore>();
         services.AddSingleton<IEventBus, ServiceProviderEventBus>();
-        services.AddSingleton<IStateStore, ElasticsearchStateStore>();
+        services.AddSingleton<IProcessInstanceStateStore, ElasticsearchProcessInstanceStateStore>();
 
         
         // سرویس BpmnProcessor
         services.AddSingleton<BpmnService>();
-        services.AddSingleton<BpmnProcessStreamProcessor>();
-        services.AddHostedService<BpmnProcessStreamProcessorHostedService>();
         
 
         // سرویس UserTask
         services.AddSingleton<IUserTaskStore, InMemoryUserTaskStore>();
-        services.AddSingleton<IUserTaskService, UserTaskService>();
         
         // تنها ثبت هندلرها اگر گزینه خودکار ثبت هندلرها فعال نیست
         if (!options.AutoRegisterEventHandlers)
@@ -69,6 +68,7 @@ public static class BpmnEventSourcingServiceCollectionExtensions
             var assembly = typeof(BpmnEventSourcingServiceCollectionExtensions).Assembly;
             services.AddBpmnEventHandlers(assembly);
         }
+        
         
         return services;
     }
@@ -186,4 +186,5 @@ public class BpmnEventSourcingOptions
     /// مسیر ذخیره‌سازی تعاریف BPMN
     /// </summary>
     public string? DefinitionsDirectory { get; set; }
-} 
+}
+

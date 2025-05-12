@@ -23,9 +23,9 @@ namespace Novin.Bpmn.EventSourcing.Core;
 public class BpmnService
 {
     private readonly IEventBus _eventBus;
-    private readonly IStateStore _stateStore;
+    private readonly IProcessInstanceStateStore _stateStore;
     private readonly IEventStore _eventStore;
-    private readonly IDefinitionStore _definitionStore;
+    private readonly IProcessDeploymentStore _deploymentStore;
     private readonly IElasticClient _elasticClient;
     private readonly ILogger<BpmnService> _logger;
     private const string DefinitionIndexPrefix = "bpmn-definitions-";
@@ -35,16 +35,16 @@ public class BpmnService
     /// </summary>
     public BpmnService(
         IEventBus eventBus,
-        IStateStore stateStore,
+        IProcessInstanceStateStore stateStore,
         IEventStore eventStore,
-        IDefinitionStore definitionStore,
+        IProcessDeploymentStore deploymentStore,
         IElasticClient elasticClient,
         ILogger<BpmnService> logger)
     {
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
         _stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
-        _definitionStore = definitionStore ?? throw new ArgumentNullException(nameof(definitionStore));
+        _deploymentStore = deploymentStore ?? throw new ArgumentNullException(nameof(deploymentStore));
         _elasticClient = elasticClient ?? throw new ArgumentNullException(nameof(elasticClient));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         
@@ -119,7 +119,7 @@ public class BpmnService
     /// <summary>
     /// نصب تعریف فرآیند BPMN با پشتیبانی از نسخه‌گذاری
     /// </summary>
-    public async Task<BpmnDeploymentInfo> DeployProcessDefinitionAsync(
+    public async Task<DeploymentDescriptor> DeployProcessDefinitionAsync(
         string deploymentKey, 
         string xmlContent,
         string label = null,
@@ -144,7 +144,7 @@ public class BpmnService
             var definitionId = $"{deploymentKey}-v{newVersion}";
             
             // Create deployment info
-            var deploymentInfo = new BpmnDeploymentInfo
+            var deploymentInfo = new DeploymentDescriptor
             {
                 DeploymentKey = deploymentKey,
                 DefinitionId = definitionId,
@@ -155,11 +155,12 @@ public class BpmnService
             };
             
             // Save to definition store
-            await _definitionStore.SaveDefinitionAsync(
+            await _deploymentStore.DeployAsync(
                 deploymentKey, 
                 xmlContent, 
                 definitions, 
                 label, 
+                null,
                 cancellationToken);
             
             // Save to Elasticsearch
@@ -183,7 +184,7 @@ public class BpmnService
                 
             if (!response.IsValid)
             {
-                throw new ElasticsearchException($"Failed to save definition to Elasticsearch: {response.DebugInformation}");
+                throw new Exception($"Failed to save definition to Elasticsearch: {response.DebugInformation}");
             }
             
             _logger.LogInformation("Deployed BPMN process definition with key {DeploymentKey} and version {Version}", 
@@ -299,7 +300,7 @@ public class BpmnService
                 ActiveElements = new HashSet<string>(),
                 CompletedElements = new HashSet<string>(),
                 Variables = initialVariables,
-                Status = ProcessStatus.Created,
+                Status = ProcessInstanceStatus.Created,
                 ExecutionPaths = new List<ExecutionPath>(),
                 ActiveExecutions = new Dictionary<string, ExecutionPath>(),
                 ElementExecutionPaths = new Dictionary<string, List<string>>(),
@@ -338,14 +339,14 @@ public class BpmnService
     /// <summary>
     /// دریافت وضعیت نمونه فرآیند
     /// </summary>
-    public async Task<BpmnProcessState> GetProcessInstanceStateAsync(
+    public async Task<ProcessInstanceState> GetProcessInstanceStateAsync(
         string processInstanceId,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(processInstanceId))
             throw new ArgumentException("Process instance ID cannot be empty", nameof(processInstanceId));
             
-        var state = await _stateStore.GetStateAsync(
+        var state = await _stateStore.GetStateAsync<ProcessInstanceState>(
             processInstanceId, cancellationToken);
             
         if (state == null)
@@ -388,7 +389,7 @@ public class BpmnService
         // پیدا کردن فرآیندهای فعال
         var activeProcesses = await _stateStore.FindStatesByPatternAsync(
             "*", // همه فرآیندهای ذخیره شده
-            state => state.Status == ProcessStatus.Running, 
+            state => state.Status == ProcessInstanceStatus.Running, 
             cancellationToken);
             
         var result = new Dictionary<string, Dictionary<string, BpmnTaskInfo>>();
@@ -524,27 +525,30 @@ public class BpmnService
         if (string.IsNullOrEmpty(processInstanceId))
             throw new ArgumentException("Process instance ID cannot be empty", nameof(processInstanceId));
             
-        var (state, version) = await _stateStore.GetStateWithVersionAsync(processInstanceId, cancellationToken);
-        if (state == null)
+        var stateInfo = await _stateStore.GetStateWithVersionAsync<ProcessInstanceState>(processInstanceId, cancellationToken);
+        if (stateInfo.State == null)
             throw new BpmnProcessorException($"Process instance {processInstanceId} not found");
         
-        if (state.Status == ProcessStatus.Completed || state.Status == ProcessStatus.Terminated)
+        var state = stateInfo.State;
+        var version = stateInfo.Version;
+        
+        if (state.Status == ProcessInstanceStatus.Completed || state.Status == ProcessInstanceStatus.Terminated)
             throw new BpmnProcessorException($"Process instance {processInstanceId} is already terminated");
             
         try
         {
             // Update state
-            state.Status = ProcessStatus.Terminated;
+            state.Status = ProcessInstanceStatus.Terminated;
             state.ActiveElements.Clear();
             
             // Save updated state
             await _stateStore.SaveStateAsync(processInstanceId, state, version + 1);
             
-            // انتشار رویداد حذف نمونه فرآیند
-            await _eventBus.PublishAsync(new ProcessInstanceDeleted
+            // Publish termination event
+            await _eventBus.PublishAsync(new ProcessTerminated
             {
                 ProcessInstanceId = processInstanceId,
-                Reason = reason ?? "Manual termination"
+                TerminationReason = reason ?? "Manual termination"
             }, cancellationToken);
             
             _logger.LogInformation("Terminated process instance {ProcessInstanceId} with reason: {Reason}", 
@@ -623,7 +627,7 @@ public class BpmnService
             
         var state = await GetProcessInstanceStateAsync(processInstanceId, cancellationToken);
         
-        if (state.Status == ProcessStatus.Completed || state.Status == ProcessStatus.Terminated)
+        if (state.Status == ProcessInstanceStatus.Completed || state.Status == ProcessInstanceStatus.Terminated)
             throw new BpmnProcessorException($"Process instance {processInstanceId} is already completed or terminated");
             
         try
@@ -657,24 +661,27 @@ public class BpmnService
         if (string.IsNullOrEmpty(processInstanceId))
             throw new ArgumentException("Process instance ID cannot be empty", nameof(processInstanceId));
             
-        var (state, version) = await _stateStore.GetStateWithVersionAsync(processInstanceId, cancellationToken);
-        if (state == null)
+        var stateInfo = await _stateStore.GetStateWithVersionAsync<ProcessInstanceState>(processInstanceId, cancellationToken);
+        if (stateInfo.State == null)
             throw new BpmnProcessorException($"Process instance {processInstanceId} not found");
         
-        if (state.Status == ProcessStatus.Completed || state.Status == ProcessStatus.Terminated)
+        var state = stateInfo.State;
+        var version = stateInfo.Version;
+        
+        if (state.Status == ProcessInstanceStatus.Completed || state.Status == ProcessInstanceStatus.Terminated)
             throw new BpmnProcessorException($"Process instance {processInstanceId} is already completed or terminated");
             
         try
         {
             // Update state
-            state.Status = ProcessStatus.Cancelled;
+            state.Status = ProcessInstanceStatus.Cancelled;
             state.ActiveElements.Clear();
             
             // Save updated state
             await _stateStore.SaveStateAsync(processInstanceId, state, version + 1);
             
             // Publish cancellation event
-            await _eventBus.PublishAsync(new ProcessInstanceCancelled
+            await _eventBus.PublishAsync(new ProcessCancelled
             {
                 ProcessInstanceId = processInstanceId,
                 ProcessDefinitionId = state.ProcessDefinitionId,
@@ -707,7 +714,7 @@ public class BpmnService
             
         var state = await GetProcessInstanceStateAsync(processInstanceId, cancellationToken);
         
-        if (state.Status != ProcessStatus.Cancelled && state.Status != ProcessStatus.Terminated)
+        if (state.Status != ProcessInstanceStatus.Cancelled && state.Status != ProcessInstanceStatus.Terminated)
             throw new BpmnProcessorException($"Process instance {processInstanceId} must be cancelled or terminated to restart");
             
         try
@@ -735,7 +742,7 @@ public class BpmnService
             }
             
             // Update state
-            state.Status = ProcessStatus.Created;
+            state.Status = ProcessInstanceStatus.Created;
             state.ActiveElements.Clear();
             state.CompletedElements.Clear();
             
@@ -827,5 +834,433 @@ public class BpmnDefinitionDocument
 }
 
 /// <summary>
-/// رویداد ادامه اجرای فرآیند
+/// Descriptor for a deployed process definition
 /// </summary>
+public class DeploymentDescriptor
+{
+    /// <summary>
+    /// Unique key for this deployment
+    /// </summary>
+    public string DeploymentKey { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Unique identifier for this specific definition version
+    /// </summary>
+    public string DefinitionId { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Version number of this deployment
+    /// </summary>
+    public int Version { get; set; }
+    
+    /// <summary>
+    /// Optional display label for this deployment
+    /// </summary>
+    public string Label { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Raw XML content of the BPMN definition
+    /// </summary>
+    public string XmlContent { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// When this definition was deployed
+    /// </summary>
+    public DateTime DeploymentTime { get; set; }
+}
+
+/// <summary>
+/// Status of a process instance
+/// </summary>
+public enum ProcessInstanceStatus
+{
+    /// <summary>
+    /// Process instance has been created but not yet started
+    /// </summary>
+    Created,
+    
+    /// <summary>
+    /// Process instance is currently running
+    /// </summary>
+    Running,
+    
+    /// <summary>
+    /// Process instance has been completed successfully
+    /// </summary>
+    Completed,
+    
+    /// <summary>
+    /// Process instance has been terminated
+    /// </summary>
+    Terminated,
+    
+    /// <summary>
+    /// Process instance has been cancelled
+    /// </summary>
+    Cancelled,
+    
+    /// <summary>
+    /// Process instance has failed
+    /// </summary>
+    Failed,
+    
+    /// <summary>
+    /// Process instance is suspended
+    /// </summary>
+    Suspended
+}
+
+/// <summary>
+/// State of a BPMN process instance
+/// </summary>
+public class ProcessInstanceState
+{
+    /// <summary>
+    /// Unique identifier for this process instance
+    /// </summary>
+    public string InstanceId { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// The ID of the process definition
+    /// </summary>
+    public string ProcessDefinitionId { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// The deployment key used for this process
+    /// </summary>
+    public string DeploymentKey { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Version of the process definition
+    /// </summary>
+    public int DefinitionVersion { get; set; }
+    
+    /// <summary>
+    /// Current status of the process
+    /// </summary>
+    public ProcessInstanceStatus Status { get; set; } = ProcessInstanceStatus.Created;
+    
+    /// <summary>
+    /// Elements currently active in the process
+    /// </summary>
+    public HashSet<string> ActiveElements { get; set; } = new();
+    
+    /// <summary>
+    /// Elements that have been completed
+    /// </summary>
+    public HashSet<string> CompletedElements { get; set; } = new();
+    
+    /// <summary>
+    /// Variables for this process instance
+    /// </summary>
+    public Dictionary<string, object> Variables { get; set; } = new();
+    
+    /// <summary>
+    /// Tasks in this process instance
+    /// </summary>
+    public Dictionary<string, BpmnTaskInfo> Tasks { get; set; } = new();
+    
+    /// <summary>
+    /// History of events for this process instance
+    /// </summary>
+    public List<IBpmnEvent> EventHistory { get; set; } = new();
+    
+    /// <summary>
+    /// Record an event in this process instance's history
+    /// </summary>
+    public void RecordEvent(IBpmnEvent @event)
+    {
+        EventHistory.Add(@event);
+    }
+    
+    /// <summary>
+    /// Create process state from a start event
+    /// </summary>
+    public static ProcessInstanceState From(ProcessStarted startEvent)
+    {
+        return new ProcessInstanceState
+        {
+            InstanceId = startEvent.ProcessInstanceId,
+            ProcessDefinitionId = startEvent.ProcessDefinitionId,
+            Status = ProcessInstanceStatus.Running
+        };
+    }
+    
+    /// <summary>
+    /// Mark the process as complete
+    /// </summary>
+    public void Complete(ProcessCompleted @event)
+    {
+        Status = ProcessInstanceStatus.Completed;
+        ActiveElements.Clear();
+    }
+    
+    /// <summary>
+    /// Mark the process as failed
+    /// </summary>
+    public void Fail(ProcessFailed @event)
+    {
+        Status = ProcessInstanceStatus.Failed;
+        ActiveElements.Clear();
+    }
+    
+    /// <summary>
+    /// Mark the process as terminated
+    /// </summary>
+    public void Terminate(ProcessTerminated @event)
+    {
+        Status = ProcessInstanceStatus.Terminated;
+        ActiveElements.Clear();
+    }
+    
+    /// <summary>
+    /// Mark the process as suspended
+    /// </summary>
+    public void Suspend(ProcessSuspended @event)
+    {
+        Status = ProcessInstanceStatus.Suspended;
+    }
+}
+
+/// <summary>
+/// Event for when a process instance is created
+/// </summary>
+public record ProcessInstanceCreated : BpmnEvent
+{
+    /// <summary>
+    /// The process definition ID this instance is based on
+    /// </summary>
+    public string ProcessDefinitionId { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// The deployment key for this process
+    /// </summary>
+    public string ProcessDefinitionKey { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// The version of the process definition
+    /// </summary>
+    public int ProcessDefinitionVersion { get; init; }
+    
+    /// <summary>
+    /// Initial variables for the process
+    /// </summary>
+    public Dictionary<string, object> Variables { get; init; } = new();
+}
+
+/// <summary>
+/// Event for when a process instance is deleted
+/// </summary>
+public record ProcessInstanceDeleted : BpmnEvent
+{
+    /// <summary>
+    /// Reason for deletion
+    /// </summary>
+    public string Reason { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Event for when a process instance is continued after being suspended
+/// </summary>
+public record ProcessInstanceContinued : BpmnEvent
+{
+    /// <summary>
+    /// The process definition ID this instance is based on
+    /// </summary>
+    public string ProcessDefinitionId { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// The deployment key for this process
+    /// </summary>
+    public string ProcessDefinitionKey { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// The version of the process definition
+    /// </summary>
+    public int DefinitionVersion { get; init; }
+}
+
+/// <summary>
+/// Event for when a process instance is cancelled
+/// </summary>
+public record ProcessCancelled : BpmnEvent
+{
+    /// <summary>
+    /// The process definition ID this instance is based on
+    /// </summary>
+    public string ProcessDefinitionId { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// The deployment key for this process
+    /// </summary>
+    public string ProcessDefinitionKey { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// The version of the process definition
+    /// </summary>
+    public int DefinitionVersion { get; init; }
+    
+    /// <summary>
+    /// Reason for cancellation
+    /// </summary>
+    public string Reason { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Event for when a process instance is restarted
+/// </summary>
+public record ProcessInstanceRestarted : BpmnEvent
+{
+    /// <summary>
+    /// The process definition ID this instance is based on
+    /// </summary>
+    public string ProcessDefinitionId { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// The deployment key for this process
+    /// </summary>
+    public string ProcessDefinitionKey { get; init; } = string.Empty;
+    
+    /// <summary>
+    /// The version of the process definition
+    /// </summary>
+    public int DefinitionVersion { get; init; }
+    
+    /// <summary>
+    /// ID of the element to start from (optional)
+    /// </summary>
+    public string? StartElementId { get; init; }
+}
+
+/// <summary>
+/// Task information stored in process state
+/// </summary>
+public class TaskInfo
+{
+    /// <summary>
+    /// Unique ID of the task
+    /// </summary>
+    public string TaskId { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Type of task (UserTask, ServiceTask, etc.)
+    /// </summary>
+    public string TaskType { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Current status of the task
+    /// </summary>
+    public TaskStatus Status { get; set; } = TaskStatus.Created;
+    
+    /// <summary>
+    /// Task name
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Task description
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// ID of the user assigned to this task (for user tasks)
+    /// </summary>
+    public string? Assignee { get; set; }
+    
+    /// <summary>
+    /// Candidate users who can claim this task
+    /// </summary>
+    public List<string> CandidateUsers { get; set; } = new();
+    
+    /// <summary>
+    /// Candidate groups who can claim this task
+    /// </summary>
+    public List<string> CandidateGroups { get; set; } = new();
+    
+    /// <summary>
+    /// Due date for this task
+    /// </summary>
+    public DateTime? DueDate { get; set; }
+    
+    /// <summary>
+    /// When this task was created
+    /// </summary>
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    
+    /// <summary>
+    /// When this task was last updated
+    /// </summary>
+    public DateTime? UpdatedAt { get; set; }
+    
+    /// <summary>
+    /// When this task was completed
+    /// </summary>
+    public DateTime? CompletedAt { get; set; }
+    
+    /// <summary>
+    /// Form key for this task
+    /// </summary>
+    public string? FormKey { get; set; }
+    
+    /// <summary>
+    /// Task-specific properties
+    /// </summary>
+    public Dictionary<string, object> Properties { get; set; } = new();
+}
+
+/// <summary>
+/// Status of a task
+/// </summary>
+public enum TaskStatus
+{
+    /// <summary>
+    /// Task has been created
+    /// </summary>
+    Created,
+    
+    /// <summary>
+    /// Task is active and can be worked on
+    /// </summary>
+    Active,
+    
+    /// <summary>
+    /// Task has been claimed by a user
+    /// </summary>
+    Claimed,
+    
+    /// <summary>
+    /// Task is in progress
+    /// </summary>
+    InProgress,
+    
+    /// <summary>
+    /// Task has been completed
+    /// </summary>
+    Completed,
+    
+    /// <summary>
+    /// Task has been cancelled
+    /// </summary>
+    Cancelled
+}
+
+/// <summary>
+/// User task claimed event
+/// </summary>
+public class UserTaskClaimedEvent : BpmnEvent
+{
+    /// <summary>
+    /// ID of the user task
+    /// </summary>
+    public string UserTaskId { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// ID of the assignee
+    /// </summary>
+    public string AssigneeId { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Name of the assignee
+    /// </summary>
+    public string AssigneeName { get; set; } = string.Empty;
+}

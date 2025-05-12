@@ -1,561 +1,488 @@
-using Microsoft.Extensions.Logging;
-using Nest;
-using Novin.Bpmn.EventSourcing.Contracts;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Elasticsearch.Net;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Microsoft.Extensions.Logging.Abstractions;
-using LogLevel = Microsoft.Extensions.Logging.LogLevel;
-using System.Reflection;
+using Microsoft.Extensions.Logging;
+using Nest;
+using Novin.Bpmn.EventSourcing.Contracts;
 
-namespace Novin.Bpmn.EventSourcing.Core;
+namespace Novin.Bpmn.EventSourcing.Core
+{
+    /// <summary>
+    /// Custom exception for Elasticsearch client errors
+    /// </summary>
+    public class ElasticsearchClientException : Exception
+    {
+        public ElasticsearchClientException(string message) : base(message) { }
+        public ElasticsearchClientException(string message, Exception inner) : base(message, inner) { }
+    }
 
 /// <summary>
-/// Elasticsearch-based implementation of IEventStore
-/// </summary>
-public class ElasticsearchEventStore : IEventStore
-{
-    private readonly IElasticClient _elasticClient;
-    private readonly ILogger<ElasticsearchEventStore> _logger;
-    private const string IndexPrefix = "bpmn-events-";
-    private const string EventTypeField = "eventType";
-    private const string ProcessInstanceIdField = "processInstanceId";
-    private const string PositionField = "position";
-    private const string TimestampField = "timestamp";
-    private const string DataField = "data";
-    private const string ProcessedField = "processed";
-    private const string ProcessedAtField = "processedAt";
-    private const string ProcessorIdField = "processorId";
-    private readonly JsonSerializerOptions _jsonOptions;
-    private readonly SemaphoreSlim _positionLock = new(1, 1);
-
-    public ElasticsearchEventStore(
-        IElasticClient elasticClient,
-        ILogger<ElasticsearchEventStore> logger)
+    /// JSON‐based serializer for BPMN events.
+    /// </summary>
+    public class JsonEventSerializer : IEventSerializer
     {
-        _elasticClient = elasticClient ?? throw new ArgumentNullException(nameof(elasticClient));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        
-        _jsonOptions = new JsonSerializerOptions
+        private readonly JsonSerializerOptions _options;
+
+        public JsonEventSerializer(JsonSerializerOptions? options = null)
         {
-            PropertyNameCaseInsensitive = true,
-            Converters = { new JsonStringEnumConverter() },
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = false
-        };
-        
-        // Ensure index template exists with retry
-        var retryCount = 3;
-        var delay = TimeSpan.FromSeconds(2);
-        
-        for (var i = 0; i < retryCount; i++)
+            // configure your JSON settings (camel-case, enum as strings, etc.)
+            _options = options ?? new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                Converters =
+                {
+                    new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)
+                },
+                WriteIndented = false
+            };
+        }
+
+        /// <inheritdoc/>
+        public SerializedEvent Serialize(IBpmnEvent @event)
         {
-            try
+            if (@event is null) throw new ArgumentNullException(nameof(@event));
+
+            var eventType = @event.GetType();
+            var payload   = JsonSerializer.Serialize(@event, eventType, _options);
+
+            return new SerializedEvent
             {
-                EnsureIndexTemplateAsync().GetAwaiter().GetResult();
-                break;
-            }
-            catch (Exception ex) when (i < retryCount - 1)
-            {
-                _logger.LogWarning(ex, "Failed to ensure index template exists, attempt {Attempt} of {MaxAttempts}. Retrying in {Delay} seconds...", 
-                    i + 1, retryCount, delay.TotalSeconds);
-                Thread.Sleep(delay);
-                delay *= 2; // Exponential backoff
-            }
+                Id                = Guid.NewGuid().ToString(),
+                ProcessInstanceId = @event.ProcessInstanceId,
+                TypeName          = eventType.Name,
+                Namespace         = eventType.Namespace ?? string.Empty,
+                Payload           = payload,
+                Timestamp         = @event.Timestamp
+            };
+        }
+
+        /// <inheritdoc/>
+        public IBpmnEvent Deserialize(SerializedEvent stored)
+        {
+            if (stored is null) throw new ArgumentNullException(nameof(stored));
+
+            // locate the CLR type by its full name
+            var fullName = stored.FullName;
+            var type     = Type.GetType(fullName)
+                           ?? throw new InvalidOperationException($"Type '{fullName}' not found.");
+
+            var @event = JsonSerializer.Deserialize(stored.Payload, type, _options)
+                        as IBpmnEvent
+                    ?? throw new InvalidOperationException($"Payload did not deserialize to IBpmnEvent.");
+
+            return @event;
         }
     }
-
-    private async Task EnsureIndexTemplateAsync()
+    /// <summary>
+    /// Elasticsearch‐backed implementation of IEventStore.
+    /// </summary>
+    public class ElasticsearchEventStore : IEventStore, IEventQueryService
     {
-        try
-        {
-            var templateName = IndexPrefix + "template";
-            var templateExists = await _elasticClient.Indices.TemplateExistsAsync(templateName);
-            if (!templateExists.Exists)
-            {
-                var response = await _elasticClient.Indices.PutTemplateAsync(templateName, t => t
-                    .Mappings(m => m
-                        .Map<dynamic>(tm => tm
-                            .AutoMap()
-                            .Properties(p => p
-                                .Keyword(k => k.Name(EventTypeField))
-                                .Keyword(k => k.Name(ProcessInstanceIdField))
-                                .Number(n => n.Name(PositionField).Type(NumberType.Long))
-                                .Date(d => d.Name(TimestampField))
-                                .Boolean(b => b.Name(ProcessedField))
-                                .Date(d => d.Name(ProcessedAtField))
-                                .Keyword(k => k.Name(ProcessorIdField))
-                                .Object<dynamic>(o => o.Name(DataField).Dynamic()))))
-                    .Settings(s => s
-                        .NumberOfShards(1)
-                        .NumberOfReplicas(0)
-                        .RefreshInterval("1s"))
-                    .IndexPatterns(IndexPrefix + "*"));
+        private const string IndexName = "bpmn-events";
+        private readonly IElasticClient _client;
+        private readonly ILogger<ElasticsearchEventStore> _logger;
+        private readonly IEventSerializer _serializer;
+        private readonly ConcurrentDictionary<string, CancellationTokenSource> _subscriptions
+            = new ConcurrentDictionary<string, CancellationTokenSource>();
 
-                if (!response.IsValid)
-                {
-                    throw new ElasticsearchException($"Failed to create index template: {response.DebugInformation}");
-                }
-            }
+        // Position tracking
+        private long _lastPosition = 0;
+
+        public ElasticsearchEventStore(
+            IElasticClient client,
+            ILogger<ElasticsearchEventStore> logger,
+            IEventSerializer serializer)
+        {
+            _client = client ?? throw new ArgumentNullException(nameof(client));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+            EnsureIndexExistsAsync().GetAwaiter().GetResult();
         }
-        catch (Exception ex)
+
+        private async Task EnsureIndexExistsAsync()
         {
-            _logger.LogError(ex, "Failed to ensure index template exists");
-            throw;
-        }
-    }
+            var exists = await _client.Indices.ExistsAsync(IndexName);
+            if (exists.Exists) return;
 
-    public async Task<long> AppendEventAsync(IBpmnEvent @event, CancellationToken cancellationToken = default)
-    {
-        if (@event == null) throw new ArgumentNullException(nameof(@event));
-
-        try
-        {
-            var indexName = GetIndexName(@event.Timestamp);
-            await EnsureIndexExistsAsync(indexName, cancellationToken);
-            
-            await _positionLock.WaitAsync(cancellationToken);
-            try
-            {
-                var position = await GetNextPositionAsync(indexName, cancellationToken);
-
-                var eventType = @event.GetType();
-                var document = new
-                {
-                   
-                        fullName = eventType.FullName,
-                        assemblyName = eventType.Assembly.GetName().Name,
-                        namespaceName = eventType.Namespace
-                    ,
-                    processInstanceId = @event.ProcessInstanceId,
-                    position = position,
-                    timestamp = @event.Timestamp,
-                    id = @event.EventId,
-                    intent = @event.Intent,
-                    processed = false,
-                    processedAt = (DateTime?)null,
-                    processorId = (string?)null,
-                    payload = JsonSerializer.Serialize(@event, _jsonOptions)
-                };
-
-                var response = await _elasticClient.IndexAsync(document, i => i
-                    .Index(indexName)
-                    .Id(@event.EventId.ToString())
-                    .Refresh(Refresh.True),
-                    cancellationToken
-                );
-
-                if (!response.IsValid)
-                {
-                    throw new ElasticsearchException($"Failed to append event: {response.DebugInformation}");
-                }
-
-                _logger.LogDebug("Appended event {EventId} at position {Position}", @event.EventId, position);
-                return position;
-            }
-            finally
-            {
-                _positionLock.Release();
-            }
-        }
-        catch (Exception ex) when (ex is not ElasticsearchException)
-        {
-            _logger.LogError(ex, "Failed to append event {EventId}", @event.EventId);
-            throw new ElasticsearchException("Failed to append event", ex);
-        }
-    }
-
-    public async Task<long> AppendEventsAsync(IEnumerable<IBpmnEvent> events, CancellationToken cancellationToken = default)
-    {
-        if (events == null) throw new ArgumentNullException(nameof(events));
-        var eventList = events.ToList();
-        if (!eventList.Any()) return 0;
-
-        try
-        {
-            var bulkDescriptor = new BulkDescriptor();
-            var indexName = GetIndexName(DateTime.UtcNow);
-            await EnsureIndexExistsAsync(indexName, cancellationToken);
-
-            await _positionLock.WaitAsync(cancellationToken);
-            try
-            {
-                var position = await GetNextPositionAsync(indexName, cancellationToken);
-                var documents = new List<object>();
-
-                foreach (var @event in eventList)
-                {
-                    var eventType = @event.GetType();
-                    var document = new
-                    {
-                        
-                            fullName = eventType.FullName,
-                            assemblyName = eventType.Assembly.GetName().Name,
-                            namespaceName = eventType.Namespace
-                        ,
-                        processInstanceId = @event.ProcessInstanceId,
-                        position = position++,
-                        timestamp = @event.Timestamp,
-                        id = @event.EventId,
-                        intent = @event.Intent,
-                        processed = false,
-                        processedAt = (DateTime?)null,
-                        processorId = (string?)null,
-                        payload = JsonSerializer.Serialize(@event, _jsonOptions)
-                    };
-
-                    bulkDescriptor.Index<object>(i => i
-                        .Index(indexName)
-                        .Id(@event.EventId.ToString())
-                        .Document(document));
-                }
-
-                var response = await _elasticClient.BulkAsync(bulkDescriptor, cancellationToken);
-                if (!response.IsValid)
-                {
-                    throw new ElasticsearchException($"Failed to append events: {response.DebugInformation}");
-                }
-
-                if (response.Errors)
-                {
-                    var errors = response.ItemsWithErrors
-                        .Select(i => new { Id = i.Id, Error = i.Error?.Reason })
-                        .Where(e => e.Error != null);
-                    
-                    var errorMessage = string.Join(", ", errors.Select(e => $"Event {e.Id}: {e.Error}"));
-                    throw new ElasticsearchException($"Bulk operation had errors: {errorMessage}");
-                }
-
-                _logger.LogDebug("Appended {Count} events starting at position {Position}", eventList.Count, position - eventList.Count);
-                return position - 1;
-            }
-            finally
-            {
-                _positionLock.Release();
-            }
-        }
-        catch (Exception ex) when (ex is not ElasticsearchException)
-        {
-            _logger.LogError(ex, "Failed to append events");
-            throw new ElasticsearchException("Failed to append events", ex);
-        }
-    }
-
-    private async Task EnsureIndexExistsAsync(string indexName, CancellationToken cancellationToken)
-    {
-        var exists = await _elasticClient.Indices.ExistsAsync(indexName, ct: cancellationToken);
-        if (!exists.Exists)
-        {
-            var response = await _elasticClient.Indices.CreateAsync(indexName, c => c
+            var create = await _client.Indices.CreateAsync(IndexName, c => c
                 .Settings(s => s
                     .NumberOfShards(1)
-                    .NumberOfReplicas(0)
-                    .RefreshInterval("1s")),
+                    .NumberOfReplicas(1)
+                    .RefreshInterval("1s"))
+                .Map<SerializedEvent>(m => m
+                    .AutoMap()
+                    .Properties(ps => ps
+                        .Keyword(k => k.Name(e => e.ProcessInstanceId).IgnoreAbove(256))
+                        .Keyword(k => k.Name(e => e.TypeName).IgnoreAbove(128))
+                        .Keyword(k => k.Name(e => e.Namespace).IgnoreAbove(256))
+                        .Keyword(k => k.Name(e => e.FullName).IgnoreAbove(512))
+                        .Text(t => t.Name(e => e.Payload).Index(false))
+                        .Date(d => d.Name(e => e.Timestamp)))))
+            ;
+
+            if (!create.IsValid)
+            {
+                _logger.LogError("Failed to create index '{Index}': {Error}", IndexName, create.DebugInformation);
+                throw new ElasticsearchClientException($"Cannot create index {IndexName}: {create.DebugInformation}");
+            }
+        }
+
+        public async Task<long> AppendEventAsync(IBpmnEvent @event, CancellationToken cancellationToken = default)
+        {
+            if (@event == null) throw new ArgumentNullException(nameof(@event));
+            
+            var serialized = _serializer.Serialize(@event);
+            return await AppendEventAsync(serialized, cancellationToken);
+        }
+
+        public async Task<long> AppendEventsAsync(IEnumerable<IBpmnEvent> events, CancellationToken cancellationToken = default)
+        {
+            if (events == null) throw new ArgumentNullException(nameof(events));
+            
+            var serialized = events.Select(_serializer.Serialize).ToList();
+            return await AppendEventsAsync(serialized, cancellationToken);
+        }
+
+        private async Task<long> AppendEventAsync(SerializedEvent @event, CancellationToken cancellationToken = default)
+        {
+            var resp = await _client.IndexAsync(@event, i => i
+                .Index(IndexName)
+                .Id(@event.Id)
+                .Refresh(Refresh.True),
+                cancellationToken);
+            
+            if (!resp.IsValid)
+                throw new ElasticsearchClientException($"AppendEventAsync failed: {resp.DebugInformation}");
+
+            // Simply return and increment our position counter
+            return Interlocked.Increment(ref _lastPosition);
+        }
+
+        private async Task<long> AppendEventsAsync(IEnumerable<SerializedEvent> events, CancellationToken cancellationToken = default)
+        {
+            var list = events.ToList();
+            if (!list.Any()) return 0;
+
+            var bulkDescriptor = new BulkDescriptor();
+            foreach (var doc in list)
+            {
+                bulkDescriptor.Index<SerializedEvent>(i => i
+                    .Document(doc)
+                    .Index(IndexName)
+                    .Id(doc.Id));
+            }
+
+            var bulk = await _client.BulkAsync(bulkDescriptor
+                .Refresh(Refresh.True), cancellationToken);
+
+            if (!bulk.IsValid)
+                throw new ElasticsearchClientException($"AppendEventsAsync failed: {bulk.DebugInformation}");
+
+            // Return the last position after incrementing for each item
+            long finalPosition = _lastPosition;
+            for (int i = 0; i < list.Count; i++)
+            {
+                finalPosition = Interlocked.Increment(ref _lastPosition);
+            }
+            
+            return finalPosition;
+        }
+
+        public async Task<IReadOnlyList<IBpmnEvent>> ReadEventsAsync(
+            long position = 0,
+            int count = 100,
+            Func<IBpmnEvent, bool>? predicate = null,
+            CancellationToken cancellationToken = default)
+        {
+            var serializedEvents = await ReadSerializedEventsAsync(position, count, null, cancellationToken);
+            var events = serializedEvents.Select(_serializer.Deserialize).ToList();
+            
+            return predicate != null ? events.Where(predicate).ToList() : events;
+        }
+
+        private async Task<IReadOnlyList<SerializedEvent>> ReadSerializedEventsAsync(
+            long position = 0,
+            int count = 100,
+            Func<SerializedEvent, bool>? predicate = null,
+            CancellationToken cancellationToken = default)
+        {
+            var resp = await _client.SearchAsync<SerializedEvent>(s => s
+                .Index(IndexName)
+                .Sort(ss => ss.Ascending(e => e.Timestamp))
+                .From((int)position)
+                .Size(count),
                 cancellationToken);
 
-            if (!response.IsValid)
-            {
-                throw new ElasticsearchException($"Failed to create index {indexName}: {response.DebugInformation}");
-            }
+            if (!resp.IsValid)
+                throw new ElasticsearchClientException($"ReadEventsAsync failed: {resp.DebugInformation}");
+
+            var docs = resp.Documents;
+            return predicate != null ? docs.Where(predicate).ToList() : docs.ToList();
         }
-    }
 
-    public async Task<List<IBpmnEvent>> ReadEventsAsync(
-        long position = 0,
-        int count = 100,
-        Func<IBpmnEvent, bool>? predicate = null,
-        CancellationToken cancellationToken = default)
-    {
-        try
+        public async Task<IReadOnlyList<IBpmnEvent>> ReadProcessInstanceEventsAsync(
+            string processInstanceId,
+            long position = 0,
+            int count = 100,
+            Func<IBpmnEvent, bool>? predicate = null,
+            CancellationToken cancellationToken = default)
         {
-            var searchResponse = await _elasticClient.SearchAsync<dynamic>(s => s
-                .Index(IndexPrefix + "*")
-                .Query(q => q
-                    .Bool(b => b
-                        .Must(m => m
-                            .Range(r => r
-                                .Field(PositionField)
-                                .GreaterThanOrEquals(position)
-                            ),
-                        m => m
-                            .Term(t => t
-                                .Field(ProcessedField)
-                                .Value(false)
-                            )
-                        )
-                    )
-                )
-                .Sort(sort => sort
-                    .Ascending(PositionField)
-                )
-                .Size(count),
-                cancellationToken
-            );
-
-            if (!searchResponse.IsValid)
-            {
-                throw new ElasticsearchException($"Failed to read events: {searchResponse.DebugInformation}");
-            }
-
-            return await DeserializeEventsAsync(searchResponse.Hits, predicate);
-        }
-        catch (Exception ex) when (ex is not ElasticsearchException)
-        {
-            _logger.LogError(ex, "Failed to read events from position {Position}", position);
-            throw new ElasticsearchException("Failed to read events", ex);
-        }
-    }
-
-    public async Task<List<IBpmnEvent>> ReadProcessInstanceEventsAsync(
-        string processInstanceId,
-        long position = 0,
-        int count = 100,
-        Func<IBpmnEvent, bool>? predicate = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrEmpty(processInstanceId))
-            throw new ArgumentException("Process instance ID cannot be null or empty", nameof(processInstanceId));
-
-        try
-        {
-            var searchResponse = await _elasticClient.SearchAsync<dynamic>(s => s
-                .Index(IndexPrefix + "*")
-                .Query(q => q
-                    .Bool(b => b
-                        .Must(m => m
-                            .Term(t => t.Field(ProcessInstanceIdField).Value(processInstanceId)),
-                        m => m
-                            .Range(r => r
-                                .Field(PositionField)
-                                .GreaterThanOrEquals(position)
-                            )
-                        )
-                    )
-                )
-                .Sort(sort => sort
-                    .Ascending(PositionField)
-                )
-                .Size(count),
-                cancellationToken
-            );
-
-            if (!searchResponse.IsValid)
-            {
-                throw new ElasticsearchException($"Failed to read process instance events: {searchResponse.DebugInformation}");
-            }
-
-            return await DeserializeEventsAsync(searchResponse.Hits, predicate);
-        }
-        catch (Exception ex) when (ex is not ElasticsearchException)
-        {
-            _logger.LogError(ex, "Failed to read events for process instance {ProcessInstanceId}", processInstanceId);
-            throw new ElasticsearchException("Failed to read process instance events", ex);
-        }
-    }
-
-    private async Task<List<IBpmnEvent>> DeserializeEventsAsync(IReadOnlyCollection<IHit<dynamic>> hits, Func<IBpmnEvent, bool>? predicate)
-    {
-        var events = new List<IBpmnEvent>();
-        foreach (var hit in hits)
-        {
-            try
-            {
-                var sourceDict = (IDictionary<string, object>)hit.Source;
-                var payload = sourceDict["payload"].ToString();
-                var fullName = sourceDict["fullName"].ToString();
-                var assemblyName = sourceDict["assemblyName"].ToString();
-
-                var assembly = AppDomain.CurrentDomain.GetAssemblies()
-                    .FirstOrDefault(a => a.GetName().Name == assemblyName);
+            var serializedEvents = await ReadProcessInstanceSerializedEventsAsync(
+                processInstanceId, position, count, null, cancellationToken);
                 
-                if (assembly == null)
-                {
-                    assembly = Assembly.Load(assemblyName);
-                }
-
-                var eventTypeObj = assembly.GetType(fullName);
-                
-                if (eventTypeObj != null)
-                {
-                    try
-                    {
-                        var @event = JsonSerializer.Deserialize(payload, eventTypeObj, _jsonOptions) as IBpmnEvent;
-                        if (@event != null && (predicate == null || predicate(@event)))
-                        {
-                            events.Add(@event);
-                        }
-                    }
-                    catch (JsonException jsonEx)
-                    {
-                        _logger.LogError(jsonEx, 
-                            "Failed to deserialize event payload for type {EventType}. Payload: {Payload}", 
-                            fullName, payload);
-                    }
-                }
-                else
-                {
-                    LoggerExtensions.LogWarning(_logger, "Event type {EventType} not found in assembly {Assembly}", fullName, assemblyName);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to deserialize event from hit {HitId}", hit.Id);
-            }
+            var events = serializedEvents.Select(_serializer.Deserialize).ToList();
+            
+            return predicate != null ? events.Where(predicate).ToList() : events;
         }
-        return events;
-    }
 
-    public async Task<string> SubscribeToEventsAsync(
-        Func<IBpmnEvent, Task> handler,
-        Func<IBpmnEvent, bool>? predicate = null,
-        long position = 0,
-        CancellationToken cancellationToken = default)
-    {
-        if (handler == null) throw new ArgumentNullException(nameof(handler));
-
-        try
+        private async Task<IReadOnlyList<SerializedEvent>> ReadProcessInstanceSerializedEventsAsync(
+            string processInstanceId,
+            long position = 0,
+            int count = 100,
+            Func<SerializedEvent, bool>? predicate = null,
+            CancellationToken cancellationToken = default)
         {
-            var subscriptionId = Guid.NewGuid().ToString();
-            var searchResponse = await _elasticClient.SearchAsync<dynamic>(s => s
-                .Index(IndexPrefix + "*")
-                .Query(q => q
-                    .Bool(b => b
-                        .Must(m => m
-                            .Range(r => r
-                                .Field(PositionField)
-                                .GreaterThan(position - 1)
-                            )
-                        )
-                    )
-                )
-                .Sort(sort => sort
-                    .Ascending(PositionField)
-                )
-                .Scroll("5m"),
-                cancellationToken
-            );
+            var resp = await _client.SearchAsync<SerializedEvent>(s => s
+                .Index(IndexName)
+                .Sort(ss => ss.Ascending(e => e.Timestamp))
+                .Query(q => q.Term(t => t.Field(f => f.ProcessInstanceId).Value(processInstanceId)))
+                .From((int)position)
+                .Size(count),
+                cancellationToken);
 
-            if (!searchResponse.IsValid)
-            {
-                throw new ElasticsearchException($"Failed to subscribe to events: {searchResponse.DebugInformation}");
-            }
+            if (!resp.IsValid)
+                throw new ElasticsearchClientException($"ReadProcessInstanceEventsAsync failed: {resp.DebugInformation}");
+
+            var docs = resp.Documents;
+            return predicate != null ? docs.Where(predicate).ToList() : docs.ToList();
+        }
+
+        public Task<string> SubscribeToEventsAsync(
+            Func<IBpmnEvent, Task> handler,
+            Func<IBpmnEvent, bool>? predicate = null,
+            long position = 0,
+            CancellationToken cancellationToken = default)
+        {
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
+            
+            var subId = Guid.NewGuid().ToString();
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _subscriptions[subId] = cts;
 
             _ = Task.Run(async () =>
             {
-                try
+                var lastPos = position;
+                while (!cts.IsCancellationRequested)
                 {
-                    var scrollId = searchResponse.ScrollId;
-                    var searchResults = searchResponse.Hits;
-
-                    while (searchResults.Any() && !cancellationToken.IsCancellationRequested)
+                    try
                     {
-                        var events = await DeserializeEventsAsync(searchResults, predicate);
-                        foreach (var @event in events)
+                        var batch = await ReadSerializedEventsAsync(lastPos, 50, null, cts.Token);
+                        foreach (var serializedEvent in batch)
                         {
-                            if (cancellationToken.IsCancellationRequested) break;
-                            await handler(@event);
+                            lastPos++;
+                            
+                            try
+                            {
+                                var @event = _serializer.Deserialize(serializedEvent);
+                                
+                                if (predicate == null || predicate(@event))
+                                    await handler(@event);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Error deserializing or handling event");
+                            }
                         }
-
-                        var scrollResponse = await _elasticClient.ScrollAsync<dynamic>(new ScrollRequest(scrollId, "5m"), cancellationToken);
-
-                        if (!scrollResponse.IsValid)
-                        {
-                            throw new ElasticsearchException($"Failed to scroll events: {scrollResponse.DebugInformation}");
-                        }
-
-                        scrollId = scrollResponse.ScrollId;
-                        searchResults = scrollResponse.Hits;
                     }
-
-                    await _elasticClient.ClearScrollAsync(c => c.ScrollId(scrollId), cancellationToken);
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error in subscription '{SubId}'", subId);
+                    }
+                    await Task.Delay(TimeSpan.FromSeconds(1), cts.Token);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger.LogError(ex, "Error in event subscription {SubscriptionId}", subscriptionId);
-                }
-            }, cancellationToken);
+            }, cts.Token);
 
-            return subscriptionId;
-        }
-        catch (Exception ex) when (ex is not ElasticsearchException)
-        {
-            _logger.LogError(ex, "Failed to subscribe to events");
-            throw new ElasticsearchException("Failed to subscribe to events", ex);
-        }
-    }
-
-    public async Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken = default)
-    {
-        // Note: In Elasticsearch, we don't need to do anything special to unsubscribe
-        // The subscription will automatically end when the scroll expires
-        await Task.CompletedTask;
-    }
-
-    private string GetIndexName(DateTime timestamp)
-    {
-        return $"{IndexPrefix}{timestamp:yyyy.MM}";
-    }
-
-    private async Task<long> GetNextPositionAsync(string indexName, CancellationToken cancellationToken)
-    {
-        var searchResponse = await _elasticClient.SearchAsync<dynamic>(s => s
-            .Index(indexName)
-            .Size(0)
-            .Aggregations(a => a
-                .Max("max_position", m => m
-                    .Field(PositionField)
-                )
-            ),
-            cancellationToken
-        );
-
-        if (!searchResponse.IsValid)
-        {
-            throw new ElasticsearchException($"Failed to get next position: {searchResponse.DebugInformation}");
+            return Task.FromResult(subId);
         }
 
-        var maxPosition = searchResponse.Aggregations.Max("max_position");
-        return (long)(maxPosition?.Value ?? 0) + 1;
-    }
-
-    public async Task MarkAsProcessedAsync(string eventId, string processorId, CancellationToken cancellationToken = default)
-    {
-        try
+        public Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken = default)
         {
-            var updateResponse = await _elasticClient.UpdateAsync<dynamic>(eventId, u => u
-                .Index(IndexPrefix + "*")
-                .Doc(new
-                {
-                    processed = true,
-                    processedAt = DateTime.UtcNow,
-                    processorId = processorId
-                })
-                .Refresh(Refresh.True),
+            if (string.IsNullOrEmpty(subscriptionId))
+                throw new ArgumentNullException(nameof(subscriptionId));
+                
+            if (_subscriptions.TryRemove(subscriptionId, out var cts))
+            {
+                cts.Cancel();
+                cts.Dispose();
+            }
+            return Task.CompletedTask;
+        }
+
+        #region IEventQueryService Implementation
+
+        public async Task<IReadOnlyList<IBpmnEvent>> QueryByTypeNameAsync(
+            string typeName,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(typeName))
+                throw new ArgumentNullException(nameof(typeName));
+                
+            var serializedEvents = await QuerySerializedByTypeNameAsync(typeName, cancellationToken);
+            return serializedEvents.Select(_serializer.Deserialize).ToList();
+        }
+        
+        private async Task<IReadOnlyList<SerializedEvent>> QuerySerializedByTypeNameAsync(
+            string typeName,
+            CancellationToken cancellationToken = default)
+        {
+            var resp = await _client.SearchAsync<SerializedEvent>(s => s
+                .Index(IndexName)
+                .Size(1000)
+                .Query(q => q.Term(t => t.Field(f => f.TypeName).Value(typeName))),
                 cancellationToken);
 
-            if (!updateResponse.IsValid)
+            if (!resp.IsValid)
+                throw new ElasticsearchClientException($"QueryByTypeNameAsync failed: {resp.DebugInformation}");
+
+            return resp.Documents.ToList();
+        }
+
+        public async Task<IReadOnlyList<IBpmnEvent>> QueryByNamespaceAsync(
+            string @namespace,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(@namespace))
+                throw new ArgumentNullException(nameof(@namespace));
+                
+            var serializedEvents = await QuerySerializedByNamespaceAsync(@namespace, cancellationToken);
+            return serializedEvents.Select(_serializer.Deserialize).ToList();
+        }
+        
+        private async Task<IReadOnlyList<SerializedEvent>> QuerySerializedByNamespaceAsync(
+            string @namespace,
+            CancellationToken cancellationToken = default)
+        {
+            var resp = await _client.SearchAsync<SerializedEvent>(s => s
+                .Index(IndexName)
+                .Size(1000)
+                .Query(q => q.Term(t => t.Field(f => f.Namespace).Value(@namespace))),
+                cancellationToken);
+
+            if (!resp.IsValid)
+                throw new ElasticsearchClientException($"QueryByNamespaceAsync failed: {resp.DebugInformation}");
+
+            return resp.Documents.ToList();
+        }
+        
+        public async Task<IReadOnlyList<IBpmnEvent>> QueryByProcessInstanceIdAsync(
+            string processInstanceId,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(processInstanceId))
+                throw new ArgumentNullException(nameof(processInstanceId));
+                
+            var serializedEvents = await QuerySerializedByProcessInstanceIdAsync(processInstanceId, cancellationToken);
+            return serializedEvents.Select(_serializer.Deserialize).ToList();
+        }
+        
+        private async Task<IReadOnlyList<SerializedEvent>> QuerySerializedByProcessInstanceIdAsync(
+            string processInstanceId,
+            CancellationToken cancellationToken = default)
+        {
+            var resp = await _client.SearchAsync<SerializedEvent>(s => s
+                .Index(IndexName)
+                .Size(1000)
+                .Query(q => q.Term(t => t.Field(f => f.ProcessInstanceId).Value(processInstanceId))),
+                cancellationToken);
+
+            if (!resp.IsValid)
+                throw new ElasticsearchClientException($"QueryByProcessInstanceIdAsync failed: {resp.DebugInformation}");
+
+            return resp.Documents.ToList();
+        }
+        
+        public async Task<IReadOnlyList<IBpmnEvent>> QueryAsync(
+            Func<IBpmnEvent, bool> predicate,
+            CancellationToken cancellationToken = default)
+        {
+            if (predicate == null)
+                throw new ArgumentNullException(nameof(predicate));
+                
+            var resp = await _client.SearchAsync<SerializedEvent>(s => s
+                .Index(IndexName)
+                .Size(1000)
+                .Query(q => q.MatchAll()),
+                cancellationToken);
+
+            if (!resp.IsValid)
+                throw new ElasticsearchClientException($"QueryAsync failed: {resp.DebugInformation}");
+                
+            var events = resp.Documents
+                .Select(_serializer.Deserialize)
+                .Where(predicate)
+                .ToList();
+                
+            return events;
+        }
+
+        public async Task<IReadOnlyList<IBpmnEvent>> ReadEventsTimeRangeAsync(
+            DateTime fromTimestamp, 
+            DateTime? toTimestamp, 
+            Func<IBpmnEvent, bool>? filter = null,
+            CancellationToken cancellationToken = default)
+        {
+            var searchDescriptor = new SearchDescriptor<SerializedEvent>()
+                .Index(IndexName)
+                .Size(1000)
+                .Sort(s => s.Ascending(f => f.Timestamp));
+
+            // Add timestamp range query
+            searchDescriptor = searchDescriptor.Query(q => q
+                .Bool(b => b
+                    .Must(
+                        m => m.DateRange(r => r
+                            .Field(f => f.Timestamp)
+                            .GreaterThanOrEquals(fromTimestamp)
+                            .LessThanOrEquals(toTimestamp ?? DateTime.UtcNow)
+                        )
+                    )
+                )
+            );
+
+            var response = await _client.SearchAsync<SerializedEvent>(searchDescriptor, cancellationToken);
+            if (!response.IsValid)
             {
-                throw new ElasticsearchException($"Failed to mark event as processed: {updateResponse.DebugInformation}");
+                throw new Exception($"Failed to read events: {response.DebugInformation}");
             }
 
-            _logger.LogDebug("Marked event {EventId} as processed by {ProcessorId}", eventId, processorId);
+            var events = new List<IBpmnEvent>();
+            foreach (var hit in response.Hits)
+            {
+                try
+                {
+                    var @event = _serializer.Deserialize(hit.Source);
+                    
+                    // Apply filter if provided
+                    if (filter == null || filter(@event))
+                    {
+                        events.Add(@event);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to deserialize event {EventId}", hit.Source.Id);
+                }
+            }
+
+            return events;
         }
-        catch (Exception ex) when (ex is not ElasticsearchException)
-        {
-            _logger.LogError(ex, "Failed to mark event {EventId} as processed", eventId);
-            throw new ElasticsearchException("Failed to mark event as processed", ex);
-        }
+
+        #endregion
     }
 }
-
-public class ElasticsearchException : Exception
-{
-    public ElasticsearchException(string message) : base(message) { }
-    public ElasticsearchException(string message, Exception innerException) : base(message, innerException) { }
-} 

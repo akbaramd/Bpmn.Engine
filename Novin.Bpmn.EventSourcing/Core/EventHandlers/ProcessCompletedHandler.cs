@@ -1,39 +1,39 @@
 using Microsoft.Extensions.Logging;
 using Novin.Bpmn.EventSourcing.Contracts;
+using Novin.Bpmn.EventSourcing.Core.Models;
 using Novin.Bpmn.EventSourcing.Events;
-using Novin.Bpmn.Models;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Novin.Bpmn.EventSourcing.Core.Models;
 
 namespace Novin.Bpmn.EventSourcing.Core.EventHandlers;
 
 /// <summary>
 /// Handles the completion of process instances and performs cleanup
 /// </summary>
-public class ProcessCompletedHandler : IBpmnEventHandler<ProcessCompletedEvent>
+public class ProcessCompletedHandler : BaseEventHandler<ProcessCompleted>
 {
-    private readonly ILogger<ProcessCompletedHandler> _logger;
-    private readonly IStateStore _stateStore;
     private readonly IEventBus _eventBus;
-    private readonly IDefinitionStore _definitionStore;
-    
+
+    /// <summary>
+    /// Creates a new instance of ProcessCompletedHandler
+    /// </summary>
     public ProcessCompletedHandler(
-        ILogger<ProcessCompletedHandler> logger,
-        IStateStore stateStore,
+        IProcessInstanceStateStore stateStore,
+        IEventStore eventStore,
+        IProcessDeploymentStore definitionStore,
         IEventBus eventBus,
-        IDefinitionStore definitionStore)
+        ILogger<ProcessCompletedHandler> logger)
+        : base(stateStore, eventStore, definitionStore, logger)
     {
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
-        _definitionStore = definitionStore ?? throw new ArgumentNullException(nameof(definitionStore));
     }
     
-    public async Task HandleAsync(ProcessCompletedEvent @event, CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    protected override async Task ProcessEventAsync(
+        ProcessCompleted @event, 
+        ProcessInstanceState state,
+        CancellationToken cancellationToken)
     {
         if (@event == null)
         {
@@ -42,31 +42,21 @@ public class ProcessCompletedHandler : IBpmnEventHandler<ProcessCompletedEvent>
         
         try
         {
-            _logger.LogDebug("Processing ProcessInstanceCompleted event for process instance {ProcessInstanceId}", 
+            Logger.LogDebug("Processing ProcessCompleted event for process instance {ProcessInstanceId}", 
                 @event.ProcessInstanceId);
             
-            // Get current state with version
-            var (state, version) = await _stateStore.GetStateWithVersionAsync(@event.ProcessInstanceId);
-            if (state == null)
-            {
-                throw new InvalidOperationException($"Process instance state not found for {@event.ProcessInstanceId}");
-            }
+            // Record the event in state history
+            state.RecordEvent(@event);
             
-            // Update process state
-            state.Status = ProcessStatus.Completed;
-            state.ActiveElements.Clear();
+            // Update process state to completed
+            state.Complete(@event);
             
-            // Save final state with current version
-            await _stateStore.SaveStateAsync(@event.ProcessInstanceId, state, version);
-            
-
-            
-            _logger.LogInformation("Successfully completed process instance {ProcessInstanceId}",
+            Logger.LogInformation("Successfully completed process instance {ProcessInstanceId}",
                 @event.ProcessInstanceId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling ProcessInstanceCompleted event for process instance {ProcessInstanceId}",
+            Logger.LogError(ex, "Error handling ProcessCompleted event for process instance {ProcessInstanceId}",
                 @event.ProcessInstanceId);
             throw;
         }

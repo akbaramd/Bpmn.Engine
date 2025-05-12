@@ -1,6 +1,7 @@
 using Novin.Bpmn.EventSourcing.Contracts;
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Novin.Bpmn.EventSourcing.Events;
 
@@ -9,35 +10,27 @@ namespace Novin.Bpmn.EventSourcing.Events;
 /// </summary>
 public abstract record ElementEvent : BpmnEvent
 {
-    /// <summary>
-    /// شناسه المان BPMN
-    /// </summary>
-    public required string ElementId { get; init; }
-    
-    /// <summary>
-    /// نوع المان BPMN
-    /// </summary>
-    public required string ElementType { get; init; }
+      public Guid EventId { get; init; } = Guid.NewGuid();
+        public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
 
-    /// <summary>
-    /// شناسه اجرا - برای پیگیری مسیر اجرای فرآیند
-    /// </summary>
-    public string? ExecutionId { get; init; }
-    
-    /// <summary>
-    /// آیا المان قابل اجرا است
-    /// Indicates if the element should execute its business logic
-    /// </summary>
-    public bool IsExecutable { get; init; } = true;
+        public required string ProcessDefinitionId { get; init; }
+        public string?       CorrelationId         { get; init; }
+
+        public required string          ElementId     { get; init; }
+        public required BpmnElementType ElementType   { get; init; }  // نوع المان :contentReference[oaicite:4]{index=4}:contentReference[oaicite:5]{index=5}
+        public string?                 ExecutionId   { get; init; }
+        public bool                   IsExecutable  { get; init; } = true;
+        public int                    Version       { get; init; } = 1;
 }
-
 /// <summary>
 /// رویداد ایجاد المان BPMN
 /// </summary>
 public record ElementCreated : ElementEvent
 {
-    /// <inheritdoc/>
-    public new string Intent { get; init; } = "CREATED";
+    /// <summary>
+    /// Type of event - ElementCreated
+    /// </summary>
+    public override string EventType => "ElementCreated";
     
     /// <summary>
     /// شناسه المان منبع
@@ -56,41 +49,10 @@ public record ElementCreated : ElementEvent
 public record ElementProcessing : ElementEvent
 {
     /// <summary>
-    /// وضعیت پیشرفت پردازش (0 تا 100)
+    /// Type of event - ElementProcessing
     /// </summary>
-    public int Progress { get; init; }
+    public override string EventType => "ElementProcessing";
     
-    /// <summary>
-    /// جزئیات وضعیت پردازش
-    /// </summary>
-    public string? ProcessingDetails { get; init; }
-    
-    /// <inheritdoc/>
-    public new string Intent { get; init; } = "PROCESSING";
-}
-
-/// <summary>
-/// رویداد در حال تکمیل المان BPMN
-/// </summary>
-public record ElementCompleting : ElementEvent
-{
-    /// <summary>
-    /// شناسه‌های جریان‌های خروجی
-    /// </summary>
-    public List<string>? OutgoingFlowIds { get; init; }
-    
-    /// <summary>
-    /// خروجی المان
-    /// </summary>
-    public object? Output { get; init; }
-    
-    /// <summary>
-    /// متغیرهای بروزرسانی شده
-    /// </summary>
-    public Dictionary<string, object>? UpdatedVariables { get; init; }
-    
-    /// <inheritdoc/>
-    public new string Intent { get; init; } = "COMPLETING";
 }
 
 /// <summary>
@@ -98,8 +60,10 @@ public record ElementCompleting : ElementEvent
 /// </summary>
 public record ElementCompleted : ElementEvent
 {
-    /// <inheritdoc/>
-    public new string Intent { get; init; } = "COMPLETED";
+    /// <summary>
+    /// Type of event - ElementCompleted
+    /// </summary>
+    public override string EventType => "ElementCompleted";
 }
 
 /// <summary>
@@ -107,6 +71,11 @@ public record ElementCompleted : ElementEvent
 /// </summary>
 public record ElementFailed : ElementEvent
 {
+    /// <summary>
+    /// Type of event - ElementFailed
+    /// </summary>
+    public override string EventType => "ElementFailed";
+    
     /// <summary>
     /// کد خطا
     /// </summary>
@@ -126,23 +95,6 @@ public record ElementFailed : ElementEvent
     /// شناسه رویداد مرزی خطا
     /// </summary>
     public string? ErrorBoundaryEventId { get; init; }
-    
-    /// <inheritdoc/>
-    public new string Intent { get; init; } = "FAILED";
-}
-
-/// <summary>
-/// رویداد در حال خاتمه المان BPMN
-/// </summary>
-public record ElementTerminating : ElementEvent
-{
-    /// <summary>
-    /// دلیل خاتمه
-    /// </summary>
-    public string? Reason { get; init; }
-    
-    /// <inheritdoc/>
-    public new string Intent { get; init; } = "TERMINATING";
 }
 
 /// <summary>
@@ -150,6 +102,8 @@ public record ElementTerminating : ElementEvent
 /// </summary>
 public record ElementTerminated : ElementEvent
 {
-    /// <inheritdoc/>
-    public new string Intent { get; init; } = "TERMINATED";
+    /// <summary>
+    /// Type of event - ElementTerminated
+    /// </summary>
+    public override string EventType => "ElementTerminated";
 } 

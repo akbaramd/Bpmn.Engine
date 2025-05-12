@@ -55,8 +55,6 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
             {
                 try 
                 {
-                    var execution = state.GetExecution(@event.ExecutionId);
-                    execution.Complete();
                     Logger.LogDebug("Marked execution {ExecutionId} as completed for element {ElementId}", 
                         @event.ExecutionId, @event.ElementId);
                 } 
@@ -164,4 +162,4 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
         Logger.LogInformation("Outgoing flows scheduled for processing from element {ElementId} in process {ProcessInstanceId}",
             @event.ElementId, @event.ProcessInstanceId);
     }
-}
+} 

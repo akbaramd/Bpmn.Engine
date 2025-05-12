@@ -1,177 +1,114 @@
-using Microsoft.Extensions.Logging;
-using Novin.Bpmn.EventSourcing.Contracts;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Novin.Bpmn.EventSourcing.Events;
+using Microsoft.Extensions.Logging;
+using Novin.Bpmn.EventSourcing.Contracts;
 using Novin.Bpmn.EventSourcing.Core.Models;
 
-namespace Novin.Bpmn.EventSourcing.Core.EventHandlers;
-
-/// <summary>
-/// Base class for all BPMN event handlers
-/// </summary>
-/// <typeparam name="TEvent">Type of event to handle</typeparam>
-public abstract class BaseEventHandler<TEvent> : IEventHandler<TEvent>, IBpmnEventHandler<TEvent> where TEvent : IBpmnEvent
+namespace Novin.Bpmn.EventSourcing.Core.EventHandlers
 {
     /// <summary>
-    /// Logger instance
+    /// Base class for all BPMN event handlers.
+    /// Automatically loads state, invokes lifecycle hooks, persists state & events, and logs.
     /// </summary>
-    protected readonly ILogger Logger;
-    
-    /// <summary>
-    /// State store for process instances
-    /// </summary>
-    protected readonly IStateStore StateStore;
-    
-    /// <summary>
-    /// Event bus for publishing events
-    /// </summary>
-    protected readonly IEventBus EventBus;
-
-    /// <summary>
-    /// Event store for persisting events
-    /// </summary>
-    protected readonly IEventStore EventStore;
-
-    /// <summary>
-    /// Definition store for BPMN process definitions
-    /// </summary>
-    protected readonly IDefinitionStore DefinitionStore;
-
-    /// <summary>
-    /// Creates a new instance of the base event handler
-    /// </summary>
-    protected BaseEventHandler(
-        IStateStore stateStore,
-        IEventStore eventStore,
-        IDefinitionStore definitionStore,
-        ILogger logger)
+    /// <typeparam name="TEvent">Type of BPMN event to handle</typeparam>
+    public abstract class BaseEventHandler<TEvent> : IBpmnEventHandler<TEvent>
+        where TEvent : IBpmnEvent
     {
-        StateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
-        EventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
-        DefinitionStore = definitionStore ?? throw new ArgumentNullException(nameof(definitionStore));
-        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
+        protected readonly ILogger<BaseEventHandler<TEvent>> Logger;
+        protected readonly IProcessInstanceStateStore StateStore;
+        protected readonly IEventStore EventStore;
+        protected readonly IProcessDeploymentStore DefinitionStore;
 
-    /// <inheritdoc />
-    public virtual async Task HandleAsync(TEvent @event, BpmnProcessState state, CancellationToken cancellationToken = default)
-    {
-        try
+        protected BaseEventHandler(
+            IProcessInstanceStateStore stateStore,
+            IEventStore eventStore,
+            IProcessDeploymentStore definitionStore,
+            ILogger<BaseEventHandler<TEvent>> logger)
         {
-            Logger.LogInformation("Handling event {EventType} for process instance {ProcessInstanceId}",
-                @event.GetType().Name, @event.ProcessInstanceId);
-
-            // Pre-handling operations
-            await BeforeHandleAsync(@event, cancellationToken);
-            
-            // Main event processing (implemented by derived classes)
-            await ProcessEventAsync(@event, cancellationToken);
-            
-            // Post-handling operations
-            await AfterHandleAsync(@event, cancellationToken);
-
-            Logger.LogInformation("Successfully handled event {EventType} for process instance {ProcessInstanceId}",
-                @event.GetType().Name, @event.ProcessInstanceId);
+            StateStore      = stateStore      ?? throw new ArgumentNullException(nameof(stateStore));
+            EventStore      = eventStore      ?? throw new ArgumentNullException(nameof(eventStore));
+            DefinitionStore = definitionStore ?? throw new ArgumentNullException(nameof(definitionStore));
+            Logger          = logger          ?? throw new ArgumentNullException(nameof(logger));
         }
-        catch (Exception ex)
+
+        /// <inheritdoc />
+        public async Task HandleAsync(TEvent @event, CancellationToken cancellationToken = default)
         {
-            Logger.LogError(ex, "Error handling event {EventType} for process instance {ProcessInstanceId}",
-                @event.GetType().Name, @event.ProcessInstanceId);
-            throw;
+            if (@event is null) throw new ArgumentNullException(nameof(@event));
+
+            // 1. Load and validate process state
+            var state = await StateStore
+                .GetAsync(@event.ProcessInstanceId, cancellationToken)
+                .ConfigureAwait(false)
+                ?? throw new InvalidOperationException(
+                    $"Process instance '{@event.ProcessInstanceId}' not found.");
+
+            Logger.LogInformation(
+                "⏳ Handling {EventType} for instance {InstanceId}",
+                @event.EventType, @event.ProcessInstanceId);
+
+            try
+            {
+                // 2. Pre‐processing hook
+                await BeforeHandleAsync(@event, state, cancellationToken)
+                    .ConfigureAwait(false);
+
+                // 3. Main processing (must mutate state)
+                await ProcessEventAsync(@event, state, cancellationToken)
+                    .ConfigureAwait(false);
+
+                // 4. Persist updated state & record the event
+                await StateStore
+                    .SaveAsync(state, cancellationToken)
+                    .ConfigureAwait(false);
+                    
+                await EventStore
+                    .AppendEventAsync(@event, cancellationToken)
+                    .ConfigureAwait(false);
+
+                // 5. Post‐processing hook
+                await AfterHandleAsync(@event, state, cancellationToken)
+                    .ConfigureAwait(false);
+
+                Logger.LogInformation(
+                    "✅ Successfully handled {EventType} for instance {InstanceId}",
+                    @event.EventType, @event.ProcessInstanceId);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(
+                    ex,
+                    "❌ Error handling {EventType} for instance {InstanceId}",
+                    @event.EventType, @event.ProcessInstanceId);
+                throw;
+            }
         }
-    }
 
-    /// <summary>
-    /// Operations to perform before handling the event
-    /// </summary>
-    protected virtual Task BeforeHandleAsync(TEvent @event, CancellationToken cancellationToken = default)
-    {
-        return Task.CompletedTask;
-    }
+        /// <summary>
+        /// Override to run logic before <see cref="ProcessEventAsync"/>.
+        /// </summary>
+        protected virtual Task BeforeHandleAsync(
+            TEvent @event,
+            ProcessInstanceState state,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
 
-    /// <summary>
-    /// Main event processing logic to be implemented by derived classes
-    /// </summary>
-    protected abstract Task ProcessEventAsync(TEvent @event, CancellationToken cancellationToken = default);
+        /// <summary>
+        /// Must implement the core event‐driven state mutation logic here.
+        /// </summary>
+        protected abstract Task ProcessEventAsync(
+            TEvent @event,
+            ProcessInstanceState state,
+            CancellationToken cancellationToken);
 
-    /// <summary>
-    /// Operations to perform after handling the event
-    /// </summary>
-    protected virtual Task AfterHandleAsync(TEvent @event, CancellationToken cancellationToken = default)
-    {
-        return Task.CompletedTask;
+        /// <summary>
+        /// Override to run logic after state & event are persisted.
+        /// </summary>
+        protected virtual Task AfterHandleAsync(
+            TEvent @event,
+            ProcessInstanceState state,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
-
-    /// <summary>
-    /// Gets the current state of a process instance
-    /// </summary>
-    protected async Task<BpmnProcessState> GetStateAsync(string processInstanceId, CancellationToken cancellationToken)
-    {
-        var state = await StateStore.GetStateAsync(processInstanceId, cancellationToken);
-        if (state == null)
-        {
-            throw new InvalidOperationException($"Process instance {processInstanceId} not found");
-        }
-        return state;
-    }
-
-    /// <summary>
-    /// Saves the state of a process instance
-    /// </summary>
-    protected async Task SaveStateAsync(string processInstanceId, BpmnProcessState state, long? expectedVersion, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await StateStore.SaveStateAsync(processInstanceId, state, expectedVersion, cancellationToken);
-            Logger.LogDebug("Saved state for process instance {ProcessInstanceId} with version {Version}",
-                processInstanceId, expectedVersion);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to save state for process instance {ProcessInstanceId}", processInstanceId);
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Saves an event to the event store
-    /// </summary>
-    protected async Task SaveEventAsync(IBpmnEvent @event, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await EventStore.AppendEventAsync(@event, cancellationToken);
-            Logger.LogDebug("Saved event {EventType} for process instance {ProcessInstanceId}",
-                @event.GetType().Name, @event.ProcessInstanceId);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to save event {EventType} for process instance {ProcessInstanceId}", 
-                @event.GetType().Name, @event.ProcessInstanceId);
-            throw;
-        }
-    }
-
-    /// <inheritdoc />
-    public Task HandleAsync(TEvent @event, BpmnProcessState state)
-    {
-        return HandleAsync(@event, state, CancellationToken.None);
-    }
-
-    /// <inheritdoc />
-    public Task HandleAsync(IBpmnEvent @event, BpmnProcessState state)
-    {
-        if (@event is TEvent typedEvent)
-        {
-            return HandleAsync(typedEvent, state);
-        }
-        throw new ArgumentException($"Event type {@event.GetType().Name} is not compatible with handler for {typeof(TEvent).Name}");
-    }
-
-    /// <inheritdoc />
-    public Task HandleAsync(TEvent @event, CancellationToken cancellationToken = default)
-    {
-        return HandleAsync(@event, null, cancellationToken);
-    }
-} 
+}
