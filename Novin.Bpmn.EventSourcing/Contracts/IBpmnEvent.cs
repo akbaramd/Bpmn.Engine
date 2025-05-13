@@ -20,6 +20,7 @@ public interface IBpmnEvent
     public string DeploymentKey { get; }
     public Guid DeploymentId { get; }
     public string? CorrelationId { get; }
+    
     /// <summary>
     /// نوع رویداد
     /// </summary>

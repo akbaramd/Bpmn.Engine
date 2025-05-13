@@ -11,94 +11,6 @@ using System.Threading.Tasks;
 namespace Novin.Bpmn.EventSourcing.Core.EventHandlers;
 
 /// <summary>
-/// Script executor for evaluating conditional expressions
-/// </summary>
-public class ScriptExecuter
-{
-    private readonly ILogger _logger;
-
-    public ScriptExecuter(ILogger logger)
-    {
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
-
-    /// <summary>
-    /// Evaluates a conditional expression against process variables
-    /// </summary>
-    /// <param name="condition">The condition expression to evaluate</param>
-    /// <param name="variables">The variables to use for evaluation</param>
-    /// <returns>True if the condition evaluates to true, false otherwise</returns>
-    public bool EvaluateCondition(string condition, Dictionary<string, object> variables)
-    {
-        if (string.IsNullOrWhiteSpace(condition))
-        {
-            // No condition means it's always valid
-            return true;
-        }
-
-        try
-        {
-            _logger.LogDebug("Evaluating condition: {Condition}", condition);
-            
-            // This is a placeholder for actual expression evaluation
-            // In a real implementation, you would use a script engine to evaluate the expression
-            // For now, we'll implement some basic condition parsing
-            
-            // Simple variable substitution
-            foreach (var variable in variables)
-            {
-                condition = condition.Replace("${" + variable.Key + "}", variable.Value?.ToString() ?? "null");
-            }
-            
-            // Handle simple boolean expressions
-            if (condition.Trim().Equals("true", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-            
-            if (condition.Trim().Equals("false", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-            
-            // Handle basic comparisons (equals, not equals)
-            if (condition.Contains("=="))
-            {
-                var parts = condition.Split(new[] { "==" }, StringSplitOptions.None);
-                if (parts.Length == 2)
-                {
-                    var left = parts[0].Trim();
-                    var right = parts[1].Trim();
-                    return left == right;
-                }
-            }
-            
-            if (condition.Contains("!="))
-            {
-                var parts = condition.Split(new[] { "!=" }, StringSplitOptions.None);
-                if (parts.Length == 2)
-                {
-                    var left = parts[0].Trim();
-                    var right = parts[1].Trim();
-                    return left != right;
-                }
-            }
-            
-            // For more complex expressions, you would use a proper script engine
-            // such as Jint for JavaScript or Microsoft.CodeAnalysis.CSharp.Scripting
-            
-            _logger.LogWarning("Unable to evaluate condition: {Condition}, defaulting to true", condition);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error evaluating condition: {Condition}", condition);
-            return false;
-        }
-    }
-}
-
-/// <summary>
 /// Handles the completion of BPMN elements in a process instance
 /// </summary>
 public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
@@ -118,7 +30,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
         : base(stateStore, eventStore, definitionStore, eventBus, logger)
     {
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
-        _scriptExecuter = new ScriptExecuter(logger);
+        _scriptExecuter = new ScriptExecuter();
     }
 
     /// <inheritdoc />
@@ -138,7 +50,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
                 @event.ElementId, @event.InstanceId);
 
             // The execution should be in the context
-            var execution = context.CurrentExecution;
+            var execution = context.Execution;
             if (execution == null)
             {
                 throw new InvalidOperationException($"Execution not found for element {@event.ElementId}");
@@ -216,6 +128,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
             await CreateTargetElementAsync(
                 @event, 
                 flow, 
+                context.State,
                 context.State.Variables, 
                 isExecutable: true, 
                 definitionExplorer, 
@@ -234,6 +147,9 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
     {
         Logger.LogDebug("Handling fork for gateway {ElementId} of type {ElementType}", 
             @event.ElementId, @event.ElementType);
+            
+        // Store the state before handling fork to ensure any updates are preserved
+        await StateStore.UpsertAsync(context.State, null, cancellationToken);
             
         // Find all outgoing sequence flows for this gateway
         var outgoingFlows = await FindOutgoingFlowsAsync(
@@ -256,6 +172,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
                 await CreateTargetElementAsync(
                     @event, 
                     flow, 
+                    context.State,
                     context.State.Variables, 
                     isExecutable: true, 
                     definitionExplorer, 
@@ -274,7 +191,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
             foreach (var flow in outgoingFlows.Where(f => !f.IsDefault && !string.IsNullOrEmpty(f.Condition)))
             {
                 // Evaluate the condition
-                bool isValid = _scriptExecuter.EvaluateCondition(flow.Condition, context.State.Variables);
+                bool isValid = await _scriptExecuter.Evaluate(flow.Condition, context.Execution);
                 
                 if (isValid)
                 {
@@ -282,6 +199,8 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
                     await CreateTargetElementAsync(
                         @event, 
                         flow, 
+                        context.State,
+
                         context.State.Variables, 
                         isExecutable: true, 
                         definitionExplorer, 
@@ -298,6 +217,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
                 await CreateTargetElementAsync(
                     @event, 
                     defaultFlow, 
+                    context.State,
                     context.State.Variables, 
                     isExecutable: true, 
                     definitionExplorer, 
@@ -312,6 +232,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
                 await CreateTargetElementAsync(
                     @event, 
                     flow, 
+                    context.State,
                     context.State.Variables, 
                     isExecutable: false, 
                     definitionExplorer, 
@@ -327,7 +248,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
             foreach (var flow in outgoingFlows.Where(f => !string.IsNullOrEmpty(f.Condition)))
             {
                 // Evaluate the condition
-                bool isValid = _scriptExecuter.EvaluateCondition(flow.Condition, context.State.Variables);
+                bool isValid = await _scriptExecuter.Evaluate(flow.Condition, context.Execution);
                 
                 if (isValid)
                 {
@@ -335,6 +256,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
                     await CreateTargetElementAsync(
                         @event, 
                         flow, 
+                        context.State,
                         context.State.Variables, 
                         isExecutable: true, 
                         definitionExplorer, 
@@ -348,6 +270,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
                     await CreateTargetElementAsync(
                         @event, 
                         flow, 
+                        context.State,
                         context.State.Variables, 
                         isExecutable: false, 
                         definitionExplorer, 
@@ -362,6 +285,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
                 await CreateTargetElementAsync(
                     @event, 
                     defaultFlow, 
+                    context.State,
                     context.State.Variables, 
                     isExecutable: true, 
                     definitionExplorer, 
@@ -374,6 +298,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
                 await CreateTargetElementAsync(
                     @event, 
                     flow, 
+                    context.State,
                     context.State.Variables, 
                     isExecutable: true, 
                     definitionExplorer, 
@@ -388,12 +313,16 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
                 await CreateTargetElementAsync(
                     @event, 
                     flow, 
+                    context.State,
                     context.State.Variables, 
                     isExecutable: true, 
                     definitionExplorer, 
                     cancellationToken);
             }
         }
+        
+        // Store the state again after creating all target elements to ensure all executions are recorded
+        await StateStore.UpsertAsync(context.State, null, cancellationToken);
     }
     
     /// <summary>
@@ -402,6 +331,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
     private async Task CreateTargetElementAsync(
         ElementCompleted sourceEvent,
         SequenceFlow flow,
+        ProcessInstanceState state,
         Dictionary<string, object> variables,
         bool isExecutable,
         DefiantionExplorer definitionExplorer,
@@ -420,6 +350,21 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
             return;
         }
         
+        // Generate a unique execution ID for the element that will be created
+        // This ensures that when the event is processed, it will create a new execution
+        // with this ID rather than trying to find an existing one
+  
+        // create executions
+        var execution = ElementExecutionBuilder.Init()
+            .WithProcessInstanceId(sourceEvent.InstanceId)
+            .WithElementId(flow.TargetId)
+            .WithElementType(targetElementResult.ElementType)
+            .WithLocalVariables(variables)
+            .Executable(isExecutable)
+            .Build()
+            .BuildResult();
+        
+        state.AddExecution(execution);
         // Create and publish the ElementCreated event
         var createdEvent = new ElementCreated
         {
@@ -432,16 +377,18 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
             SourceElementId = sourceEvent.ElementId,
             SequenceFlowId = flow.Id,
             IsExecutable = isExecutable,
+            ExecutionId = execution.ExecutionId,  // Set the execution ID explicitly here
             Timestamp = DateTimeOffset.UtcNow
         };
         
         // Publish the event to create the target element
         PublishLater(createdEvent);
         
-        Logger.LogDebug("Created {ExecutableStatus} element for target {TargetId} via flow {FlowId}",
+        Logger.LogDebug("Created {ExecutableStatus} element for target {TargetId} via flow {FlowId} with execution ID {ExecutionId}",
             isExecutable ? "executable" : "non-executable",
             flow.TargetId,
-            flow.Id);
+            flow.Id,
+            execution.ExecutionId);
     }
     
     /// <summary>
@@ -457,6 +404,8 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
         {
             Logger.LogInformation("All executions completed in process {ProcessInstanceId}, marking process as completed", 
                 @event.InstanceId);
+            
+            
             
             // Publish process completed event
             PublishLater(new ProcessCompleted
@@ -497,6 +446,7 @@ public class ElementCompletedHandler : BaseEventHandler<ElementCompleted>
             Id = x.id,
             SourceId = x.sourceRef,
             TargetId = x.targetRef,
+            Condition = x.conditionExpression?.Text.FirstOrDefault()??"",
         }).ToList();
     }
     

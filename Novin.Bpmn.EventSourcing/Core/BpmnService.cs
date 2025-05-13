@@ -17,6 +17,131 @@ using Elasticsearch.Net;
 namespace Novin.Bpmn.EventSourcing.Core;
 
 /// <summary>
+/// Provides locking for process instances to prevent concurrent modifications
+/// </summary>
+public class ProcessInstanceLockProvider
+{
+    private static readonly Dictionary<string, SemaphoreSlim> _locks = new();
+    private static readonly SemaphoreSlim _dictionaryLock = new SemaphoreSlim(1, 1);
+    private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Acquires a lock for the specified process instance
+    /// </summary>
+    public static async Task<IDisposable> AcquireLockAsync(string instanceId, ILogger logger, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(instanceId))
+            throw new ArgumentException("Process instance ID cannot be empty", nameof(instanceId));
+
+        logger.LogDebug("Waiting for lock dictionary access for process {InstanceId}", instanceId);
+        
+        bool dictionaryLockAcquired = await _dictionaryLock.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+        if (!dictionaryLockAcquired)
+        {
+            logger.LogWarning("Timeout waiting for dictionary lock access. Proceeding without lock.");
+            return new DummyLockReleaser(instanceId, logger);
+        }
+        try
+        {
+            if (!_locks.TryGetValue(instanceId, out var instanceLock))
+            {
+                instanceLock = new SemaphoreSlim(1, 1);
+                _locks[instanceId] = instanceLock;
+                logger.LogDebug("Created new lock for process instance {InstanceId}", instanceId);
+                
+                // Schedule cleanup
+                _ = Task.Run(async () => 
+                {
+                    await Task.Delay(TimeSpan.FromMinutes(30));
+                    await _dictionaryLock.WaitAsync();
+                    try
+                    {
+                        if (_locks.TryGetValue(instanceId, out var lockToRemove))
+                        {
+                            _locks.Remove(instanceId);
+                            lockToRemove.Dispose();
+                            logger.LogDebug("Removed unused lock for process instance {InstanceId}", instanceId);
+                        }
+                    }
+                    finally
+                    {
+                        _dictionaryLock.Release();
+                    }
+                });
+            }
+            
+            // Return a disposable lock releaser
+            var lockReleaser = new ProcessInstanceLockReleaser(instanceLock, instanceId, logger);
+            
+            // Release dictionary lock before waiting on instance lock
+            _dictionaryLock.Release();
+            
+            logger.LogDebug("Waiting for lock on process instance {InstanceId}", instanceId);
+            bool lockAcquired = await instanceLock.WaitAsync(LockTimeout, cancellationToken);
+            
+            if (!lockAcquired)
+            {
+                logger.LogWarning("Timeout waiting for lock on process instance {InstanceId}. Proceeding without lock.", 
+                    instanceId);
+                return new DummyLockReleaser(instanceId, logger);
+            }
+            
+            logger.LogDebug("Acquired lock on process instance {InstanceId}", instanceId);
+            
+            return lockReleaser;
+        }
+        catch
+        {
+            _dictionaryLock.Release();
+            throw;
+        }
+    }
+
+    private class ProcessInstanceLockReleaser : IDisposable
+    {
+        private readonly SemaphoreSlim _lock;
+        private readonly string _instanceId;
+        private readonly ILogger _logger;
+        private bool _disposed = false;
+
+        public ProcessInstanceLockReleaser(SemaphoreSlim instanceLock, string instanceId, ILogger logger)
+        {
+            _lock = instanceLock;
+            _instanceId = instanceId;
+            _logger = logger;
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                _lock.Release();
+                _logger.LogDebug("Released lock on process instance {InstanceId}", _instanceId);
+                _disposed = true;
+            }
+        }
+    }
+    
+    // Dummy lock releaser for when we can't acquire a lock
+    private class DummyLockReleaser : IDisposable
+    {
+        private readonly string _instanceId;
+        private readonly ILogger _logger;
+        
+        public DummyLockReleaser(string instanceId, ILogger logger)
+        {
+            _instanceId = instanceId;
+            _logger = logger;
+        }
+        
+        public void Dispose()
+        {
+            _logger.LogDebug("Dummy lock releaser for {InstanceId} - no actual lock was held", _instanceId);
+        }
+    }
+}
+
+/// <summary>
 /// سرویس پردازش و مدیریت فرآیندهای BPMN
 /// این سرویس مسئول خواندن تعریف BPMN، مدیریت نمونه‌های فرآیند و اجرای فرآیند با استفاده از Event Sourcing است
 /// </summary>
@@ -205,11 +330,8 @@ public class BpmnService
         Dictionary<string, object> variables = null,
         CancellationToken cancellationToken = default)
     {
-
         try
         {
-            
-            
             var definitionDoc = await _deploymentStore.GetDeploymentAsync(deploymentId,cancellationToken);
             if (definitionDoc == null)
             {
@@ -249,45 +371,68 @@ public class BpmnService
                 ? new Dictionary<string, object>(variables) 
                 : new Dictionary<string, object>();
                 
-            // Create a new process instance state
-            var initialState = ProcessInstanceState.From(new ProcessStarted 
+            // Create process instance state
+            var instanceState = new ProcessInstanceState
             {
                 InstanceId = processInstanceId,
-                ProcessId = process.id,
-                DeploymentId = definitionDoc.DeploymentId,
+                DeploymentId = deploymentId,
                 DeploymentKey = definitionDoc.DeploymentKey,
-                Timestamp = DateTime.UtcNow
-            });
+                ProcessId = process.id,
+                DefinitionVersion = definitionDoc.Version,
+                Status = ProcessInstanceStatus.Active,
+                StartedAt = DateTime.UtcNow,
+                LastUpdatedAt = DateTime.UtcNow,
+                Variables = initialVariables
+            };
             
-            
-            // Add initial variables
-            foreach (var variable in initialVariables)
-            {
-                initialState.SetVariable(variable.Key, variable.Value);
-            }
-
-            // Save initial state
-            await _stateStore.UpsertAsync(initialState, null, cancellationToken);
-            
-            // Publish process started event
+            // Initialize history with process started event
             var startedEvent = new ProcessStarted
             {
+                EventId = Guid.NewGuid(),
                 InstanceId = processInstanceId,
-                ProcessId = process.id,
-                DeploymentId = definitionDoc.DeploymentId,
+                DeploymentId = deploymentId,
                 DeploymentKey = definitionDoc.DeploymentKey,
+                ProcessId = process.id,
+                DefinitionVersion = definitionDoc.Version,
                 Timestamp = DateTime.UtcNow
             };
-            await _eventBus.PublishAsync(startedEvent, cancellationToken);
             
-            _logger.LogInformation("Started process instance {ProcessInstanceId} for definition {DeploymentKey} version {Version}", 
-                processInstanceId, deploymentId, definitionDoc.Version);
+            instanceState.RecordEvent(startedEvent);
+            
+            // Persist initial state with fresh version (1)
+            // Use null for expectedVersion to let the store handle versioning
+            try
+            {
+                await _stateStore.UpsertAsync(instanceState, null, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                throw new BpmnProcessorException($"Failed to store process instance state: {ex.Message}", ex);
+            }
+            
+            // Publish event to trigger execution
+            try
+            {
+                await _eventBus.PublishAsync(startedEvent, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to publish ProcessStarted event: {Error}", ex.Message);
+                throw new BpmnProcessorException($"Failed to start process execution: {ex.Message}", ex);
+            }
+            
+            _logger.LogInformation("Started process instance {ProcessInstanceId} for deployment {DeploymentKey}/{DeploymentId}",
+                processInstanceId, definitionDoc.DeploymentKey, deploymentId);
                 
             return processInstanceId;
         }
+        catch (BpmnProcessorException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error starting process instance for deployment {DeploymentKey}", deploymentId);
+            _logger.LogError(ex, "Failed to start process instance for deployment {DeploymentId}", deploymentId);
             throw new BpmnProcessorException($"Failed to start process instance: {ex.Message}", ex);
         }
     }
@@ -322,6 +467,10 @@ public class BpmnService
     {
         if (string.IsNullOrEmpty(processInstanceId))
             throw new ArgumentException("Process instance ID cannot be empty", nameof(processInstanceId));
+        
+        // Acquire a lock for this process instance to prevent concurrent modifications
+        // Even if lock acquisition fails, we continue with optimistic concurrency
+        using var lockReleaser = await ProcessInstanceLockProvider.AcquireLockAsync(processInstanceId, _logger, cancellationToken);
             
         var stateInfo = await _stateStore.GetAsync(processInstanceId, cancellationToken);
         if (stateInfo == null)
@@ -347,8 +496,8 @@ public class BpmnService
 
             // Update status to terminated
             state.Terminate(terminatedEvent);
-            // Save updated state
-            await _stateStore.UpsertAsync(state, ct: cancellationToken);
+            // Save updated state with null for expected version to allow state merging
+            await _stateStore.UpsertAsync(state, null, cancellationToken);
             
             // Publish termination event
             await _eventBus.PublishAsync(terminatedEvent, cancellationToken);
@@ -463,6 +612,10 @@ public class BpmnService
     {
         if (string.IsNullOrEmpty(processInstanceId))
             throw new ArgumentException("Process instance ID cannot be empty", nameof(processInstanceId));
+         
+        // Acquire a lock for this process instance to prevent concurrent modifications
+        // Even if lock acquisition fails, we continue with optimistic concurrency
+        using var lockReleaser = await ProcessInstanceLockProvider.AcquireLockAsync(processInstanceId, _logger, cancellationToken);
             
         var stateInfo = await _stateStore.GetAsync(processInstanceId, cancellationToken);
         if (stateInfo == null)
@@ -488,8 +641,8 @@ public class BpmnService
             // Update status
             state.Cancel(cancelledEvent);
             
-            // Save updated state
-            await _stateStore.UpsertAsync(state, ct: cancellationToken);
+            // Save updated state with optimistic concurrency control using expected version
+            await _stateStore.UpsertAsync(state, null, cancellationToken);
             
             // Publish cancellation event
             await _eventBus.PublishAsync(cancelledEvent, cancellationToken);
@@ -557,8 +710,8 @@ public class BpmnService
                 }
             }
             
-            // Save updated state
-            await _stateStore.UpsertAsync(state.State, ct: cancellationToken);
+            // Save updated state with null for expected version to allow state merging
+            await _stateStore.UpsertAsync(state.State, null, cancellationToken);
             
             // Publish restart event
             await _eventBus.PublishAsync(new ProcessRestarted

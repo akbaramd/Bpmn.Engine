@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Collections.Concurrent;
 using System.Text.Json.Serialization;
 using Novin.Bpmn.EventSourcing.Contracts;
 using Novin.Bpmn.EventSourcing.Core.Json;
@@ -34,7 +35,22 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
 
         // Process data
         public Dictionary<string, object> Variables { get; set; } = new();
-        public Dictionary<string, ElementExecution> Executions { get; set; } = new();
+        
+        // Using ConcurrentDictionary for thread-safe execution tracking
+        private ConcurrentDictionary<string, ElementExecution> _executions = new();
+        
+        // This property maintains serialization compatibility
+        [JsonInclude]
+        public Dictionary<string, ElementExecution> Executions 
+        { 
+            get => _executions.ToDictionary(k => k.Key, v => v.Value);
+            set => _executions = new ConcurrentDictionary<string, ElementExecution>(value); 
+        }
+        
+        // Direct access to ConcurrentDictionary for thread-safe operations
+        [JsonIgnore]
+        public ConcurrentDictionary<string, ElementExecution> ConcurrentExecutions => _executions;
+        
         public List<EventSubscription> Subscriptions { get; set; } = new();
         public List<Job> Jobs { get; set; } = new();
         public List<Incident> Incidents { get; set; } = new();
@@ -43,7 +59,7 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
         // Computed properties
         [JsonIgnore]
         public IReadOnlyCollection<ElementExecution> ActiveExecutions =>
-            Executions.Values
+            _executions.Values
                 .Where(e => e.Status == ExecutionStatus.Active 
                          || e.Status == ExecutionStatus.Waiting 
                          || e.Status == ExecutionStatus.Suspended)
@@ -52,7 +68,7 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
 
         [JsonIgnore]
         public IReadOnlyCollection<ElementExecution> CompletedExecutions =>
-            Executions.Values
+            _executions.Values
                 .Where(e => e.Status == ExecutionStatus.Completed 
                          || e.Status == ExecutionStatus.Failed 
                          || e.Status == ExecutionStatus.Terminated)
@@ -126,13 +142,13 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
         public void AddExecution(ElementExecution exec)
         {
             if (exec is null) throw new ArgumentNullException(nameof(exec));
-            Executions[exec.ExecutionId] = exec;
+            _executions[exec.ExecutionId] = exec;
             Touch();
         }
 
         public ElementExecution GetExecution(string executionId)
         {
-            if (!Executions.TryGetValue(executionId, out var exec))
+            if (!_executions.TryGetValue(executionId, out var exec))
                 throw new KeyNotFoundException($"Execution '{executionId}' not found.");
             return exec;
         }
@@ -176,7 +192,7 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
             Variables[name] = value;
             
             // If the execution exists, set it there too
-            if (Executions.TryGetValue(executionId, out var exec))
+            if (_executions.TryGetValue(executionId, out var exec))
             {
                 exec.SetVariable(name, value);
             }
@@ -356,5 +372,75 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
         
         public void Touch() =>
             LastUpdatedAt = DateTime.UtcNow;
+
+        /// <summary>
+        /// Merges another execution into this state, handling any potential conflicts.
+        /// </summary>
+        public void MergeExecution(ElementExecution execution)
+        {
+            if (execution == null) throw new ArgumentNullException(nameof(execution));
+            
+            // Use ConcurrentDictionary's built-in thread-safe update method
+            _executions.AddOrUpdate(
+                execution.ExecutionId,
+                // If key doesn't exist, use the new execution
+                addValue: execution,
+                // If key exists, merge the executions
+                updateValueFactory: (key, existingExecution) =>
+                {
+                    // Only merge if execution isn't already in a terminal state
+                    if (!IsExecutionTerminal(existingExecution.Status))
+                    {
+                        // Update status if necessary
+                        if (IsExecutionTerminal(execution.Status))
+                        {
+                            existingExecution.Status = execution.Status;
+                            if (execution.CompletedAt.HasValue)
+                                existingExecution.CompletedAt = execution.CompletedAt;
+                        }
+                        
+                        // Always merge variables
+                        foreach (var kvp in execution.LocalVariables)
+                        {
+                            existingExecution.LocalVariables[kvp.Key] = kvp.Value;
+                        }
+                        
+                        // Merge events to ensure complete history
+                        foreach (var evt in execution.Events)
+                        {
+                            if (!existingExecution.Events.Any(e => e.EventId == evt.EventId))
+                            {
+                                existingExecution.Events.Add(evt);
+                            }
+                        }
+                    }
+                    return existingExecution;
+                });
+            
+            Touch();
+        }
+        
+        /// <summary>
+        /// Merges multiple executions at once
+        /// </summary>
+        public void MergeExecutions(IEnumerable<ElementExecution> executions)
+        {
+            if (executions == null) return;
+            
+            foreach (var execution in executions)
+            {
+                MergeExecution(execution);
+            }
+        }
+        
+        /// <summary>
+        /// Checks if an execution status is considered terminal (completed, failed, or terminated)
+        /// </summary>
+        private bool IsExecutionTerminal(ExecutionStatus status)
+        {
+            return status == ExecutionStatus.Completed || 
+                   status == ExecutionStatus.Failed || 
+                   status == ExecutionStatus.Terminated;
+        }
     }
 }

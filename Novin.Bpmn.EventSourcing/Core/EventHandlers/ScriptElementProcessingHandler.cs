@@ -11,27 +11,28 @@ namespace Novin.Bpmn.EventSourcing.Core.EventHandlers;
 /// <summary>
 /// Handles the processing of BPMN elements and tasks
 /// </summary>
-public class ElementProcessingHandler : BaseEventHandler<ElementProcessing>
+public class ScriptElementProcessingHandler : BaseEventHandler<ScriptTaskProcessing>
 {
     private readonly IEventBus _eventBus;
-
+    private readonly ScriptExecuter _scriptExecuter;
     /// <summary>
     /// Creates a new instance of ElementProcessingHandler
     /// </summary>
-    public ElementProcessingHandler(
+    public ScriptElementProcessingHandler(
         IProcessInstanceStateStore stateStore,
         IEventStore eventStore,
         IProcessDeploymentStore definitionStore,
         IEventBus eventBus,
-        ILogger<ElementProcessingHandler> logger)
+        ILogger<ScriptElementProcessingHandler> logger)
         : base(stateStore, eventStore, definitionStore, eventBus, logger)
     {
         _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+        _scriptExecuter = new ScriptExecuter();
     }
-    
+
     /// <inheritdoc />
     protected override async Task ProcessEventAsync(
-        ElementProcessing @event,
+        ScriptTaskProcessing @event,
         EventHandlerContext context,
         CancellationToken cancellationToken)
     {
@@ -42,32 +43,29 @@ public class ElementProcessingHandler : BaseEventHandler<ElementProcessing>
 
         try
         {
-            Logger.LogInformation("Processing element {ElementId} of type {ElementType} in process {ProcessInstanceId}",
-                @event.ElementId, @event.ElementType, @event.InstanceId);
-            
-            // Check if we have an execution ID and update the execution status
-            if (!string.IsNullOrEmpty(@event.ExecutionId))
-            {
-                var execution = context.State.GetExecution(@event.ExecutionId);
-                // Mark execution as Active/Processing if it exists
-                if (execution != null)
-                {
-                    Logger.LogDebug("Updating execution status for {ExecutionId} to Processing", 
-                        @event.ExecutionId);
-                }
-            }
 
-            // Determine the type of element being processed and handle it accordingly
-            await HandleElementTypeAsync(@event, context, cancellationToken);
-            
-            Logger.LogDebug("Successfully processed element {ElementId} in process {ProcessInstanceId}",
-                @event.ElementId, @event.InstanceId);
+            await _scriptExecuter.Execute(@event.Script, context.Execution);
+
+
+            PublishLater(new ElementCompleted
+            {
+                InstanceId = @event.InstanceId,
+                ProcessId = @event.ProcessId,
+                DeploymentId = @event.DeploymentId,
+                DeploymentKey = @event.DeploymentKey,
+                ElementId = @event.ElementId,
+                ElementType = @event.ElementType,
+                ExecutionId = @event.ExecutionId,
+                Timestamp = DateTimeOffset.UtcNow
+
+            });
+
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error processing element {ElementId} in process {ProcessInstanceId}",
                 @event.ElementId, @event.InstanceId);
-                
+
             // Create failed event 
             PublishLater(new ElementFailed
             {
@@ -82,11 +80,11 @@ public class ElementProcessingHandler : BaseEventHandler<ElementProcessing>
                 ErrorMessage = ex.Message,
                 Timestamp = DateTimeOffset.UtcNow
             });
-            
+
             throw;
         }
     }
-    
+
     /// <summary>
     /// Handle the element processing based on element type
     /// </summary>

@@ -263,6 +263,21 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
             LocalVariables[name] = value;
         }
 
+        //SetVariables
+        /// <summary>
+        /// Set multiple local variable values at once
+        /// </summary>
+        public void SetVariables(IDictionary<string, object> variables)
+        {
+            if (variables == null)
+                throw new ArgumentNullException(nameof(variables));
+
+            foreach (var (name, value) in variables)
+            {
+                SetVariable(name, value);
+            }
+        }
+
         /// <summary>
         /// Get a local variable value
         /// </summary>

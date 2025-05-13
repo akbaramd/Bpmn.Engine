@@ -13,6 +13,7 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
     {
         // IBpmnEvent implementation
         public Guid EventId { get; set; }
+        public string? ElemenetId { get; }
         public string EventType { get; set; } = string.Empty;
         public string InstanceId { get; set; } = string.Empty;
         public DateTime Timestamp { get; set; }
@@ -96,7 +97,7 @@ namespace Novin.Bpmn.EventSourcing.Core.Models
             
             foreach (var prop in targetType.GetProperties())
             {
-                if (prop.Name is "EventId" or "EventType" or "InstanceId" or "Timestamp" 
+                if (prop.Name is "EventId" or "EventType" or "InstanceId" or "Timestamp" or"ElementType"
                     or "DeploymentId" or "DeploymentKey" or "CorrelationId")
                     continue; // Already copied above
                 

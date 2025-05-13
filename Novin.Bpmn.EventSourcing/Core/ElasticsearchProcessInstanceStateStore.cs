@@ -14,7 +14,7 @@ public sealed class ElasticsearchProcessInstanceStateStore : IProcessInstanceSta
     private readonly IElasticClient _es;
     private readonly ILogger<ElasticsearchProcessInstanceStateStore> _log;
     private readonly JsonSerializerOptions _json;
-
+    
     public ElasticsearchProcessInstanceStateStore(
         IElasticClient es,
         ILogger<ElasticsearchProcessInstanceStateStore> log)
@@ -51,25 +51,169 @@ public sealed class ElasticsearchProcessInstanceStateStore : IProcessInstanceSta
         ArgumentNullException.ThrowIfNull(state);
         ArgumentException.ThrowIfNullOrWhiteSpace(state.InstanceId);
 
-        if (expectedVersion.HasValue)
-            await EnsureVersionAsync(state.InstanceId, expectedVersion.Value, ct);
+        const int maxRetries = 5;
+        int retryCount = 0;
+        bool success = false;
 
-        var doc = new
+        while (!success && retryCount <= maxRetries)
         {
-            instanceId   = state.InstanceId,
-            deploymentId = state.DeploymentId,
-            deploymentKey= state.DeploymentKey,
-            status       = state.Status.ToString(),
-            version      = expectedVersion.GetValueOrDefault() + 1,
-            state        = JsonSerializer.Serialize(state, _json),
-            updatedAt    = DateTime.UtcNow
-        };
+            try
+            {
+                // First get the current document to get sequence numbers for optimistic concurrency
+                var getResponse = await _es.GetAsync<Dictionary<string, object>>(
+                    new DocumentPath<Dictionary<string, object>>(state.InstanceId),
+                    d => d.Index(IndexName)
+                );
+                
+                // Prepare document to index
+                long newVersion = 1; // Default for new documents
+                long? ifSeqNo = null;
+                long? ifPrimaryTerm = null;
+                long currentVersion = 0;
+                
+                if (getResponse.IsValid && getResponse.Found)
+                {
+                    // Document exists, extract current version and always increment it
+                    if (getResponse.Source.TryGetValue("version", out var v))
+                    {
+                        currentVersion = Convert.ToInt64(v);
+                        // Always use DB version + 1, regardless of what expectedVersion is
+                        newVersion = currentVersion + 1;
+                        
+                        // Check expectedVersion only for optimistic concurrency validation
+                        // and only when explicitly provided (not null)
+                        if (expectedVersion.HasValue && currentVersion != expectedVersion.Value)
+                        {
+                            // Instead of failing with an exception, we'll just log a warning 
+                            // and proceed with state merging. This ensures we don't lose updates
+                            // even when concurrent updates are happening despite our locks
+                            _log.LogWarning("Version mismatch for '{InstanceId}'. Expected {ExpectedVersion}, got {CurrentVersion}. " +
+                                           "Proceeding with merged state.",
+                                state.InstanceId, expectedVersion.Value, currentVersion);
+                        }
+                    }
+                    
+                    // Always set sequence number and primary term for optimistic concurrency
+                    ifSeqNo = getResponse.SequenceNumber;
+                    ifPrimaryTerm = getResponse.PrimaryTerm;
+                    
+                    // Always merge with current state if it exists
+                    // This ensures we don't lose updates from parallel flows
+                    var currentJson = getResponse.Source.TryGetValue("state", out var stateJson) 
+                        ? stateJson?.ToString() 
+                        : null;
+                        
+                    if (currentJson != null)
+                    {
+                        var currentState = JsonSerializer.Deserialize<ProcessInstanceState>(currentJson, _json);
+                        if (currentState != null)
+                        {
+                            _log.LogDebug("Merging state for {InstanceId} (retry: {RetryCount}, version: {CurrentVersion} -> {NewVersion})", 
+                                state.InstanceId, retryCount, currentVersion, newVersion);
+                            
+                            MergeStates(state, currentState);
+                        }
+                    }
+                }
+                else if (expectedVersion.HasValue && expectedVersion.Value > 0)
+                {
+                    // Document doesn't exist but expectedVersion is specified (and not zero)
+                    throw new InvalidOperationException(
+                        $"Document '{state.InstanceId}' doesn't exist but version {expectedVersion.Value} was expected");
+                }
+                
+                // Always update the lastUpdatedAt timestamp to ensure proper ordering
+                state.LastUpdatedAt = DateTime.UtcNow;
+                
+                var doc = new
+                {
+                    instanceId   = state.InstanceId,
+                    deploymentId = state.DeploymentId,
+                    deploymentKey= state.DeploymentKey,
+                    status       = state.Status.ToString(),
+                    version      = newVersion,
+                    state        = JsonSerializer.Serialize(state, _json),
+                    updatedAt    = DateTime.UtcNow
+                };
+                
+                // Build the index request
+                var indexRequest = new IndexRequest<object>(IndexName, state.InstanceId)
+                {
+                    Document = doc,
+                    Refresh = Refresh.True
+                };
+                
+                // Apply optimistic concurrency control ONLY if document exists
+                if (ifSeqNo.HasValue && ifPrimaryTerm.HasValue)
+                {
+                    // Both IfSequenceNumber and IfPrimaryTerm must be provided together
+                    indexRequest.IfSequenceNumber = ifSeqNo;
+                    indexRequest.IfPrimaryTerm = ifPrimaryTerm;
+                    
+                    _log.LogDebug("Using optimistic concurrency for {InstanceId}: Version={Version}, SeqNo={SeqNo}, PrimaryTerm={PrimaryTerm}", 
+                        state.InstanceId, newVersion, ifSeqNo, ifPrimaryTerm);
+                }
+                else
+                {
+                    _log.LogDebug("Document {InstanceId} doesn't exist yet, creating new with version 1", state.InstanceId);
+                }
 
-        var resp = await _es.IndexAsync(doc, i => i.Index(IndexName)
-                                                   .Id(state.InstanceId)
-                                                   .Refresh(Refresh.True), ct);
+                var resp = await _es.IndexAsync(indexRequest, ct);
 
-        ThrowIfInvalid(resp, $"index {state.InstanceId}");
+                if (!resp.IsValid)
+                {
+                    if (resp.ServerError?.Status == 409 || 
+                        (resp.ServerError?.Error?.Type?.Contains("conflict") == true))
+                    {
+                        retryCount++;
+                        
+                        if (retryCount > maxRetries)
+                        {
+                            _log.LogError("Failed to update state for {InstanceId} after {MaxRetries} retries due to concurrency conflicts: {Error}", 
+                                state.InstanceId, maxRetries, resp.DebugInformation);
+                            throw new InvalidOperationException(
+                                $"Failed to update state for '{state.InstanceId}' after {maxRetries} retries due to concurrency conflicts");
+                        }
+                        
+                        _log.LogWarning("Concurrency conflict detected for {InstanceId}. Retrying {RetryCount}/{MaxRetries}. Error: {Error}", 
+                            state.InstanceId, retryCount, maxRetries, resp.DebugInformation);
+                            
+                        // Wait before retry with exponential backoff
+                        int delay = Math.Min(100 * (int)Math.Pow(2, retryCount), 5000);
+                        await Task.Delay(delay, ct);
+                    }
+                    else
+                    {
+                        // Not a concurrency issue, throw regular error
+                        ThrowIfInvalid(resp, $"index {state.InstanceId}");
+                    }
+                }
+                else
+                {
+                    success = true;
+                    _log.LogInformation("Successfully updated state for {InstanceId} with version {Version}", 
+                        state.InstanceId, doc.version);
+                }
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Version mismatch"))
+            {
+                retryCount++;
+                
+                if (retryCount > maxRetries)
+                {
+                    _log.LogError(ex, "Failed to update state for {InstanceId} after {MaxRetries} retries", 
+                        state.InstanceId, maxRetries);
+                    throw;
+                }
+                
+                _log.LogWarning("Version mismatch for {InstanceId}. Retrying {RetryCount}/{MaxRetries}", 
+                    state.InstanceId, retryCount, maxRetries);
+                    
+                // Wait before retry with exponential backoff
+                int delay = Math.Min(100 * (int)Math.Pow(2, retryCount), 5000);
+                await Task.Delay(delay, ct);
+            }
+        }
     }
 
     public async Task<StateWithVersion<ProcessInstanceState>?> GetAsync(
@@ -102,7 +246,7 @@ public sealed class ElasticsearchProcessInstanceStateStore : IProcessInstanceSta
 
             long ver = resp.Source.TryGetValue("version", out var v) ? Convert.ToInt64(v) : 0;
 
-            return new StateWithVersion<ProcessInstanceState> { State = obj, Version = ver };
+            return new StateWithVersion<ProcessInstanceState>(obj, ver);
         }
         catch (Exception ex)
         {
@@ -118,14 +262,106 @@ public sealed class ElasticsearchProcessInstanceStateStore : IProcessInstanceSta
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
 
-        if (expectedVersion.HasValue)
-            await EnsureVersionAsync(instanceId, expectedVersion.Value, ct);
+        const int maxRetries = 3;
+        int retryCount = 0;
+        bool success = false;
 
-        var resp = await _es.DeleteAsync(new DeleteRequest(IndexName, instanceId), ct);
-
-        if (resp.ApiCall.HttpStatusCode is 404) return false;
-        ThrowIfInvalid(resp, $"delete {instanceId}");
-        return true;
+        while (!success && retryCount <= maxRetries)
+        {
+            try
+            {
+                // Get the document to get sequence numbers for optimistic concurrency
+                var getResponse = await _es.GetAsync<Dictionary<string, object>>(
+                    new DocumentPath<Dictionary<string, object>>(instanceId),
+                    d => d.Index(IndexName)
+                );
+                
+                // Document doesn't exist
+                if (!getResponse.IsValid || !getResponse.Found)
+                {
+                    return false;
+                }
+                
+                // Check version if specified
+                if (expectedVersion.HasValue)
+                {
+                    if (getResponse.Source.TryGetValue("version", out var v))
+                    {
+                        long currentVersion = Convert.ToInt64(v);
+                        if (currentVersion != expectedVersion.Value)
+                        {
+                            throw new InvalidOperationException(
+                                $"Version mismatch for '{instanceId}'. Expected {expectedVersion.Value}, got {currentVersion}");
+                        }
+                    }
+                }
+                
+                // Use sequence numbers for optimistic concurrency
+                var deleteRequest = new DeleteRequest(IndexName, instanceId)
+                {
+                    IfSequenceNumber = getResponse.SequenceNumber,
+                    IfPrimaryTerm = getResponse.PrimaryTerm,
+                    Refresh = Refresh.True
+                };
+                
+                var resp = await _es.DeleteAsync(deleteRequest, ct);
+                
+                if (!resp.IsValid)
+                {
+                    if (resp.ServerError?.Status == 409 || 
+                        (resp.ServerError?.Error?.Type?.Contains("conflict") == true))
+                    {
+                        retryCount++;
+                        
+                        if (retryCount > maxRetries)
+                        {
+                            _log.LogError("Failed to delete {InstanceId} after {MaxRetries} retries due to concurrency conflicts", 
+                                instanceId, maxRetries);
+                            throw new InvalidOperationException(
+                                $"Failed to delete '{instanceId}' after {maxRetries} retries due to concurrency conflicts");
+                        }
+                        
+                        _log.LogWarning("Concurrency conflict when deleting {InstanceId}. Retrying {RetryCount}/{MaxRetries}", 
+                            instanceId, retryCount, maxRetries);
+                            
+                        // Wait before retry with exponential backoff
+                        await Task.Delay(100 * (int)Math.Pow(2, retryCount), ct);
+                    }
+                    else if (resp.ApiCall.HttpStatusCode is 404)
+                    {
+                        return false;
+                    }
+                    else
+                    {
+                        ThrowIfInvalid(resp, $"delete {instanceId}");
+                    }
+                }
+                else
+                {
+                    success = true;
+                    return true;
+                }
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Version mismatch"))
+            {
+                retryCount++;
+                
+                if (retryCount > maxRetries)
+                {
+                    _log.LogError(ex, "Failed to delete {InstanceId} after {MaxRetries} retries", 
+                        instanceId, maxRetries);
+                    throw;
+                }
+                
+                _log.LogWarning("Version mismatch when deleting {InstanceId}. Retrying {RetryCount}/{MaxRetries}", 
+                    instanceId, retryCount, maxRetries);
+                    
+                // Wait before retry with exponential backoff
+                await Task.Delay(100 * (int)Math.Pow(2, retryCount), ct);
+            }
+        }
+        
+        return false;
     }
 
     public async Task<bool> ExistsAsync(string instanceId, CancellationToken ct = default)
@@ -174,14 +410,6 @@ public sealed class ElasticsearchProcessInstanceStateStore : IProcessInstanceSta
 
     #region ------------- Helpers -------------
 
-    private async Task EnsureVersionAsync(string id, long expected, CancellationToken ct)
-    {
-        var current = await GetAsync(id, ct);
-        if (current?.Version != expected)
-            throw new InvalidOperationException(
-                $"Version mismatch for '{id}'. Expected {expected}, got {current?.Version}");
-    }
-
     private static void ThrowIfInvalid(IResponse resp, string op)
     {
         if (resp.IsValid) return;
@@ -206,6 +434,197 @@ public sealed class ElasticsearchProcessInstanceStateStore : IProcessInstanceSta
                 )));
 
         ThrowIfInvalid(create, $"create-index {IndexName}");
+    }
+
+    /// <summary>
+    /// Merges two process instance states to handle concurrent updates
+    /// </summary>
+    private void MergeStates(ProcessInstanceState target, ProcessInstanceState source)
+    {
+        // Don't merge if the source is a previous version of the target
+        if (source.LastUpdatedAt < target.LastUpdatedAt)
+        {
+            _log.LogDebug("Skipping merge for {InstanceId} as source state is older than target state", target.InstanceId);
+            return;
+        }
+        
+        // Merge variables (target vars take precedence for conflicting keys)
+        foreach (var kvp in source.Variables)
+        {
+            if (!target.Variables.ContainsKey(kvp.Key))
+            {
+                target.Variables[kvp.Key] = kvp.Value;
+                _log.LogDebug("Merged variable {Key} from source state", kvp.Key);
+            }
+        }
+
+        // Merge history by unique event IDs
+        var targetEventIds = target.History.Select(e => e.EventId).ToHashSet();
+        foreach (var evt in source.History)
+        {
+            if (!targetEventIds.Contains(evt.EventId))
+            {
+                target.History.Add(evt);
+                _log.LogDebug("Merged history event {EventId} from source state", evt.EventId);
+            }
+        }
+
+        // Use the new MergeExecutions method to handle executions more safely
+        // This handles all the execution merging logic cleanly
+        target.MergeExecutions(source.Executions.Values);
+        _log.LogDebug("Merged {Count} executions from source state", source.Executions.Count);
+        
+        // Merge subscriptions by ID
+        var targetSubIds = target.Subscriptions.Select(s => s.SubscriptionId).ToHashSet();
+        foreach (var subscription in source.Subscriptions)
+        {
+            if (!targetSubIds.Contains(subscription.SubscriptionId))
+            {
+                target.Subscriptions.Add(subscription);
+                _log.LogDebug("Merged subscription {SubscriptionId} from source state", subscription.SubscriptionId);
+            }
+        }
+        
+        // Merge jobs by ID
+        var targetJobIds = target.Jobs.Select(j => j.JobId).ToHashSet();
+        foreach (var job in source.Jobs)
+        {
+            if (!targetJobIds.Contains(job.JobId))
+            {
+                target.Jobs.Add(job);
+                _log.LogDebug("Merged job {JobId} from source state", job.JobId);
+            }
+        }
+        
+        // Merge incidents by ID
+        var targetIncidentIds = target.Incidents.Select(i => i.IncidentId).ToHashSet();
+        foreach (var incident in source.Incidents)
+        {
+            if (!targetIncidentIds.Contains(incident.IncidentId))
+            {
+                target.Incidents.Add(incident);
+                _log.LogDebug("Merged incident {IncidentId} from source state", incident.IncidentId);
+            }
+        }
+        
+        // Update process status if source is more "terminal" than target
+        if (IsMoreTerminal(source.Status, target.Status))
+        {
+            _log.LogDebug("Updating process status from {OldStatus} to {NewStatus} due to merge", 
+                target.Status, source.Status);
+                
+            target.Status = source.Status;
+            
+            // Copy completion info if applicable
+            if (source.CompletedAt.HasValue)
+            {
+                target.CompletedAt = source.CompletedAt;
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Determines if newStatus represents a more terminal state than oldStatus
+    /// </summary>
+    private bool IsMoreTerminal(ProcessInstanceStatus newStatus, ProcessInstanceStatus oldStatus)
+    {
+        // Terminal states (in order of precedence): Completed > Failed > Terminated/Cancelled
+        // Active states (in order): Active > Waiting > Suspended
+        
+        // If both statuses are the same, there's no change
+        if (newStatus == oldStatus) return false;
+        
+        // If old status is already terminal, don't change it
+        if (oldStatus == ProcessInstanceStatus.Completed ||
+            oldStatus == ProcessInstanceStatus.Failed)
+        {
+            return false;
+        }
+        
+        // Always allow transition to Completed from any non-terminal state
+        if (newStatus == ProcessInstanceStatus.Completed)
+        {
+            return true;
+        }
+        
+        // Allow transition to Failed from any non-terminal and non-Completed state
+        if (newStatus == ProcessInstanceStatus.Failed && 
+            oldStatus != ProcessInstanceStatus.Completed)
+        {
+            return true;
+        }
+        
+        // Allow transition to Terminated/Cancelled from any non-terminal, non-Completed, non-Failed state
+        if ((newStatus == ProcessInstanceStatus.Terminated || newStatus == ProcessInstanceStatus.Cancelled) &&
+            oldStatus != ProcessInstanceStatus.Completed && 
+            oldStatus != ProcessInstanceStatus.Failed)
+        {
+            return true;
+        }
+        
+        // For non-terminal states, prefer more "active" states
+        if (!IsTerminalStatus(oldStatus) && !IsTerminalStatus(newStatus))
+        {
+            // Active > Waiting > Suspended
+            if (newStatus == ProcessInstanceStatus.Active)
+            {
+                return true;
+            }
+            
+            if (newStatus == ProcessInstanceStatus.Waiting && 
+                oldStatus == ProcessInstanceStatus.Suspended)
+            {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /// <summary>
+    /// Merges execution details (variables and events) without changing the execution status
+    /// </summary>
+    private void MergeExecutionDetails(ElementExecution target, ElementExecution source)
+    {
+        // Merge variables
+        foreach (var varKvp in source.LocalVariables)
+        {
+            if (!target.LocalVariables.ContainsKey(varKvp.Key))
+            {
+                target.LocalVariables[varKvp.Key] = varKvp.Value;
+            }
+        }
+        
+        // Merge events by ID
+        var targetEventIds = target.Events.Select(e => e.EventId).ToHashSet();
+        foreach (var evt in source.Events)
+        {
+            if (!targetEventIds.Contains(evt.EventId))
+            {
+                target.Events.Add(evt);
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Check if execution status is terminal (completed, failed, terminated)
+    /// </summary>
+    private bool IsTerminalStatus(ExecutionStatus status)
+    {
+        return status == ExecutionStatus.Completed || 
+               status == ExecutionStatus.Failed ||
+               status == ExecutionStatus.Terminated;
+    }
+    
+    /// <summary>
+    /// Check if process status is terminal
+    /// </summary>
+    private bool IsTerminalStatus(ProcessInstanceStatus status)
+    {
+        return status == ProcessInstanceStatus.Completed ||
+               status == ProcessInstanceStatus.Failed ||
+               status == ProcessInstanceStatus.Terminated ||
+               status == ProcessInstanceStatus.Cancelled;
     }
 
     #endregion

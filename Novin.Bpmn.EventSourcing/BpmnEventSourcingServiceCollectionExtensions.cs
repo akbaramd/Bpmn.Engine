@@ -56,6 +56,7 @@ public static class BpmnEventSourcingServiceCollectionExtensions
             services.AddTransient<IBpmnEventHandler<ElementCreated>, ElementCreatedHandler>();
             services.AddTransient<IBpmnEventHandler<ElementCompleted>, ElementCompletedHandler>();
             services.AddTransient<IBpmnEventHandler<ElementProcessing>, ElementProcessingHandler>();
+            services.AddTransient<IBpmnEventHandler<ScriptTaskProcessing>, ScriptElementProcessingHandler>();
             
             // ثبت هندلرهای وظایف کاربری
             

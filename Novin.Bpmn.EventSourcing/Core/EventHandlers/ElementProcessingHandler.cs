@@ -44,7 +44,7 @@ public class ElementProcessingHandler : BaseEventHandler<ElementProcessing>
         {
             Logger.LogInformation("Processing element {ElementId} of type {ElementType} in process {ProcessInstanceId}",
                 @event.ElementId, @event.ElementType, @event.InstanceId);
-
+            
             // Check if we have an execution ID and update the execution status
             if (!string.IsNullOrEmpty(@event.ExecutionId))
             {

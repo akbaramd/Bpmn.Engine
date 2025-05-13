@@ -48,8 +48,6 @@ public class ProcessStartedHandler : BaseEventHandler<ProcessStarted>
             Logger.LogInformation("Handling process creation for instance {ProcessInstanceId}", 
                 @event.InstanceId);
 
-          
-
             // Get process definition using the process definition ID from the event
             var definition = await GetDefinitionsAsync(@event.DeploymentId, cancellationToken);
 
@@ -73,7 +71,26 @@ public class ProcessStartedHandler : BaseEventHandler<ProcessStarted>
             {
                 Logger.LogDebug("Creating element for start event {StartEventId}", startEvent.id);
                 
-                PublishLater(new ElementCreated
+          
+                
+                // Create the execution for this start event
+                var execution = ElementExecutionBuilder.Init()
+                    .WithProcessInstanceId(@event.InstanceId)
+                    .WithElementId(startEvent.id)
+                    .WithElementType(BpmnElementType.StartEvent)
+                    .WithLocalVariables(context.State.Variables)
+                    .Executable(true)
+                    .Build()
+                    .BuildResult();
+                
+                // Add the execution to the state's concurrent executions dictionary
+                context.State.ConcurrentExecutions[execution.ExecutionId] = execution;
+                
+                Logger.LogDebug("Created execution {ExecutionId} for start event {StartEventId}", 
+                    execution.ExecutionId, startEvent.id);
+                
+                // Create the element created event with this execution ID
+                var elementCreatedEvent = new ElementCreated
                 {
                     InstanceId = @event.InstanceId,
                     DeploymentKey = @event.DeploymentKey,
@@ -82,11 +99,21 @@ public class ProcessStartedHandler : BaseEventHandler<ProcessStarted>
                     ElementId = startEvent.id,
                     ElementType = BpmnElementType.StartEvent,
                     IsExecutable = true,
+                    ExecutionId = execution.ExecutionId,  // Set execution ID explicitly
                     Timestamp = DateTimeOffset.UtcNow
-                });
+                };
+                
+                // Add this event to the execution's history
+                execution.AddEvent(elementCreatedEvent);
+                
+                // Publish the event
+                PublishLater(elementCreatedEvent);
             }
+            
+            // Store the state with the new executions
+            await StateStore.UpsertAsync(context.State, null, cancellationToken);
 
-            Logger.LogInformation("Process instance {ProcessInstanceId} started successfully with {StartEventCount} start events", 
+            Logger.LogInformation("Process instance {ProcessInstanceId} started successfully with {StartEventCount} start events and executions", 
                 @event.InstanceId, startEvents.Count);
         }
         catch (Exception ex)
@@ -108,6 +135,4 @@ public class ProcessStartedHandler : BaseEventHandler<ProcessStarted>
             throw;
         }
     }
-
-   
 }

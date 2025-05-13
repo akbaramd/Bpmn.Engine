@@ -30,13 +30,11 @@ public class InclusiveGatewayExample
              id=""Definitions_1"" 
              targetNamespace=""http://bpmn.io/schema/bpmn"">
   <process id=""MathOperationsProcess"" name=""Math Operations Process"" isExecutable=""true"">
-    <!-- Start of process -->
     <startEvent id=""StartEvent_1"" name=""Start"">
       <outgoing>Flow_Start_Gateway</outgoing>
     </startEvent>
     <sequenceFlow id=""Flow_Start_Gateway"" sourceRef=""StartEvent_1"" targetRef=""InclusiveGateway_Fork"" />
-    
-    <!-- Inclusive Gateway Fork -->
+
     <inclusiveGateway id=""InclusiveGateway_Fork"" name=""Route by Operator"">
       <incoming>Flow_Start_Gateway</incoming>
       <outgoing>Flow_Addition</outgoing>
@@ -44,124 +42,124 @@ public class InclusiveGatewayExample
       <outgoing>Flow_Multiplication</outgoing>
       <outgoing>Flow_Division</outgoing>
     </inclusiveGateway>
-    
-    <!-- Addition Path -->
+
     <sequenceFlow id=""Flow_Addition"" name=""Addition"" sourceRef=""InclusiveGateway_Fork"" targetRef=""ScriptTask_Addition"">
-      <conditionExpression xsi:type=""tFormalExpression"">Variables[""operator""].Equals(""+"") || Variables[""operator""].Equals(""add"")</conditionExpression>
+      <conditionExpression xsi:type=""tFormalExpression""><![CDATA[
+        execution.TryGetVariable(""operator"", out string op) && 
+        (op == ""+"" || op.ToLower() == ""add"")
+      ]]></conditionExpression>
     </sequenceFlow>
     <scriptTask id=""ScriptTask_Addition"" name=""Perform Addition"">
       <incoming>Flow_Addition</incoming>
       <outgoing>Flow_Addition_Merge</outgoing>
-      <script>
-        <![CDATA[
-        // Get input numbers
-        var num1 = Convert.ToDouble(Variables[""num1""]);
-        var num2 = Convert.ToDouble(Variables[""num2""]);
-        
-        // Calculate result
+      <script><![CDATA[
+        execution.TryGetVariable(""num1"", out double num1);
+        execution.TryGetVariable(""num2"", out double num2);
+
         var result = num1 + num2;
-        
-        // Store result and operation info
-        Variables[""result_addition""] = result;
-        Variables[""operation_addition""] = $""{num1} + {num2} = {result}"";
-        Variables[""final_value_addition""] = result;
-        
-        Log($""Addition performed: {num1} + {num2} = {result}"");
-        ]]>
-      </script>
+
+        execution.SetVariables(new Dictionary<string, object>
+        {
+            { ""result_addition"", result },
+            { ""operation_addition"", $""{num1} + {num2} = {result}"" },
+            { ""final_value_addition"", result }
+        });
+
+      ]]></script>
     </scriptTask>
     <sequenceFlow id=""Flow_Addition_Merge"" sourceRef=""ScriptTask_Addition"" targetRef=""InclusiveGateway_Merge"" />
-    
-    <!-- Subtraction Path -->
+
     <sequenceFlow id=""Flow_Subtraction"" name=""Subtraction"" sourceRef=""InclusiveGateway_Fork"" targetRef=""ScriptTask_Subtraction"">
-      <conditionExpression xsi:type=""tFormalExpression"">Variables[""operator""].Equals(""-"") || Variables[""operator""].Equals(""subtract"")</conditionExpression>
+      <conditionExpression xsi:type=""tFormalExpression""><![CDATA[
+        execution.TryGetVariable(""operator"", out string op) &&
+        (op == ""-"" || op.ToLower() == ""subtract"")
+      ]]></conditionExpression>
     </sequenceFlow>
     <scriptTask id=""ScriptTask_Subtraction"" name=""Perform Subtraction"">
       <incoming>Flow_Subtraction</incoming>
       <outgoing>Flow_Subtraction_Merge</outgoing>
-      <script>
-        <![CDATA[
-        // Get input numbers
-        var num1 = Convert.ToDouble(Variables[""num1""]);
-        var num2 = Convert.ToDouble(Variables[""num2""]);
-        
-        // Calculate result
+      <script><![CDATA[
+        execution.TryGetVariable(""num1"", out double num1);
+        execution.TryGetVariable(""num2"", out double num2);
+
         var result = num1 - num2;
-        
-        // Store result and operation info
-        Variables[""result_subtraction""] = result;
-        Variables[""operation_subtraction""] = $""{num1} - {num2} = {result}"";
-        Variables[""final_value_subtraction""] = result;
-        
-        Log($""Subtraction performed: {num1} - {num2} = {result}"");
-        ]]>
-      </script>
+
+        execution.SetVariables(new Dictionary<string, object>
+        {
+            { ""result_subtraction"", result },
+            { ""operation_subtraction"", $""{num1} - {num2} = {result}"" },
+            { ""final_value_subtraction"", result }
+        });
+
+      ]]></script>
     </scriptTask>
     <sequenceFlow id=""Flow_Subtraction_Merge"" sourceRef=""ScriptTask_Subtraction"" targetRef=""InclusiveGateway_Merge"" />
-    
-    <!-- Multiplication Path -->
+
     <sequenceFlow id=""Flow_Multiplication"" name=""Multiplication"" sourceRef=""InclusiveGateway_Fork"" targetRef=""ScriptTask_Multiplication"">
-      <conditionExpression xsi:type=""tFormalExpression"">Variables[""operator""].Equals(""*"") || Variables[""operator""].Equals(""multiply"")</conditionExpression>
+      <conditionExpression xsi:type=""tFormalExpression""><![CDATA[
+        execution.TryGetVariable(""operator"", out string op) &&
+        (op == ""*"" || op.ToLower() == ""multiply"")
+      ]]></conditionExpression>
     </sequenceFlow>
     <scriptTask id=""ScriptTask_Multiplication"" name=""Perform Multiplication"">
       <incoming>Flow_Multiplication</incoming>
       <outgoing>Flow_Multiplication_Merge</outgoing>
-      <script>
-        <![CDATA[
-        // Get input numbers
-        var num1 = Convert.ToDouble(Variables[""num1""]);
-        var num2 = Convert.ToDouble(Variables[""num2""]);
-        
-        // Calculate result
+      <script><![CDATA[
+        execution.TryGetVariable(""num1"", out double num1);
+        execution.TryGetVariable(""num2"", out double num2);
+
         var result = num1 * num2;
-        
-        // Store result and operation info
-        Variables[""result_multiplication""] = result;
-        Variables[""operation_multiplication""] = $""{num1} * {num2} = {result}"";
-        Variables[""final_value_multiplication""] = result;
-        
-        Log($""Multiplication performed: {num1} * {num2} = {result}"");
-        ]]>
-      </script>
+
+        execution.SetVariables(new Dictionary<string, object>
+        {
+            { ""result_multiplication"", result },
+            { ""operation_multiplication"", $""{num1} * {num2} = {result}"" },
+            { ""final_value_multiplication"", result }
+        });
+
+      ]]></script>
     </scriptTask>
     <sequenceFlow id=""Flow_Multiplication_Merge"" sourceRef=""ScriptTask_Multiplication"" targetRef=""InclusiveGateway_Merge"" />
-    
-    <!-- Division Path -->
+
     <sequenceFlow id=""Flow_Division"" name=""Division"" sourceRef=""InclusiveGateway_Fork"" targetRef=""ScriptTask_Division"">
-      <conditionExpression xsi:type=""tFormalExpression"">Variables[""operator""].Equals(""/"") || Variables[""operator""].Equals(""divide"")</conditionExpression>
+      <conditionExpression xsi:type=""tFormalExpression""><![CDATA[
+        execution.TryGetVariable(""operator"", out string op) &&
+        (op == ""/"" || op.ToLower() == ""divide"")
+      ]]></conditionExpression>
     </sequenceFlow>
     <scriptTask id=""ScriptTask_Division"" name=""Perform Division"">
       <incoming>Flow_Division</incoming>
       <outgoing>Flow_Division_Merge</outgoing>
-      <script>
-        <![CDATA[
-        // Get input numbers
-        var num1 = Convert.ToDouble(Variables[""num1""]);
-        var num2 = Convert.ToDouble(Variables[""num2""]);
-        
-        // Check for division by zero
-        if (num2 == 0) {
-            Variables[""result_division""] = ""Error: Division by zero"";
-            Variables[""operation_division""] = $""{num1} / {num2} = Error: Division by zero"";
-            Variables[""final_value_division""] = null;
-            Log(""Division error: Cannot divide by zero"");
-        } else {
-            // Calculate result
-            var result = num1 / num2;
-            
-            // Store result and operation info
-            Variables[""result_division""] = result;
-            Variables[""operation_division""] = $""{num1} / {num2} = {result}"";
-            Variables[""final_value_division""] = result;
-            
-            Log($""Division performed: {num1} / {num2} = {result}"");
+      <script><![CDATA[
+        execution.TryGetVariable(""num1"", out double num1);
+        execution.TryGetVariable(""num2"", out double num2);
+
+        if (num2 == 0)
+        {
+            execution.SetVariables(new Dictionary<string, object>
+            {
+                { ""result_division"", ""Error: Division by zero"" },
+                { ""operation_division"", $""{num1} / {num2} = Error: Division by zero"" },
+                { ""final_value_division"", null }
+            });
+
         }
-        ]]>
-      </script>
+        else
+        {
+            var result = num1 / num2;
+
+            execution.SetVariables(new Dictionary<string, object>
+            {
+                { ""result_division"", result },
+                { ""operation_division"", $""{num1} / {num2} = {result}"" },
+                { ""final_value_division"", result }
+            });
+
+        }
+      ]]></script>
     </scriptTask>
     <sequenceFlow id=""Flow_Division_Merge"" sourceRef=""ScriptTask_Division"" targetRef=""InclusiveGateway_Merge"" />
-    
-    <!-- Inclusive Gateway Merge -->
+
     <inclusiveGateway id=""InclusiveGateway_Merge"" name=""Merge Results"">
       <incoming>Flow_Addition_Merge</incoming>
       <incoming>Flow_Subtraction_Merge</incoming>
@@ -170,56 +168,51 @@ public class InclusiveGatewayExample
       <outgoing>Flow_Merge_Summary</outgoing>
     </inclusiveGateway>
     <sequenceFlow id=""Flow_Merge_Summary"" sourceRef=""InclusiveGateway_Merge"" targetRef=""ScriptTask_Summary"" />
-    
-    <!-- Summarize results -->
+
     <scriptTask id=""ScriptTask_Summary"" name=""Summarize Results"">
       <incoming>Flow_Merge_Summary</incoming>
       <outgoing>Flow_Summary_End</outgoing>
-      <script>
-        <![CDATA[
-        // Create a summary of all operations performed
+      <script><![CDATA[
         var summary = ""Math Operations Summary:\n"";
         var finalValues = new Dictionary<string, object>();
-        
-        if (Variables.ContainsKey(""operation_addition"")) {
-            summary += Variables[""operation_addition""] + ""\n"";
-            finalValues[""addition""] = Variables[""final_value_addition""];
+
+        // Function to add operation results to summary if present
+        bool TryAddOperationResult(string operationKey, string valueKey)
+        {
+            if (execution.TryGetVariable(operationKey, out object operation))
+            {
+                summary += operation + ""\n"";
+                if (execution.TryGetVariable(valueKey, out object value))
+                {
+                    finalValues[valueKey] = value;
+                }
+                return true;
+            }
+            return false;
         }
-        
-        if (Variables.ContainsKey(""operation_subtraction"")) {
-            summary += Variables[""operation_subtraction""] + ""\n"";
-            finalValues[""subtraction""] = Variables[""final_value_subtraction""];
-        }
-        
-        if (Variables.ContainsKey(""operation_multiplication"")) {
-            summary += Variables[""operation_multiplication""] + ""\n"";
-            finalValues[""multiplication""] = Variables[""final_value_multiplication""];
-        }
-        
-        if (Variables.ContainsKey(""operation_division"")) {
-            summary += Variables[""operation_division""] + ""\n"";
-            finalValues[""division""] = Variables[""final_value_division""];
-        }
-        
-        // Store the final summary and values
-        Variables[""operations_summary""] = summary;
-        Variables[""final_values""] = finalValues;
-        
-        // Log the summary
-        Log(""Operations completed successfully"");
-        Log(summary);
-        Log($""Final values: {string.Join("", "", finalValues.Select(kv => $""{kv.Key}: {kv.Value}""))}"");
-        ]]>
-      </script>
+
+        // Check and add each operation's results
+        TryAddOperationResult(""operation_addition"", ""final_value_addition"");
+        TryAddOperationResult(""operation_subtraction"", ""final_value_subtraction"");
+        TryAddOperationResult(""operation_multiplication"", ""final_value_multiplication"");
+        TryAddOperationResult(""operation_division"", ""final_value_division"");
+
+        execution.SetVariables(new Dictionary<string, object>
+        {
+            { ""operations_summary"", summary },
+            { ""final_values"", finalValues }
+        });
+
+      ]]></script>
     </scriptTask>
     <sequenceFlow id=""Flow_Summary_End"" sourceRef=""ScriptTask_Summary"" targetRef=""EndEvent_1"" />
-    
-    <!-- End of process -->
+
     <endEvent id=""EndEvent_1"" name=""End"">
       <incoming>Flow_Summary_End</incoming>
     </endEvent>
   </process>
 </definitions>";
+
 
     private const string DeploymentKeyBase = "math-operations-example";
     private const int ProcessingDelay = 500;

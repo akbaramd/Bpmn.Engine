@@ -64,7 +64,7 @@ public class ElementCreatedHandler : BaseEventHandler<ElementCreated>
             var definitionExplorer = GetDefiantionExplorer(definition);
             
             // Get the execution from context - it should have been created in PrepareContextAsync in BaseEventHandler
-            var execution = context.CurrentExecution;
+            var execution = context.Execution;
             if (execution == null)
             {
                 throw new InvalidOperationException($"Execution not found for element {@event.ElementId}");
@@ -137,7 +137,7 @@ public class ElementCreatedHandler : BaseEventHandler<ElementCreated>
         DefiantionExplorer definitionExplorer,
         CancellationToken cancellationToken)
     {
-        var execution = context.CurrentExecution;
+        var execution = context.Execution;
         
         // Only handle gateway types that can act as merges
         if (!(@event.ElementType == BpmnElementType.ParallelGateway ||
@@ -165,7 +165,7 @@ public class ElementCreatedHandler : BaseEventHandler<ElementCreated>
         }
         
         // Get all ElementCreated events for this execution
-        var receivedEvents = context.CurrentExecution.Events
+        var receivedEvents = context.Execution.Events
             .OfType<SerializableBpmnEvent>()
             .Where(e => e.EventType == "ElementCreated" && !string.IsNullOrEmpty(e.SequenceFlowId))
             .ToList();
@@ -220,8 +220,9 @@ public class ElementCreatedHandler : BaseEventHandler<ElementCreated>
             // Gateway needs to wait for more flows to be activated
             execution.Status = ExecutionStatus.Waiting;
             
-            // Store the current state with the waiting execution
-            await StateStore.UpsertAsync(context.State, ct: cancellationToken);
+            // Store the current state with the waiting execution - use the proper version from BaseEventHandler
+            // This will be handled by the BaseEventHandler's retry mechanism if there's a conflict
+            // We don't need to call UpsertAsync directly here as it will be called in the main handler
             
             Logger.LogInformation("Gateway {ElementId} of type {ElementType} is waiting for more flows ({Current}/{Required})",
                 @event.ElementId, @event.ElementType, receivedFlowIds.Count, incomingFlows.Count);
@@ -255,8 +256,8 @@ public class ElementCreatedHandler : BaseEventHandler<ElementCreated>
             }
         }
         
-        // Store updated state
-        await StateStore.UpsertAsync(context.State, ct: cancellationToken);
+        // We don't need to call UpsertAsync here as it will be called in the main handler's flow
+        // with proper versioning and retry mechanism
         
         return false; // Indicate that processing should continue
     }
