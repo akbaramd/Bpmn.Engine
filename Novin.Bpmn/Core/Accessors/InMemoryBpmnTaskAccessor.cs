@@ -1,11 +1,8 @@
-using Novin.Bpmn.Contracts;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using Novin.Bpmn.Contracts.Accessors;
+using Novin.Bpmn.V3.UserTasks;
 
-namespace Novin.Bpmn.V3.UserTasks
+namespace Novin.Bpmn.Core.Accessors
 {
     /// <summary>
     /// پیاده‌سازی دسترسی به وظایف کاربری BPMN در حافظه

@@ -1,12 +1,8 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Xml.Linq;
+using Novin.Bpmn.Contracts.Accessors;
 
-namespace Novin.Bpmn.Core
+namespace Novin.Bpmn.Core.Accessors
 {
     /// <summary>
     /// پیاده‌سازی دسترسی به تعاریف BPMN در حافظه

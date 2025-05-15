@@ -1,16 +1,12 @@
-﻿using Novin.Bpmn;
-using Novin.Bpmn.Contracts;
-using Novin.Bpmn.Core;
-using Novin.Bpmn.Models;
+﻿using Novin.Bpmn.Contracts.Accessors;
+using Novin.Bpmn.Contracts.Managers;
+using Novin.Bpmn.Models.Models;
 using Novin.Bpmn.V3;
 using Novin.Bpmn.V3.Events;
 using Novin.Bpmn.V3.Handlers.Gateways;
 using Novin.Bpmn.V3.UserTasks;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using System.Xml;
+
+namespace Novin.Bpmn.Core.Managers;
 
 public class BpmnProcessManager : IBpmnProcessManager
 {
@@ -283,7 +279,7 @@ public class BpmnProcessManager : IBpmnProcessManager
                             // چون توکن در حالت انتظار قرار می‌گیرد، به ادامه پردازش نیازی نیست
                             continue;
                         }
-                        else if (currentElement is Novin.Bpmn.Models.BpmnTask task)
+                        else if (currentElement is BpmnTask task)
                         {
                             // اجرای وظیفه ساده
                             Console.WriteLine($"Executing task {task.id}");

@@ -1,6 +1,8 @@
 using Novin.Bpmn.V3.UserTasks;
 using System;
 using System.Collections.Generic;
+using Novin.Bpmn.Contracts.Accessors;
+using Novin.Bpmn.V3;
 
 namespace Novin.Bpmn.Core
 {

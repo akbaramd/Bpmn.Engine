@@ -3,7 +3,9 @@ using System.IO;
 using System.Threading.Tasks;
 using Novin.Bpmn;
 using Novin.Bpmn.Core;
+using Novin.Bpmn.Core.Managers;
 using Novin.Bpmn.Models;
+using Novin.Bpmn.V3;
 using Xunit;
 
 namespace Novin.Bpmn.Test

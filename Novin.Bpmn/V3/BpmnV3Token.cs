@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace Novin.Bpmn
+﻿namespace Novin.Bpmn.V3
 {
     public class BpmnV3Token
     {

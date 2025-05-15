@@ -1,10 +1,9 @@
-﻿using System;
-using System.CodeDom.Compiler;
+﻿using System.CodeDom.Compiler;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Xml.Serialization;
 
-namespace Novin.Bpmn.Models;
+namespace Novin.Bpmn.Models.Models;
 
 /// <summary>
 /// Represents a Timer Event Definition in a BPMN process.

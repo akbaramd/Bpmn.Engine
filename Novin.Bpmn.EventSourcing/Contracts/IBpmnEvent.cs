@@ -15,7 +15,7 @@ public interface IBpmnEvent
     /// <summary>
     /// شناسه نمونه فرآیند
     /// </summary>
-    string InstanceId { get; }
+    Guid InstanceId { get; }
     
     public string DeploymentKey { get; }
     public Guid DeploymentId { get; }

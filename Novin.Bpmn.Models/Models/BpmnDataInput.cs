@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.Xml;
 using System.Xml.Serialization;
 
-namespace Novin.Bpmn.Models;
+namespace Novin.Bpmn.Models.Models;
 
 /// <remarks/>
 [GeneratedCode("xsd", "4.8.3928.0")]

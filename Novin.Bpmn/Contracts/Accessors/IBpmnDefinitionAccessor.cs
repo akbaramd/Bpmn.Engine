@@ -1,10 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Threading.Tasks;
-using Novin.Bpmn.Contracts;
-
-namespace Novin.Bpmn.Core
+namespace Novin.Bpmn.Contracts.Accessors
 {
     /// <summary>
     /// رابط دسترسی به تعاریف فرآیندهای BPMN

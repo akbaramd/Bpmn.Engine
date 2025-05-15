@@ -3,6 +3,7 @@ using Novin.Bpmn.V3;
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using Novin.Bpmn.Core.Managers;
 using Xunit;
 using Xunit.Abstractions;
 

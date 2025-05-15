@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Novin.Bpmn.Contracts.Accessors;
+using Novin.Bpmn.Contracts.Managers;
 
 namespace Novin.Bpmn
 {

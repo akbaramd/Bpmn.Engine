@@ -1,15 +1,7 @@
-using System;
-using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Novin.Bpmn.EventSourcing;
-using Novin.Bpmn.EventSourcing.Contracts;
-using Novin.Bpmn.EventSourcing.Core;
-using Novin.Bpmn.EventSourcing.Examples;
-using Novin.Bpmn.Models;
 
-namespace Novin.Bpmn.EventSourcingApp;
+namespace Novin.Bpmn.EventSourcing;
 
 class Program
 {
@@ -50,7 +42,6 @@ class Program
         switch (choice)
         {
             case "1":
-                await InclusiveGatewayExample.RunAsync();
                 break;
             default:
                 Console.WriteLine("Invalid option. Please try again.");
@@ -71,9 +62,6 @@ class Program
             })
             .ConfigureServices((hostContext, services) =>
             {
-                services.AddBpmnEventSourcing();
-                services.AddBpmnEventSourcing();
-                services.AddBpmnEventHandlers(typeof(Program).Assembly);
             })
             .Build();
 

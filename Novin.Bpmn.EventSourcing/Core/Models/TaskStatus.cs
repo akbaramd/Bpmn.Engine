@@ -1,4 +1,4 @@
-namespace Novin.Bpmn.EventSourcing.Core;
+namespace Novin.Bpmn.EventSourcing.Core.Models;
 
 /// <summary>
 /// وضعیت وظیفه

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Novin.Bpmn.Models;
+using Novin.Bpmn.Models.Models;
 
 namespace Novin.Bpmn.EventSourcing.Core.Models;
 

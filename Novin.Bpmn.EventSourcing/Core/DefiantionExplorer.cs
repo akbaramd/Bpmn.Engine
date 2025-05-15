@@ -1,6 +1,9 @@
 // create class
+
 using Novin.Bpmn.EventSourcing.Events;
-using Novin.Bpmn.Models;
+using Novin.Bpmn.Models.Models;
+
+namespace Novin.Bpmn.EventSourcing.Core;
 
 public class DefiantionExplorer
 {

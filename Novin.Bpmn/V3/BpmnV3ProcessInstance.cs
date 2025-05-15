@@ -1,14 +1,10 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
+﻿using System.Collections.Concurrent;
 using System.Dynamic;
-using System.Linq;
-using System.Threading.Tasks;
 using Newtonsoft.Json;
-using Novin.Bpmn;
 using Novin.Bpmn.Core;
-using Novin.Bpmn.Models;
-using Novin.Bpmn.V3;
+using Novin.Bpmn.Models.Models;
+
+namespace Novin.Bpmn.V3;
 
 public class BpmnV3ProcessInstance
 {
@@ -297,7 +293,7 @@ public class BpmnV3ProcessInstance
                         parentTokenToUse.Status == TokenStatus.PendingToMerge ||
                         parentTokenToUse.Status == TokenStatus.Expired)
                     {
-                    parentTokenToUse.Reactivate();
+                        parentTokenToUse.Reactivate();
                     }
                     
                     // Set token executable if any incoming token was executable
@@ -363,7 +359,7 @@ public class BpmnV3ProcessInstance
                 Console.WriteLine($"Creating token for flow {flow.id}, executable: {tokenIsExecutable}");
                 // ایجاد توکن جدید و انتقال به المان بعدی
                 var newToken = CreateToken(flow.targetRef, flow.id, tokenIsExecutable);
-                    newToken.ParentTokenId = token.Id;
+                newToken.ParentTokenId = token.Id;
                 
                 // ثبت ایجاد توکن جدید
                 TrackNodeExecution(flow.targetRef, newToken.Id, tokenIsExecutable);
@@ -374,11 +370,11 @@ public class BpmnV3ProcessInstance
             else
             {
                 // ایجاد توکن غیر اجرایی برای نمایش
-                    var inactiveToken = CreateUnExecutableToken(flow.targetRef, flow.id);
+                var inactiveToken = CreateUnExecutableToken(flow.targetRef, flow.id);
                 TrackNodeExecution(flow.targetRef, inactiveToken.Id, false);
-                    inactiveToken.ParentTokenId = token.Id;
-                }
+                inactiveToken.ParentTokenId = token.Id;
             }
+        }
         
         // توکن اصلی را تکمیل می‌کنیم چون کار آن تمام شده است
         token.Complete();
@@ -458,9 +454,9 @@ public class BpmnV3ProcessInstance
                     
                     Console.WriteLine($"Using token {parentTokenToUse.Id} to proceed from gateway {gateway.id}");
                     shouldContinue = true;
-            }
-            else
-            {
+                }
+                else
+                {
                     // اگر توکن والد پیدا نشد، از توکن فعلی استفاده می‌کنیم
                     Console.WriteLine($"No parent token found, using current token {token.Id}");
                     parentTokenToUse = token;
@@ -479,8 +475,8 @@ public class BpmnV3ProcessInstance
                     
                     shouldContinue = true;
                 }
-        }
-        else
+            }
+            else
             {
                 // هنوز به تعداد کافی توکن دریافت نشده است
                 Console.WriteLine($"Waiting for more tokens at inclusive gateway {gateway.id}. Received {tokensAtGateway.Count}/{incomingFlows.Count}");
@@ -518,7 +514,7 @@ public class BpmnV3ProcessInstance
             // 2. بررسی آیا توکن‌های منتظری روی ورودی یا خروجی این فلو وجود دارند
             var tokensOnFlow = Tokens
                 .Where(t => t.History.Any(h => h.FlowId == flow.id) &&
-                          (t.Status == TokenStatus.Active || t.Status == TokenStatus.Waiting))
+                            (t.Status == TokenStatus.Active || t.Status == TokenStatus.Waiting))
                 .ToList();
                 
             if (tokensOnFlow.Any())
@@ -549,7 +545,7 @@ public class BpmnV3ProcessInstance
             var sourceElementId = flow.sourceRef;
             var tokensOnSourceElement = Tokens
                 .Where(t => t.CurrentElementId == sourceElementId &&
-                          (t.Status == TokenStatus.Active || t.Status == TokenStatus.Waiting))
+                            (t.Status == TokenStatus.Active || t.Status == TokenStatus.Waiting))
                 .ToList();
                 
             if (tokensOnSourceElement.Any())
@@ -575,7 +571,7 @@ public class BpmnV3ProcessInstance
                     {
                         var activeTokensOnAttachedElement = Tokens
                             .Where(t => t.CurrentElementId == attachedToElement.id && 
-                                      (t.Status == TokenStatus.Active || t.Status == TokenStatus.Waiting))
+                                        (t.Status == TokenStatus.Active || t.Status == TokenStatus.Waiting))
                             .Any();
                             
                         if (activeTokensOnAttachedElement)
@@ -612,7 +608,7 @@ public class BpmnV3ProcessInstance
             // بررسی اگر حداقل یک توکن در مسیرهای ورودی وجود دارد
             var anyTokensOnIncomingPaths = Tokens
                 .Where(t => t.History.Any(h => incomingFlows.Any(flow => flow.id == h.FlowId)) &&
-                          (t.Status == TokenStatus.Active || t.Status == TokenStatus.Waiting))
+                            (t.Status == TokenStatus.Active || t.Status == TokenStatus.Waiting))
                 .Any();
                 
             if (anyTokensOnIncomingPaths)
@@ -657,7 +653,7 @@ public class BpmnV3ProcessInstance
             {
                 var activeTokensOnAttachedElement = Tokens
                     .Where(t => t.CurrentElementId == attachedElement.id && 
-                               (t.Status == TokenStatus.Active || t.Status == TokenStatus.Waiting))
+                                (t.Status == TokenStatus.Active || t.Status == TokenStatus.Waiting))
                     .Any();
                 
                 // If this is a non-interrupting boundary event and there are active tokens
@@ -804,22 +800,22 @@ public class BpmnV3ProcessInstance
             {
                 // ایجاد توکن جدید و فعال
                 var newToken = CreateToken(flow.targetRef, flow.id, tokenIsExecutable);
-                    newToken.ParentTokenId = token.Id;
+                newToken.ParentTokenId = token.Id;
                 
                 // ثبت ایجاد توکن جدید
                 TrackNodeExecution(flow.targetRef, newToken.Id, tokenIsExecutable);
                 
-                    Console.WriteLine($"Created executable token {newToken.Id} to {flow.targetRef}");
+                Console.WriteLine($"Created executable token {newToken.Id} to {flow.targetRef}");
             }
             else
             {
                 // ایجاد توکن غیرفعال برای نمایش
-                    var inactiveToken = CreateUnExecutableToken(flow.targetRef, flow.id);
-                    inactiveToken.ParentTokenId = token.Id;
+                var inactiveToken = CreateUnExecutableToken(flow.targetRef, flow.id);
+                inactiveToken.ParentTokenId = token.Id;
                 
-                    Console.WriteLine($"Created non-executable token {inactiveToken.Id} to {flow.targetRef}");
-                }
+                Console.WriteLine($"Created non-executable token {inactiveToken.Id} to {flow.targetRef}");
             }
+        }
 
         // برای مسیرهای غیرانتخابی، توکن‌های غیرفعال ایجاد می‌کنیم
         foreach (var flow in outgoingFlows.Where(f => !selectedFlows.Contains(f)))
@@ -924,7 +920,7 @@ public class BpmnV3ProcessInstance
         bool tokenIsExecutable = isExecutable ?? token.IsExecutable;
         
         // مسیرهای خروجی را بررسی می‌کنیم
-                var outgoingFlows = DefinitionsHandler.GetOutgoingSequenceFlows(gateway);
+        var outgoingFlows = DefinitionsHandler.GetOutgoingSequenceFlows(gateway);
 
         // یافتن مسیر پیش‌فرض (در صورت وجود)
         BpmnSequenceFlow defaultFlow = null;
@@ -950,13 +946,13 @@ public class BpmnV3ProcessInstance
                 TrackFlowExecution(flow.id, token.Id, Guid.Empty, flowExecutable);
                 
                 if (flowExecutable)
-                    {
-                        var newToken = CreateToken(flow.targetRef, flow.id);
+                {
+                    var newToken = CreateToken(flow.targetRef, flow.id);
                     newToken.ParentTokenId = token.Id;
-                    }
-                    else
-                    {
-                        var inactiveToken = CreateUnExecutableToken(flow.targetRef, flow.id);
+                }
+                else
+                {
+                    var inactiveToken = CreateUnExecutableToken(flow.targetRef, flow.id);
                     inactiveToken.ParentTokenId = token.Id;
                 }
             }

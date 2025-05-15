@@ -29,4 +29,10 @@
         <Resource Include="Bpmn\diagram.bpmn"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <None Update="Bpmn\diagram_2.bpmn">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+
 </Project>

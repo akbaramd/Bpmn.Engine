@@ -1,14 +1,9 @@
-using Novin.Bpmn.Contracts;
-using Novin.Bpmn.Core;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Xml.Linq;
+using Novin.Bpmn.Contracts.Accessors;
+using Novin.Bpmn.Contracts.Managers;
 
-namespace Novin.Bpmn
+namespace Novin.Bpmn.Core.Managers
 {
     /// <summary>
     /// پیاده‌سازی مدیریت تعاریف فرآیندهای BPMN با پشتیبانی از نسخه‌بندی

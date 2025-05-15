@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_multi_timer" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.30.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.18.0">
+  <bpmn:process id="process_multi_timer" name="Multiple Timer Process" isExecutable="true" camunda:historyTimeToLive="180">
+    <bpmn:startEvent id="start_event" name="Start">
+      <bpmn:outgoing>flow_to_task1</bpmn:outgoing>
+    </bpmn:startEvent>
+    
+    <!-- Main long-running task with multiple timers -->
+    <bpmn:scriptTask id="task_long_running" name="Long Running Task">
+      <bpmn:incoming>flow_to_task1</bpmn:incoming>
+      <bpmn:outgoing>flow_to_end</bpmn:outgoing>
+      <bpmn:script>Console.WriteLine("Starting long running task with multiple timers");
+// Long running task that will trigger multiple timers
+await Task.Delay(10000);</bpmn:script>
+    </bpmn:scriptTask>
+    
+    <bpmn:sequenceFlow id="flow_to_task1" sourceRef="start_event" targetRef="task_long_running" />
+    
+    <!-- Non-interrupting timer 1 (fires at 1 second) -->
+    <bpmn:boundaryEvent id="timer1" name="Timer 1s" cancelActivity="false" attachedToRef="task_long_running">
+      <bpmn:outgoing>flow_timer1</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_1">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT1S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    
+    <!-- Non-interrupting timer 2 (fires at 3 seconds) -->
+    <bpmn:boundaryEvent id="timer2" name="Timer 3s" cancelActivity="false" attachedToRef="task_long_running">
+      <bpmn:outgoing>flow_timer2</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_2">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT3S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    
+    <!-- Interrupting timer (fires at 7 seconds) -->
+    <bpmn:boundaryEvent id="timer3" name="Timer 7s (Interrupting)" attachedToRef="task_long_running">
+      <bpmn:outgoing>flow_timer3</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_3">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT7S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    
+    <!-- Task for timer 1 -->
+    <bpmn:scriptTask id="task_timer1" name="Timer 1 Task">
+      <bpmn:incoming>flow_timer1</bpmn:incoming>
+      <bpmn:outgoing>flow_timer1_to_gateway</bpmn:outgoing>
+      <bpmn:script>Console.WriteLine("Executing Timer 1 Task (non-interrupting, 1s)");
+await Task.Delay(500);</bpmn:script>
+    </bpmn:scriptTask>
+    
+    <bpmn:sequenceFlow id="flow_timer1" sourceRef="timer1" targetRef="task_timer1" />
+    
+    <!-- Task for timer 2 -->
+    <bpmn:scriptTask id="task_timer2" name="Timer 2 Task">
+      <bpmn:incoming>flow_timer2</bpmn:incoming>
+      <bpmn:outgoing>flow_timer2_to_gateway</bpmn:outgoing>
+      <bpmn:script>Console.WriteLine("Executing Timer 2 Task (non-interrupting, 3s)");
+await Task.Delay(500);</bpmn:script>
+    </bpmn:scriptTask>
+    
+    <bpmn:sequenceFlow id="flow_timer2" sourceRef="timer2" targetRef="task_timer2" />
+    
+    <!-- Task for interrupting timer -->
+    <bpmn:scriptTask id="task_timer3" name="Timer 3 Task">
+      <bpmn:incoming>flow_timer3</bpmn:incoming>
+      <bpmn:outgoing>flow_timer3_to_end</bpmn:outgoing>
+      <bpmn:script>Console.WriteLine("Executing Timer 3 Task (interrupting, 7s)");
+await Task.Delay(500);</bpmn:script>
+    </bpmn:scriptTask>
+    
+    <bpmn:sequenceFlow id="flow_timer3" sourceRef="timer3" targetRef="task_timer3" />
+    
+    <!-- Inclusive Gateway to join non-interrupting timer flows -->
+    <bpmn:inclusiveGateway id="join_gateway" name="Join Gateway">
+      <bpmn:incoming>flow_timer1_to_gateway</bpmn:incoming>
+      <bpmn:incoming>flow_timer2_to_gateway</bpmn:incoming>
+      <bpmn:outgoing>flow_join_to_end</bpmn:outgoing>
+    </bpmn:inclusiveGateway>
+    
+    <bpmn:sequenceFlow id="flow_timer1_to_gateway" sourceRef="task_timer1" targetRef="join_gateway" />
+    <bpmn:sequenceFlow id="flow_timer2_to_gateway" sourceRef="task_timer2" targetRef="join_gateway" />
+    
+    <!-- Normal end flow -->
+    <bpmn:sequenceFlow id="flow_to_end" sourceRef="task_long_running" targetRef="end_event" />
+    
+    <!-- Flows to end -->
+    <bpmn:sequenceFlow id="flow_join_to_end" sourceRef="join_gateway" targetRef="end_event" />
+    <bpmn:sequenceFlow id="flow_timer3_to_end" sourceRef="task_timer3" targetRef="end_event" />
+    
+    <bpmn:endEvent id="end_event" name="End">
+      <bpmn:incoming>flow_to_end</bpmn:incoming>
+      <bpmn:incoming>flow_join_to_end</bpmn:incoming>
+      <bpmn:incoming>flow_timer3_to_end</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="process_multi_timer">
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="start_event">
+        <dc:Bounds x="152" y="232" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="158" y="275" width="24" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_task_long_running_di" bpmnElement="task_long_running">
+        <dc:Bounds x="280" y="210" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_task_timer1_di" bpmnElement="task_timer1">
+        <dc:Bounds x="440" y="100" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_task_timer2_di" bpmnElement="task_timer2">
+        <dc:Bounds x="440" y="320" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_task_timer3_di" bpmnElement="task_timer3">
+        <dc:Bounds x="440" y="210" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_join_gateway_di" bpmnElement="join_gateway">
+        <dc:Bounds x="605" y="215" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="597" y="185" width="65" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_end_event_di" bpmnElement="end_event">
+        <dc:Bounds x="762" y="232" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="770" y="275" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_timer1_di" bpmnElement="timer1">
+        <dc:Bounds x="312" y="192" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="344" y="172" width="38" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_timer2_di" bpmnElement="timer2">
+        <dc:Bounds x="312" y="272" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="345" y="293" width="38" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_timer3_di" bpmnElement="timer3">
+        <dc:Bounds x="282" y="272" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="258" y="315" width="90" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_flow_to_task1_di" bpmnElement="flow_to_task1">
+        <di:waypoint x="188" y="250" />
+        <di:waypoint x="280" y="250" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_flow_timer1_di" bpmnElement="flow_timer1">
+        <di:waypoint x="330" y="192" />
+        <di:waypoint x="330" y="140" />
+        <di:waypoint x="440" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_flow_timer2_di" bpmnElement="flow_timer2">
+        <di:waypoint x="330" y="308" />
+        <di:waypoint x="330" y="360" />
+        <di:waypoint x="440" y="360" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_flow_timer3_di" bpmnElement="flow_timer3">
+        <di:waypoint x="300" y="308" />
+        <di:waypoint x="300" y="339" />
+        <di:waypoint x="370" y="339" />
+        <di:waypoint x="370" y="250" />
+        <di:waypoint x="440" y="250" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_flow_timer1_to_gateway_di" bpmnElement="flow_timer1_to_gateway">
+        <di:waypoint x="540" y="140" />
+        <di:waypoint x="630" y="140" />
+        <di:waypoint x="630" y="215" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_flow_timer2_to_gateway_di" bpmnElement="flow_timer2_to_gateway">
+        <di:waypoint x="540" y="360" />
+        <di:waypoint x="630" y="360" />
+        <di:waypoint x="630" y="265" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_flow_to_end_di" bpmnElement="flow_to_end">
+        <di:waypoint x="380" y="250" />
+        <di:waypoint x="762" y="250" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_flow_join_to_end_di" bpmnElement="flow_join_to_end">
+        <di:waypoint x="655" y="240" />
+        <di:waypoint x="762" y="240" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_flow_timer3_to_end_di" bpmnElement="flow_timer3_to_end">
+        <di:waypoint x="540" y="250" />
+        <di:waypoint x="762" y="250" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions> 

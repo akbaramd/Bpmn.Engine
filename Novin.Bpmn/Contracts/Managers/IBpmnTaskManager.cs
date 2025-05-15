@@ -1,10 +1,7 @@
-using Novin.Bpmn.Contracts;
+using Novin.Bpmn.Contracts.Accessors;
 using Novin.Bpmn.V3.UserTasks;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
-namespace Novin.Bpmn.Contracts
+namespace Novin.Bpmn.Contracts.Managers
 {
     /// <summary>
     /// رابط مدیریت وظایف کاربری BPMN

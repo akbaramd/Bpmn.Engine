@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Novin.Bpmn.Core.Managers;
+using Novin.Bpmn.V3;
 using Xunit;
 using Xunit.Abstractions;
 

@@ -16,8 +16,8 @@ public abstract record ElementEvent : BpmnEvent
      
 
         public required string          ElementId     { get; init; }
-        public required BpmnElementType ElementType   { get; init; }  // نوع المان :contentReference[oaicite:4]{index=4}:contentReference[oaicite:5]{index=5}
-        public string?                 ExecutionId   { get; set; }
+        public required string ElementType   { get; init; }  // نوع المان :contentReference[oaicite:4]{index=4}:contentReference[oaicite:5]{index=5}
+        public Guid                 ExecutionId   { get; set; }
         public bool                   IsExecutable  { get; init; } = true;
         public int                    Version       { get; init; } = 1;
 }

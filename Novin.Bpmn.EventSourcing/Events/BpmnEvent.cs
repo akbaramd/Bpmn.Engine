@@ -12,7 +12,7 @@ public record BpmnEvent : IBpmnEvent
     public Guid EventId { get; init; } = Guid.NewGuid();
     
     /// <inheritdoc />
-    public required string InstanceId { get; init; }
+    public required Guid InstanceId { get; init; }
     public required string ProcessId { get; init; }
     
     public required string DeploymentKey { get; init ; }

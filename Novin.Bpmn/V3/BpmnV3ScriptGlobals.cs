@@ -1,4 +1,4 @@
-﻿namespace Novin.Bpmn;
+﻿namespace Novin.Bpmn.V3;
 
 public class BpmnV3ScriptGlobals
 {

@@ -1,11 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Novin.Bpmn.Contracts;
-using Novin.Bpmn.Models;
+using Novin.Bpmn.Contracts.Accessors;
+using Novin.Bpmn.Contracts.Managers;
+using Novin.Bpmn.V3.UserTasks;
 
-namespace Novin.Bpmn.V3.UserTasks
+namespace Novin.Bpmn.Core.Managers
 {
     /// <summary>
     /// مدیریت وظایف کاربری در موتور BPMN

@@ -1,11 +1,8 @@
-using Novin.Bpmn.V3;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using Novin.Bpmn.Contracts.Accessors;
+using Novin.Bpmn.V3;
 
-namespace Novin.Bpmn.Core
+namespace Novin.Bpmn.Core.Accessors
 {
     /// <summary>
     /// پیاده‌سازی دسترسی به نمونه‌های فرآیند BPMN در حافظه
