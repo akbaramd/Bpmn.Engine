@@ -1,25 +1,33 @@
 ﻿using Novin.Bpmn.EventSourcing.Core.Executions;
+using Novin.Bpmn.EventSourcing.Core.Topology;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using ExecutionContext = Novin.Bpmn.EventSourcing.Core.Executions.ExecutionContext;
-
 
 public class JoinResolverService : IJoinResolverService
 {
-    public bool CanJoin(FlowTopology topology, string joinNodeId, IEnumerable<ExecutionContext> executionContexts)
+    public bool CanJoin(FlowTopology topology, string joinNodeId, IEnumerable<ExecutionContext> allContexts)
     {
-        // 1. بررسی می‌کند که آیا همه شاخه‌های ورودی به Join به حالت Completed رسیده‌اند.
+        if (!topology.Incoming.TryGetValue(joinNodeId, out var incomingIds))
+            return false;
 
-        var incomingBranches = topology.Incoming.TryGetValue(joinNodeId, out var sources)
-            ? sources
-            : new List<string>();
+        // کانتکست‌هایی که متعلق به شاخه‌های ورودی هستند (یعنی آخرین المان مسیرشان در incomingIds هست)
+        var relevantContexts = allContexts
+            .Where(c => c.Path != null && c.Path.Any())
+            .Where(c => incomingIds.Contains(c.Path.Last()))
+            .ToList();
 
-        foreach (var branchId in incomingBranches)
+        var activeBranches = relevantContexts
+            .Select(c => c.Path.Last())
+            .Distinct()
+            .ToHashSet();
+
+        foreach (var branch in activeBranches)
         {
-            var context = executionContexts.FirstOrDefault(c => c.CurrentElementId == branchId);
-            if (context == null || context.State != ExecutionState.Completed)
-            {
-                // حداقل یک شاخه کامل نشده
+            var ctx = relevantContexts.FirstOrDefault(c => c.Path.Last() == branch);
+            if (ctx == null || ctx.State != ExecutionState.Completed)
                 return false;
-            }
         }
 
         return true;
@@ -27,26 +35,32 @@ public class JoinResolverService : IJoinResolverService
 
     public ExecutionContext MergeContexts(FlowTopology topology, string joinNodeId, IEnumerable<ExecutionContext> executionContexts)
     {
-        // 2. ادغام Contextها: نمونه ساده جمع کردن متغیرهای محلی
-
-        var mergedContext = new ExecutionContext
+        var merged = new ExecutionContext
         {
-            ContextId = Guid.NewGuid(),
-            InstanceId = executionContexts.First().InstanceId,
+            ContextId        = Guid.NewGuid(),
+            InstanceId       = executionContexts.First().InstanceId,
+            ParentContextId  = executionContexts.First().ParentContextId,
             CurrentElementId = joinNodeId,
-            State = ExecutionState.Active,
-            LocalVariables = new Dictionary<string, object?>()
+            State            = ExecutionState.Active,
+            LocalVariables   = new Dictionary<string, object?>(),
+            Version          = 0,
+            Path             = new List<string> { joinNodeId } // مسیر جدید با Join node
         };
 
-        foreach (var context in executionContexts)
+        foreach (var ctx in executionContexts)
         {
-            foreach (var kvp in context.LocalVariables)
+            foreach (var kv in ctx.LocalVariables)
+                merged.LocalVariables[kv.Key] = kv.Value;
+
+            if (ctx.Path != null)
             {
-                // اگر کلید وجود نداشت یا بخواهی overwrite کنی، اینجا مدیریت کن
-                mergedContext.LocalVariables[kvp.Key] = kvp.Value;
+                foreach (var p in ctx.Path)
+                    if (!merged.Path.Contains(p))
+                        merged.Path.Add(p);
             }
         }
 
-        return mergedContext;
+        return merged;
     }
+
 }

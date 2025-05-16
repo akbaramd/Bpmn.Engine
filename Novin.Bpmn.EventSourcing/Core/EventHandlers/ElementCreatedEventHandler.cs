@@ -1,6 +1,9 @@
 ﻿using Novin.Bpmn.EventSourcing.Core.Executions;
 using Novin.Bpmn.EventSourcing.Events;
+using Novin.Bpmn.EventSourcing.Core.Topology;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ExecutionContext = Novin.Bpmn.EventSourcing.Core.Executions.ExecutionContext;
@@ -8,9 +11,8 @@ using ExecutionContext = Novin.Bpmn.EventSourcing.Core.Executions.ExecutionConte
 public class ElementCreatedEventHandler : BpmnEventHandlerBase<ElementCreated>
 {
     private readonly IExecutionContextRepository _contextRepository;
-    private readonly IJoinResolverService _joinResolverService;
-    private readonly IFlowTopologyStore _topologyStore;
-    // فرض کنیم AppendEvent در کلاس پایه یا جایی در دسترس است
+    private readonly IJoinResolverService        _joinResolverService;
+    private readonly IFlowTopologyStore          _topologyStore;
 
     public ElementCreatedEventHandler(IServiceProvider serviceProvider,
                                       IExecutionContextRepository contextRepository,
@@ -18,112 +20,76 @@ public class ElementCreatedEventHandler : BpmnEventHandlerBase<ElementCreated>
                                       IFlowTopologyStore topologyStore)
         : base(serviceProvider)
     {
-        _contextRepository = contextRepository ?? throw new ArgumentNullException(nameof(contextRepository));
+        _contextRepository   = contextRepository ?? throw new ArgumentNullException(nameof(contextRepository));
         _joinResolverService = joinResolverService ?? throw new ArgumentNullException(nameof(joinResolverService));
-        _topologyStore = topologyStore ?? throw new ArgumentNullException(nameof(topologyStore));
+        _topologyStore       = topologyStore ?? throw new ArgumentNullException(nameof(topologyStore));
     }
 
-    public override async Task HandleAsync(ElementCreated @event, CancellationToken cancellationToken = default)
+    public override async Task HandleAsync(ElementCreated ev, CancellationToken cancellationToken = default)
     {
-     
+        var topology = _topologyStore.Get(ev.DeploymentId, ev.ProcessId)
+                       ?? throw new InvalidOperationException("Topology not found");
 
+        var isJoinNode = topology.Nodes.TryGetValue(ev.ElementId.ToString(), out var node) && node.IsJoinNode;
 
+        var currentContext = _contextRepository.Get(ev.ExecutionId);
 
-        // 1. سعی در گرفتن ExecutionContext موجود
-        var existingContext = _contextRepository.Get(@event.ExecutionId);
-
-        // 2. بارگذاری توپولوژی
-        var topology = _topologyStore.Get(@event.DeploymentId, @event.ProcessId);
-        if (topology == null)
-            throw new InvalidOperationException("Topology not found");
-
-        bool isJoinNode = topology.Nodes.TryGetValue(@event.ElementId.ToString(), out var node) && node.IsJoinNode;
-
-        if (isJoinNode)
+        if (!isJoinNode)
         {
-            // گرفتن شاخه‌های ورودی برای Join
-            var incomingBranches = topology.Incoming.TryGetValue(@event.ElementId.ToString(), out var incomingIds)
-                ? incomingIds
-                : new List<string>();
-
-            // گرفتن کانتکست‌های شاخه‌های ورودی که State == Completed و InstanceId برابر
-            var contextsToMerge = new List<ExecutionContext>();
-
-            foreach (var branchElementIdStr in incomingBranches)
+            if (currentContext != null)
             {
-                if (!Guid.TryParse(branchElementIdStr, out var branchElementId))
-                    continue;
+                currentContext.CurrentElementId = ev.ElementId.ToString();
+                currentContext.State            = ExecutionState.Active;
+                currentContext.Version++;
+                _contextRepository.Save(currentContext);
 
-                var branchContexts = _contextRepository.GetByInstanceId(@event.InstanceId)
-                    .Where(c => Guid.TryParse(c.CurrentElementId, out var cElementId) && cElementId == branchElementId && c.State == ExecutionState.Completed)
-                    .ToList();
-
-                contextsToMerge.AddRange(branchContexts);
+                await PublishElementProcessingEvent(ev, currentContext.ContextId);
             }
-
-            // بررسی امکان Join
-            if (!_joinResolverService.CanJoin(topology, @event.ElementId.ToString(), contextsToMerge))
-            {
-                // همه شاخه‌ها کامل نشده‌اند
-                // این رویداد را مجددا به صف اضافه کنید یا مکانیزمی برای Retry قرار دهید
-                AppendEvent(@event);
-                return;
-            }
-
-            // ادغام کانتکست‌ها
-            var mergedContext = _joinResolverService.MergeContexts(topology, @event.ElementId.ToString(), contextsToMerge);
-
-            // حذف کانتکست‌های قدیمی
-            foreach (var ctx in contextsToMerge)
-                _contextRepository.Remove(ctx.ContextId);
-
-            // ذخیره کانتکست ادغام شده
-            _contextRepository.Save(mergedContext);
-
-            // انتشار رویداد پردازش شروع برای المان Join
-            await PublishElementProcessingEvent(@event, mergedContext.ContextId);
-        }
-        else
-        {
-            if (existingContext != null)
-            {
-                // کانتکست موجود است؛ آن را بروزرسانی می‌کنیم
-                existingContext.CurrentElementId = @event.ElementId.ToString();
-                existingContext.State = ExecutionState.Active;
-                existingContext.Version++;
-
-                _contextRepository.Save(existingContext);
-
-                // انتشار رویداد پردازش برای ادامه کار
-                await PublishElementProcessingEvent(@event, existingContext.ContextId);
-            }
-           
+            return;
         }
 
-        await Task.CompletedTask;
-    }
+        // Join Node:
+        var allContexts = _contextRepository.GetByInstanceId(ev.InstanceId)
+            .Where(c => c.ParentContextId != null)
+            .ToList();
 
-    // متد انتشار رویداد پردازش المان (TaskProcessing یا موارد تخصصی‌تر)
-    private async Task PublishElementProcessingEvent(ElementCreated @event, Guid contextId)
-    {
-        var processingEvent = new ElementProcessing
+        if (!_joinResolverService.CanJoin(topology, ev.ElementId.ToString(), allContexts))
         {
-            EventId = Guid.NewGuid(),
-            InstanceId = @event.InstanceId,
-            DeploymentId = @event.DeploymentId,
-            DeploymentKey = @event.DeploymentKey,
-            ProcessId = @event.ProcessId,
-            ElementId = @event.ElementId,
-            ExecutionId = contextId,
-            Timestamp = DateTime.UtcNow,
-            ElementType = @event.ElementType,
-            Version = 1,
-            IsExecutable = true
-        };
+            AppendEvent(ev); // Retry later
+            return;
+        }
 
-        // فرض کنیم AppendEvent یک متد async برای انتشار رویداد است
-         AppendEvent(processingEvent);
+        var relevantContexts = allContexts
+            .Where(c => c.Path != null && topology.Incoming[ev.ElementId.ToString()].Contains(c.Path.Last()))
+            .ToList();
+
+        var mergedContext = _joinResolverService.MergeContexts(topology, ev.ElementId.ToString(), relevantContexts);
+
+        foreach (var ctx in relevantContexts)
+            _contextRepository.Remove(ctx.ContextId);
+
+        _contextRepository.Save(mergedContext);
+        await PublishElementProcessingEvent(ev, mergedContext.ContextId);
     }
 
-   
+
+    private Task PublishElementProcessingEvent(ElementCreated ev, Guid contextId)
+    {
+        AppendEvent(new ElementProcessing
+        {
+            EventId       = Guid.NewGuid(),
+            InstanceId    = ev.InstanceId,
+            DeploymentId  = ev.DeploymentId,
+            DeploymentKey = ev.DeploymentKey,
+            ProcessId     = ev.ProcessId,
+            ElementId     = ev.ElementId,
+            ExecutionId   = contextId,
+            Timestamp     = DateTime.UtcNow,
+            ElementType   = ev.ElementType,
+            Version       = 1,
+            IsExecutable  = true
+        });
+
+        return Task.CompletedTask;
+    }
 }

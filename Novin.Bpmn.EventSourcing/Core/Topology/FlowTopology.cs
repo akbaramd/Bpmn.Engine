@@ -11,7 +11,7 @@
 
     public Dictionary<string, List<string>> Outgoing { get; init; } = new();
     public Dictionary<string, List<string>> Incoming { get; init; } = new();
-
+    public Dictionary<string, SequenceFlow> SequenceFlows { get; init; } = new();
     // متدهای کمکی برای تحلیل توپولوژی
 
     public IEnumerable<FlowNode> GetStartEvents() =>
@@ -28,4 +28,16 @@
 
     public IEnumerable<string> GetPreviousNodes(string elementId) =>
         Incoming.TryGetValue(elementId, out var prev) ? prev : Enumerable.Empty<string>();
+}
+
+public class SequenceFlow
+{
+    public string Id { get; init; } = default!;
+    public string SourceRef { get; init; } = default!;
+    public string TargetRef { get; init; } = default!;
+    public string? ConditionExpression { get; init; }
+    public bool IsDefault { get; init; }
+    
+    public Dictionary<string, object?> Metadata { get; set; } = new();
+    
 }

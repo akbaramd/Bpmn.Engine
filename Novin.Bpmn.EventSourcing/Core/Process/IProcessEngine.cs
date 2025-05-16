@@ -2,5 +2,5 @@
 
 public interface IProcessEngine
 {
-    Task StartProcessAsync(string deploymentKey, string processId, Guid instanceId, CancellationToken cancellationToken = default);
+    Task StartProcessAsync(string deploymentKey, string processId, Guid instanceId,Dictionary<string,object?>? initializeVariables = null, CancellationToken cancellationToken = default);
 }

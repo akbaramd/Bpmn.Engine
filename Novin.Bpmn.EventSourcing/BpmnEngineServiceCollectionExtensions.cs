@@ -47,6 +47,8 @@ namespace Novin.Bpmn.EventSourcing
 
             // Handlers registration
             services.AddTransient<IBpmnEventHandler<ProcessStarted>, ProcessStartedEventHandler>();
+            services.AddTransient<IBpmnEventHandler<ElementCompleted>, ElementCompletedEventHandler>();
+            services.AddTransient<IBpmnEventHandler<ElementProcessing>, ElementProcessingEventHandler>();
             services.AddTransient<IBpmnEventHandler<ElementCreated>, ElementCreatedEventHandler>();
             // هندلرهای دیگر را اینجا اضافه کنید
 

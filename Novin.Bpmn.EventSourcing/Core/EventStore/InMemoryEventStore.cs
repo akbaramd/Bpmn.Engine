@@ -2,7 +2,8 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Novin.Bpmn.EventSourcing.Contracts;
 using Novin.Bpmn.EventSourcing.Core.EventStore;
 using Novin.Bpmn.EventSourcing.Events;
@@ -23,7 +24,7 @@ public class InMemoryEventStore : IEventStore
             throw new InvalidOperationException($"Event with ID {eventEntity.EventId} already exists");
     }
 
-    // متد جدید برای Append مستقیم BpmnEvent
+    // Append مستقیم BpmnEvent با سریالایز توسط Newtonsoft.Json
     public void Append(BpmnEvent @event)
     {
         if (@event == null)
@@ -32,6 +33,32 @@ public class InMemoryEventStore : IEventStore
         var entity = ConvertToEventEntity(@event);
 
         Append(entity);
+    }
+
+    private EventEntity ConvertToEventEntity(BpmnEvent @event)
+    {
+        var type = @event.GetType();
+
+        var settings = new JsonSerializerSettings
+        {
+            NullValueHandling = NullValueHandling.Ignore,
+            DateFormatHandling = DateFormatHandling.IsoDateFormat,
+            Formatting = Formatting.None
+        };
+
+        return new EventEntity
+        {
+            EventId = @event.EventId,
+            InstanceId = @event.InstanceId,
+            EventType = @event.EventType,
+            Timestamp = @event.Timestamp,
+            Payload = JsonConvert.SerializeObject(@event, type, settings),
+            TypeFullName = type.FullName ?? string.Empty,
+            AssemblyName = type.Assembly.GetName().Name ?? string.Empty,
+            Status = EventStatus.Pending,
+            RetryCount = 0,
+            ErrorMessage = null
+        };
     }
 
     public IReadOnlyList<EventEntity> GetEvents(Guid instanceId, EventStatus[]? statuses = null)
@@ -70,31 +97,10 @@ public class InMemoryEventStore : IEventStore
             .ToList();
     }
 
-    private EventEntity ConvertToEventEntity(BpmnEvent @event)
-    {
-        var type = @event.GetType();
 
-        var options = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            Converters =
-            {
-                new DateTimeOffsetJsonConverter()
-            }
-        };
+    
 
-        return new EventEntity
-        {
-            EventId = @event.EventId,
-            InstanceId = @event.InstanceId,
-            EventType = @event.EventType,
-            Timestamp = @event.Timestamp,
-            Payload = JsonSerializer.Serialize(@event, type, options),
-            TypeFullName = type.FullName ?? string.Empty,
-            AssemblyName = type.Assembly.GetName().Name ?? string.Empty,
-            Status = EventStatus.Pending,
-            RetryCount = 0,
-            ErrorMessage = null
-        };
-    }
 }
+
+
+

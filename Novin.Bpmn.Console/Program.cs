@@ -45,13 +45,19 @@ class Program
 
         var deployment = deploymentService.Deploy(deploymentKey, bpmnXml);
 
-        Console.WriteLine($"Deployed process with key: {deployment.DeploymentKey}, ProcessId: {deployment.DeploymentKey}");
+        Console.WriteLine(
+            $"Deployed process with key: {deployment.DeploymentKey}, ProcessId: {deployment.DeploymentKey}");
 
         var processEngine = host.Services.GetRequiredService<IProcessEngine>();
         var instanceId = Guid.NewGuid();
 
         // شروع اجرای پروسس
-        await processEngine.StartProcessAsync(deployment.DeploymentKey, "start_process", instanceId);
+        await processEngine.StartProcessAsync(deployment.DeploymentKey, "start_process", instanceId, new Dictionary<string, object?>()
+        {
+            ["num1"] = 3,
+            ["num2"] = 2,
+            ["operator"] = "sum",
+        });
 
         Console.WriteLine($"Process started with InstanceId: {instanceId}");
 
@@ -59,7 +65,7 @@ class Program
         var executionRepo = host.Services.GetRequiredService<IExecutionContextRepository>();
 
         bool completed = false;
-        for (int i = 0; i < 60; i++)  // حداکثر 30 ثانیه انتظار
+        for (int i = 0; i < 60; i++) // حداکثر 30 ثانیه انتظار
         {
             var contexts = executionRepo.GetByInstanceId(instanceId);
             if (contexts.All(c => c.State == ExecutionState.Completed))

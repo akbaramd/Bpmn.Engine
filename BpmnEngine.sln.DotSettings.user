@@ -50,6 +50,7 @@
     &lt;TestId&gt;xUnit::1BC08E77-BC74-46A3-A02D-FF8288A6B265::net8.0::DeploymentServiceTests.Deploy_TwiceWithSameKey_ShouldIncrementVersion&lt;/TestId&gt;&#xD;
     &lt;TestId&gt;xUnit::1BC08E77-BC74-46A3-A02D-FF8288A6B265::net8.0::DeploymentServiceTests&lt;/TestId&gt;&#xD;
     &lt;TestId&gt;xUnit::1BC08E77-BC74-46A3-A02D-FF8288A6B265::net8.0::ProcessExecutionTests.RunProcess_ShouldCompleteSuccessfully&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::1BC08E77-BC74-46A3-A02D-FF8288A6B265::net8.0::Novin.Bpmn.Test.FeelEngineAdvancedTests.Evaluate_OperatorEqualsSum_ReturnsTrue&lt;/TestId&gt;&#xD;
   &lt;/TestAncestor&gt;&#xD;
 &lt;/SessionState&gt;</s:String>
 	

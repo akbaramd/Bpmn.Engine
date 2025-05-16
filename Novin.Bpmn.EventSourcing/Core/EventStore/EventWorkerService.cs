@@ -1,12 +1,14 @@
 ﻿using System;
 using System.Linq;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Novin.Bpmn.EventSourcing.Contracts;
 using Novin.Bpmn.EventSourcing.Core.EventStore;
+using Novin.Bpmn.EventSourcing.Events;
 
 public class EventWorkerService : BackgroundService
 {
@@ -28,17 +30,6 @@ public class EventWorkerService : BackgroundService
     {
         _logger.LogInformation("EventWorkerService started.");
 
-        var notCompletedStatuses = new[] { EventStatus.Pending, EventStatus.Failed };
-
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            Converters =
-            {
-                new DateTimeOffsetJsonConverter()
-            }
-        };
-
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -53,44 +44,33 @@ public class EventWorkerService : BackgroundService
 
                 foreach (var eventEntity in eventEntities)
                 {
-                    IBpmnEvent @event;
+                    BpmnEvent? bpmnEvent = null;
 
                     try
                     {
-                        var assembly = AppDomain.CurrentDomain.GetAssemblies()
-                            .FirstOrDefault(a => a.GetName().Name == eventEntity.AssemblyName);
-
-                        if (assembly == null)
+                        bpmnEvent = DeserializeEvent(eventEntity);
+                        if (bpmnEvent == null)
                         {
-                            throw new InvalidOperationException($"Assembly '{eventEntity.AssemblyName}' not loaded.");
+                            _logger.LogWarning("Could not deserialize event {EventId}", eventEntity.EventId);
+                            continue;
                         }
-
-                        var eventType = assembly.GetType(eventEntity.TypeFullName);
-
-                        if (eventType == null)
-                        {
-                            throw new InvalidOperationException($"Type '{eventEntity.TypeFullName}' not found in assembly '{eventEntity.AssemblyName}'.");
-                        }
-
-                        @event = (IBpmnEvent)JsonSerializer.Deserialize(eventEntity.Payload, eventType, options)!;
                     }
-                    catch (Exception dex)
+                    catch (Exception ex)
                     {
-                        _logger.LogError(dex, "Failed to deserialize event {EventId}. Marking as Failed.", eventEntity.EventId);
-                        _eventStore.UpdateStatus(eventEntity.EventId, EventStatus.Failed, dex.Message);
+                        _logger.LogError(ex, "Failed to deserialize event {EventId}", eventEntity.EventId);
+                        _eventStore.UpdateStatus(eventEntity.EventId, EventStatus.Failed, ex.Message);
                         continue;
                     }
 
                     try
                     {
-                        _logger.LogInformation("Publishing event {EventType} - {EventId}", @event.EventType, @event.EventId);
-                        await _eventBus.PublishAsync(@event, stoppingToken);
-
+                        _logger.LogInformation("Publishing event {EventType} - {EventId}", bpmnEvent.EventType, bpmnEvent.EventId);
+                        await _eventBus.PublishAsync(bpmnEvent, stoppingToken);
                         _eventStore.UpdateStatus(eventEntity.EventId, EventStatus.Sent);
                     }
                     catch (Exception pex)
                     {
-                        _logger.LogError(pex, "Error publishing event {EventId}. Marking as Failed.", eventEntity.EventId);
+                        _logger.LogError(pex, "Error publishing event {EventId}", eventEntity.EventId);
                         _eventStore.UpdateStatus(eventEntity.EventId, EventStatus.Failed, pex.Message);
                     }
                 }
@@ -103,5 +83,75 @@ public class EventWorkerService : BackgroundService
         }
 
         _logger.LogInformation("EventWorkerService stopped.");
+    }
+
+    public BpmnEvent? DeserializeEvent(EventEntity entity)
+    {
+        if (string.IsNullOrWhiteSpace(entity.Payload) || string.IsNullOrWhiteSpace(entity.TypeFullName))
+            return null;
+
+        var assembly = AppDomain.CurrentDomain.GetAssemblies()
+            .FirstOrDefault(a => a.GetName().Name == entity.AssemblyName);
+
+        if (assembly == null)
+            throw new InvalidOperationException($"Assembly '{entity.AssemblyName}' not loaded.");
+
+        var eventType = assembly.GetType(entity.TypeFullName);
+
+        if (eventType == null)
+            throw new InvalidOperationException($"Type '{entity.TypeFullName}' not found in assembly '{entity.AssemblyName}'.");
+
+        var settings = new JsonSerializerSettings
+        {
+            NullValueHandling = NullValueHandling.Ignore,
+            DateFormatHandling = DateFormatHandling.IsoDateFormat
+        };
+
+        var deserialized = JsonConvert.DeserializeObject(entity.Payload, eventType, settings);
+
+        if (deserialized != null)
+        {
+            var props = eventType.GetProperties();
+            foreach (var prop in props)
+            {
+                if (prop.PropertyType == typeof(Dictionary<string, object?>))
+                {
+                    var val = prop.GetValue(deserialized);
+                    if (val is JObject jObj)
+                    {
+                        var dict = (Dictionary<string, object?>)JsonHelper.ConvertJTokenToObject(jObj);
+                        prop.SetValue(deserialized, dict);
+                    }
+                }
+            }
+        }
+
+        return deserialized as BpmnEvent;
+    }
+}
+
+public static class JsonHelper
+{
+    public static object? ConvertJTokenToObject(JToken token)
+    {
+        return token.Type switch
+        {
+            JTokenType.Object => token.Children<JProperty>()
+                                     .ToDictionary(prop => prop.Name, prop => ConvertJTokenToObject(prop.Value)),
+
+            JTokenType.Array => token.Select(ConvertJTokenToObject).ToList(),
+
+            JTokenType.Integer => token.ToObject<int>(),
+
+            JTokenType.Float => token.ToObject<double>(),
+
+            JTokenType.String => token.ToObject<string>(),
+
+            JTokenType.Boolean => token.ToObject<bool>(),
+
+            JTokenType.Null or JTokenType.Undefined => null,
+
+            _ => token.ToString()
+        };
     }
 }

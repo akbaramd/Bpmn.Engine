@@ -127,7 +127,7 @@ public class BpmnProcessManager : IBpmnProcessManager
     // متد اجرای وظیفه اسکریپت
     private async Task ExecuteScriptTask(BpmnScriptTask scriptTask, BpmnV3Token token)
     {
-        if (scriptTask.script == null || string.IsNullOrWhiteSpace(scriptTask.script.InnerText))
+        if (scriptTask.Script == null || string.IsNullOrWhiteSpace(scriptTask.Script.InnerText))
         {
             Console.WriteLine($"Script task {scriptTask.id} has no script defined.");
             return;
@@ -137,7 +137,7 @@ public class BpmnProcessManager : IBpmnProcessManager
         {
             Console.WriteLine($"Executing script for task {scriptTask.id}");
             var globals = new BpmnV3ScriptGlobals { Instance = _currentInstance };
-            await _scriptHandler.ExecuteScriptAsync(scriptTask.script.InnerText, globals);
+            await _scriptHandler.ExecuteScriptAsync(scriptTask.Script.InnerText, globals);
         }
         catch (Exception ex)
         {

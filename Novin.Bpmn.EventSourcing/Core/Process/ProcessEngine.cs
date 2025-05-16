@@ -18,7 +18,7 @@ public class ProcessEngine : IProcessEngine
         _eventStore = eventStore;
     }
 
-    public async Task StartProcessAsync(string deploymentKey, string processId, Guid instanceId, CancellationToken cancellationToken = default)
+    public async Task StartProcessAsync(string deploymentKey, string processId, Guid instanceId,Dictionary<string,object?>? initializeVariables = null, CancellationToken cancellationToken = default)
     {
         // 1. دریافت آخرین deployment
         var deployment = _deploymentStore.GetLatest(deploymentKey);
@@ -38,6 +38,7 @@ public class ProcessEngine : IProcessEngine
             DeploymentKey = deploymentKey,
             DeploymentId = deployment.DeploymentId,
             ProcessId = processId,
+            InitializeVariables = initializeVariables ?? new Dictionary<string, object?>(),
             Timestamp = DateTime.UtcNow
         };
 

@@ -18,7 +18,9 @@ namespace Novin.Bpmn.EventSourcing.Events
         /// The version of the process definition.
         /// </summary>
         public int DefinitionVersion { get; init; } = 1;
-        
+
+        public Dictionary<string, object?> InitializeVariables { get; set; } = [];
+
     }
 
     /// <summary>

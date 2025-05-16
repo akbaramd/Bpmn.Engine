@@ -12,7 +12,20 @@ public class FeelEngineAdvancedTests
         var result = FeelEngine.Evaluate<decimal>(expr, vars);
         Assert.Equal(28, result);
     }
+    [Fact]
+    public void Evaluate_OperatorEqualsSum_ReturnsTrue()
+    {
+        var variables = new Dictionary<string, object?>
+        {
+            ["operator"] = "sum"
+        };
 
+        var expression = "= operator = \"sum\"";
+
+        var result = FeelEngine.Evaluate<bool>(expression, variables);
+
+        Assert.True(result);
+    }
     [Fact]
     public void Evaluate_LogicalExpressionsWithOrAnd_ReturnsExpectedBoolean()
     {
@@ -107,6 +120,8 @@ public class FeelEngineAdvancedTests
         var result = FeelEngine.Evaluate<string>(expr, vars);
         Assert.Equal("Jane Smith is 28 years old", result);
     }
+    
+    
 
     [Fact]
     public void Evaluate_UnaryOperators_NotAndMinus_WorkCorrectly()
