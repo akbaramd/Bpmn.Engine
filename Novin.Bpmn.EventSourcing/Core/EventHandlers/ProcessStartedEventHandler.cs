@@ -32,12 +32,13 @@
                 {
                     ContextId = Guid.NewGuid(),
                     InstanceId = @event.InstanceId,
-                    CurrentElementId = startNode.ElementId,
                     LocalVariables = @event.InitializeVariables,
-                    Path = [startNode.ElementId],
+                    
                     State = ExecutionState.Active,
                     Version = 1,
                 };
+                
+                context.MoveToNext(startNode.ElementId);
 
                 // 3. ذخیره کانتکست
                 _contextRepository.Save(context);

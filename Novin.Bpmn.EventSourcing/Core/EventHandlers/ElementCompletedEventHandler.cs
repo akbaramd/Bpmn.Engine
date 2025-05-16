@@ -31,67 +31,65 @@ public class ElementCompletedEventHandler : BpmnEventHandlerBase<ElementComplete
         var topology = _topologyStore.Get(@event.DeploymentId, @event.ProcessId)
                       ?? throw new InvalidOperationException("Topology not found");
 
-        var isGateway = topology.Nodes.TryGetValue(@event.ElementId, out var node) && node.IsGateway;
-
-        // مسیرهای خروجی از این المان
-        if (!topology.Outgoing.TryGetValue(@event.ElementId, out var targetElementIds) || targetElementIds.Count == 0)
-            return;
-
-        // شاخه‌های معتبر با بررسی FEEL
-        var validFlows = new List<(string TargetElementId, Dictionary<string, object?> Metadata)>();
-
-        foreach (var targetId in targetElementIds)
-        {
-            var flow = topology.SequenceFlows.Values.FirstOrDefault(f =>
-                f.SourceRef == @event.ElementId && f.TargetRef == targetId);
-
-            if (flow == null) continue;
-
-            bool conditionPass = true;
-
-            if (!string.IsNullOrWhiteSpace(flow.ConditionExpression))
-            {
-                try
-                {
-                    var result = FeelEngine.Evaluate<bool>("="+flow.ConditionExpression, context.LocalVariables);
-                    conditionPass = result;
-                }
-                catch
-                {
-                    conditionPass = false;
-                }
-            }
-
-            if (conditionPass)
-            {
-                validFlows.Add((flow.TargetRef, flow.Metadata));
-            }
-        }
-
-        // اگر Gateway باشد، باید کانتکست فعلی Completed شود و شاخه‌های جدید ساخته شوند
-        if (isGateway)
+        // اگر المان جاری EndEvent است
+        if (topology.Nodes.TryGetValue(@event.ElementId, out var currentNode) && 
+            currentNode.ElementType.ToLower() == BpmnElementType.EndEvent.NameWithNamespace.ToLower())
         {
             context.State = ExecutionState.Completed;
             context.Version++;
             _contextRepository.Save(context);
 
-            foreach (var (targetId, metadata) in validFlows)
+            // انتشار رویداد ProcessCompleted
+            AppendEvent(new ProcessCompleted
             {
-                var child = new ExecutionContext
+                EventId = Guid.NewGuid(),
+                InstanceId = context.InstanceId,
+                DeploymentId = @event.DeploymentId,
+                DeploymentKey = @event.DeploymentKey,
+                ProcessId = @event.ProcessId,
+                Timestamp = DateTime.UtcNow,
+            });
+
+            return; // دیگر ادامه مسیر وجود ندارد
+        }
+
+        if (!topology.Outgoing.TryGetValue(@event.ElementId, out var targetIds) || targetIds.Count == 0)
+            return;
+
+        var isCurrentGateway = currentNode.IsGateway;
+
+        foreach (var targetId in targetIds)
+        {
+            var sequenceFlow = topology.SequenceFlows.Values
+                .FirstOrDefault(f => f.SourceRef == @event.ElementId && f.TargetRef == targetId);
+
+            if (sequenceFlow == null)
+                continue;
+
+            bool conditionOk = true;
+            if (!string.IsNullOrWhiteSpace(sequenceFlow.ConditionExpression))
+            {
+                try
                 {
-                    ContextId = Guid.NewGuid(),
-                    InstanceId = context.InstanceId,
-                    ParentContextId = context.ContextId,
-                    CurrentElementId = targetId,
-                    State = ExecutionState.Active,
-                    LocalVariables = new Dictionary<string, object?>(context.LocalVariables),
-                    Version = 0
-                };
+                    conditionOk = FeelEngine.Evaluate<bool>(sequenceFlow.ConditionExpression, context.LocalVariables);
+                }
+                catch
+                {
+                    conditionOk = false;
+                }
+            }
+            if (!conditionOk)
+                continue;
 
-                foreach (var kv in metadata)
-                    child.LocalVariables[kv.Key] = kv.Value;
+            var isNextGateway = topology.Nodes.TryGetValue(targetId, out var nextNode) && nextNode.IsGateway;
 
-                _contextRepository.Save(child);
+            if (isCurrentGateway)
+            {
+                context.MoveToNext(targetId);
+                foreach (var kv in sequenceFlow.Metadata)
+                    context.LocalVariables[kv.Key] = kv.Value;
+                context.Version++;
+                _contextRepository.Save(context);
 
                 AppendEvent(new ElementCreated
                 {
@@ -101,37 +99,76 @@ public class ElementCompletedEventHandler : BpmnEventHandlerBase<ElementComplete
                     InstanceId = @event.InstanceId,
                     ProcessId = @event.ProcessId,
                     ElementId = targetId,
-                    ExecutionId = child.ContextId,
-                    ElementType = topology.Nodes[targetId].ElementType,
+                    ExecutionId = context.ContextId,
+                    ElementType = nextNode.ElementType,
                     Timestamp = DateTime.UtcNow,
                     Version = 1,
                     IsExecutable = true
                 });
             }
-        }
-        else
-        {
-            // در حالت غیر Gateway فقط کانتکست را Move می‌کنیم
-            var next = validFlows.First(); // فرض بر این است فقط یکی مجاز است
-
-            context.MoveToNext(next.TargetElementId);
-            context.Version++;
-            _contextRepository.Save(context);
-
-            AppendEvent(new ElementCreated
+            else
             {
-                EventId = Guid.NewGuid(),
-                DeploymentId = @event.DeploymentId,
-                DeploymentKey = @event.DeploymentKey,
-                InstanceId = @event.InstanceId,
-                ProcessId = @event.ProcessId,
-                ElementId = next.TargetElementId,
-                ExecutionId = context.ContextId,
-                ElementType = topology.Nodes[next.TargetElementId].ElementType,
-                Timestamp = DateTime.UtcNow,
-                Version = 1,
-                IsExecutable = true
-            });
+                if (isNextGateway)
+                {
+                    context.State = ExecutionState.Completed;
+                    context.Version++;
+                    _contextRepository.Save(context);
+
+                    var fork = new ExecutionContext
+                    {
+                        ContextId = Guid.NewGuid(),
+                        InstanceId = context.InstanceId,
+                        ParentContextId = context.ContextId,
+                        State = ExecutionState.Active,
+                        Version = 0,
+                        LocalVariables = new Dictionary<string, object?>(context.LocalVariables)
+                    };
+                    fork.MoveToNext(targetId);
+
+                    foreach (var kv in sequenceFlow.Metadata)
+                        fork.LocalVariables[kv.Key] = kv.Value;
+
+                    _contextRepository.Save(fork);
+
+                    AppendEvent(new ElementCreated
+                    {
+                        EventId = Guid.NewGuid(),
+                        DeploymentId = @event.DeploymentId,
+                        DeploymentKey = @event.DeploymentKey,
+                        InstanceId = @event.InstanceId,
+                        ProcessId = @event.ProcessId,
+                        ElementId = targetId,
+                        ExecutionId = fork.ContextId,
+                        ElementType = nextNode.ElementType,
+                        Timestamp = DateTime.UtcNow,
+                        Version = 1,
+                        IsExecutable = true
+                    });
+                }
+                else
+                {
+                    context.MoveToNext(targetId);
+                    foreach (var kv in sequenceFlow.Metadata)
+                        context.LocalVariables[kv.Key] = kv.Value;
+                    context.Version++;
+                    _contextRepository.Save(context);
+
+                    AppendEvent(new ElementCreated
+                    {
+                        EventId = Guid.NewGuid(),
+                        DeploymentId = @event.DeploymentId,
+                        DeploymentKey = @event.DeploymentKey,
+                        InstanceId = @event.InstanceId,
+                        ProcessId = @event.ProcessId,
+                        ElementId = targetId,
+                        ExecutionId = context.ContextId,
+                        ElementType = nextNode.ElementType,
+                        Timestamp = DateTime.UtcNow,
+                        Version = 1,
+                        IsExecutable = true
+                    });
+                }
+            }
         }
 
         await Task.CompletedTask;

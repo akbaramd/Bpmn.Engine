@@ -50,6 +50,7 @@ namespace Novin.Bpmn.EventSourcing
             services.AddTransient<IBpmnEventHandler<ElementCompleted>, ElementCompletedEventHandler>();
             services.AddTransient<IBpmnEventHandler<ElementProcessing>, ElementProcessingEventHandler>();
             services.AddTransient<IBpmnEventHandler<ElementCreated>, ElementCreatedEventHandler>();
+            services.AddTransient<IBpmnEventHandler<ProcessCompleted>,ProcessCompletedEventHandler>();
             // هندلرهای دیگر را اینجا اضافه کنید
 
             // Hosted Services (Background Workers)

@@ -5,19 +5,19 @@ public class ExecutionContext
     public Guid ContextId { get; init; } = Guid.NewGuid();
     public Guid InstanceId { get; init; }
     public Guid? ParentContextId { get; init; }
-    public string CurrentElementId { get; set; }
+    public string CurrentElementId { get;  set; }
     public ExecutionState State { get; set; } = ExecutionState.Active;
     public Dictionary<string, object?> LocalVariables { get; set; } = new();
     public int Version { get; set; } = 0;
 
     // مسیر پیمایش شده: لیست شناسه المان‌ها از ابتدا تا CurrentElementId
-    public List<string> Path { get; set; } = new();
+    public List<string> Path { get;  set; } = new();
 
     // اضافه کردن المان جدید به مسیر (به روز رسانی CurrentElementId)
     public void MoveToNext(string nextElementId)
     {
-        if (!string.IsNullOrEmpty(CurrentElementId) && !Path.Contains(CurrentElementId))
-            Path.Add(CurrentElementId);
+        if (!string.IsNullOrEmpty(nextElementId) && !Path.Contains(nextElementId))
+            Path.Add(nextElementId);
 
         CurrentElementId = nextElementId;
         Version++;

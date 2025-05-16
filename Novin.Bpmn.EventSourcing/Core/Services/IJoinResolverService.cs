@@ -20,5 +20,5 @@ public interface IJoinResolverService
     /// <param name="joinNodeId">شناسه نقطه Join</param>
     /// <param name="executionContexts">لیست Contextهای مرتبط</param>
     /// <returns>Context ادغام شده برای ادامه اجرا</returns>
-    ExecutionContext MergeContexts(FlowTopology topology, string joinNodeId, IEnumerable<ExecutionContext> executionContexts);
+    ExecutionContext MergeContexts(FlowTopology topology, string joinNodeId,ExecutionContext curernt, IEnumerable<ExecutionContext> executionContexts);
 }

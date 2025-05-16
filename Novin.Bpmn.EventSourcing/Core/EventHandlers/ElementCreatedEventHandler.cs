@@ -30,45 +30,44 @@ public class ElementCreatedEventHandler : BpmnEventHandlerBase<ElementCreated>
         var topology = _topologyStore.Get(ev.DeploymentId, ev.ProcessId)
                        ?? throw new InvalidOperationException("Topology not found");
 
-        var isJoinNode = topology.Nodes.TryGetValue(ev.ElementId.ToString(), out var node) && node.IsJoinNode;
+        var currentCtx = _contextRepository.Get(ev.ExecutionId);
 
-        var currentContext = _contextRepository.Get(ev.ExecutionId);
+        var isJoinNode = topology.Nodes.TryGetValue(ev.ElementId, out var node) && node.IsJoinNode;
 
         if (!isJoinNode)
         {
-            if (currentContext != null)
+            if (currentCtx != null)
             {
-                currentContext.CurrentElementId = ev.ElementId.ToString();
-                currentContext.State            = ExecutionState.Active;
-                currentContext.Version++;
-                _contextRepository.Save(currentContext);
+                currentCtx.State = ExecutionState.Active;
+                currentCtx.Version++;
+                _contextRepository.Save(currentCtx);
 
-                await PublishElementProcessingEvent(ev, currentContext.ContextId);
+                await PublishElementProcessingEvent(ev, currentCtx.ContextId);
             }
             return;
         }
 
         // Join Node:
-        var allContexts = _contextRepository.GetByInstanceId(ev.InstanceId)
-            .Where(c => c.ParentContextId != null)
+        var incomingBranches = topology.Incoming.TryGetValue(ev.ElementId, out var incomingIds)
+            ? incomingIds : new List<string>();
+
+        var candidateContexts = _contextRepository.GetByInstanceId(ev.InstanceId);
+            candidateContexts = candidateContexts
+            .Where(c => c.Path.Count > 0 &&
+                        incomingIds.Contains(c.Path.Last()) && // شاخه ورودی واقعی
+                        c.State == ExecutionState.Completed)
             .ToList();
 
-        if (!_joinResolverService.CanJoin(topology, ev.ElementId.ToString(), allContexts))
+        if (!_joinResolverService.CanJoin(topology, ev.ElementId, candidateContexts))
         {
-            AppendEvent(ev); // Retry later
+            AppendEvent(ev); // منتظر تکمیل شاخه‌های دیگر
             return;
         }
 
-        var relevantContexts = allContexts
-            .Where(c => c.Path != null && topology.Incoming[ev.ElementId.ToString()].Contains(c.Path.Last()))
-            .ToList();
-
-        var mergedContext = _joinResolverService.MergeContexts(topology, ev.ElementId.ToString(), relevantContexts);
-
-        foreach (var ctx in relevantContexts)
-            _contextRepository.Remove(ctx.ContextId);
+        var mergedContext = _joinResolverService.MergeContexts(topology, ev.ElementId,currentCtx, candidateContexts);
 
         _contextRepository.Save(mergedContext);
+
         await PublishElementProcessingEvent(ev, mergedContext.ContextId);
     }
 

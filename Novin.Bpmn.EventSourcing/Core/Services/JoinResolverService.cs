@@ -33,34 +33,16 @@ public class JoinResolverService : IJoinResolverService
         return true;
     }
 
-    public ExecutionContext MergeContexts(FlowTopology topology, string joinNodeId, IEnumerable<ExecutionContext> executionContexts)
+    public ExecutionContext MergeContexts(FlowTopology topology, string joinNodeId,ExecutionContext curernt, IEnumerable<ExecutionContext> executionContexts)
     {
-        var merged = new ExecutionContext
-        {
-            ContextId        = Guid.NewGuid(),
-            InstanceId       = executionContexts.First().InstanceId,
-            ParentContextId  = executionContexts.First().ParentContextId,
-            CurrentElementId = joinNodeId,
-            State            = ExecutionState.Active,
-            LocalVariables   = new Dictionary<string, object?>(),
-            Version          = 0,
-            Path             = new List<string> { joinNodeId } // مسیر جدید با Join node
-        };
 
         foreach (var ctx in executionContexts)
         {
             foreach (var kv in ctx.LocalVariables)
-                merged.LocalVariables[kv.Key] = kv.Value;
-
-            if (ctx.Path != null)
-            {
-                foreach (var p in ctx.Path)
-                    if (!merged.Path.Contains(p))
-                        merged.Path.Add(p);
-            }
+                curernt.LocalVariables[kv.Key] = kv.Value;
         }
 
-        return merged;
+        return curernt;
     }
 
 }

@@ -20,12 +20,12 @@ public class ExecutionContextRebuilder : IExecutionContextRebuilder
         switch (@event)
         {
             case ElementProcessing ep:
-                context.CurrentElementId = ep.ElementId;
+                context.MoveToNext(ep.ElementId);
                 context.State = ExecutionState.Active;
                 context.Version++;
                 break;
             case ElementCompleted ec:
-                context.CurrentElementId = ec.ElementId;
+                context.MoveToNext(ec.ElementId);
                 context.State = ExecutionState.Completed;
                 context.Version++;
                 break;
