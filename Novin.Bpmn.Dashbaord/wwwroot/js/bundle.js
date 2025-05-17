@@ -146020,7 +146020,7 @@ var ELEMENT_COLORS = {
     strokeWidth: 1,
     textColor: MATERIAL_COLORS.grey.main
   },
-  // Executable status colors
+  // Executable status colors - always green for executable elements
   executable: {
     stroke: MATERIAL_COLORS.green.accent,
     strokeWidth: 3,
@@ -146107,27 +146107,27 @@ var ELEMENT_TYPE_STYLES = {
   },
   // Tasks
   'bpmn:Task': {
-    stroke: MATERIAL_COLORS.blue.dark,
+    stroke: MATERIAL_COLORS.grey.dark,
     strokeWidth: 2
   },
   'bpmn:UserTask': {
-    stroke: MATERIAL_COLORS.blue.main,
+    stroke: MATERIAL_COLORS.grey.main,
     strokeWidth: 2
   },
   'bpmn:ServiceTask': {
-    stroke: MATERIAL_COLORS.purple.dark,
+    stroke: MATERIAL_COLORS.grey.dark,
     strokeWidth: 2
   },
   'bpmn:ScriptTask': {
-    stroke: MATERIAL_COLORS.teal.dark,
+    stroke: MATERIAL_COLORS.grey.dark,
     strokeWidth: 2
   },
   'bpmn:BusinessRuleTask': {
-    stroke: MATERIAL_COLORS.orange.dark,
+    stroke: MATERIAL_COLORS.grey.dark,
     strokeWidth: 2
   },
   'bpmn:ManualTask': {
-    stroke: MATERIAL_COLORS.brown.main,
+    stroke: MATERIAL_COLORS.grey.main,
     strokeWidth: 2
   },
   // Gateways
@@ -146993,12 +146993,12 @@ function markElementAsCompleted(canvas, elementRegistry, element, elementId, tra
 }
 
 /**
- * Mark an element as active
+ * Mark an element as active with the current state
  * @param {object} canvas - The BPMN.js canvas
  * @param {object} elementRegistry - The BPMN.js element registry
  * @param {object} element - The BPMN element
  * @param {string} elementId - The element ID
- * @param {object} trace - The execution trace data
+ * @param {object} trace - The execution trace
  */
 function markElementAsActive(canvas, elementRegistry, element, elementId, trace) {
   var gfx = elementRegistry.getGraphics(elementId);
@@ -147021,6 +147021,7 @@ function markElementAsActive(canvas, elementRegistry, element, elementId, trace)
   if (isSequenceFlow(element)) {
     // For sequence flows
     if (trace.isExecutable) {
+      // Always use green for executable flows
       applyColorToElement(gfx, FLOW_COLORS.executable.stroke, FLOW_COLORS.executable.strokeWidth);
     } else {
       applyColorToElement(gfx, FLOW_COLORS.nonExecutable.stroke, FLOW_COLORS.nonExecutable.strokeWidth);
@@ -147028,18 +147029,25 @@ function markElementAsActive(canvas, elementRegistry, element, elementId, trace)
   } else {
     // For other elements
     if (trace.isExecutable) {
+      // Always use green for executable elements, regardless of state
       applyColorToElement(gfx, ELEMENT_COLORS.executable.stroke, ELEMENT_COLORS.executable.strokeWidth);
+
+      // Add tooltip with execution info
+      addTooltipToElement(elementRegistry, elementId, {
+        title: "Executable Element: ".concat(elementId),
+        content: "State: ".concat(stateName, "<br>Execution ID: ").concat(trace.executionId)
+      });
     } else {
+      // Apply non-executable style
       applyColorToElement(gfx, ELEMENT_COLORS.nonExecutable.stroke, ELEMENT_COLORS.nonExecutable.strokeWidth);
+
+      // Add tooltip with execution info
+      addTooltipToElement(elementRegistry, elementId, {
+        title: "Non-Executable Element: ".concat(elementId),
+        content: "State: ".concat(stateName, "<br>Execution ID: ").concat(trace.executionId)
+      });
     }
   }
-
-  // Add tooltip with execution information
-  var stateText = getStateName(trace.state).charAt(0).toUpperCase() + getStateName(trace.state).slice(1);
-  addTooltipToElement(elementRegistry, elementId, {
-    title: "".concat(stateText, ": ").concat(elementId),
-    content: "Execution ID: ".concat(trace.executionId, "<br>\n                  State: ").concat(stateText, "<br>\n                  Executable: ").concat(trace.isExecutable ? 'Yes' : 'No')
-  });
 }
 
 /**

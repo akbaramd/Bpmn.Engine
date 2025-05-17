@@ -121,12 +121,12 @@ const ELEMENT_TYPE_STYLES = {
     'bpmn:BoundaryEvent': { stroke: MATERIAL_COLORS.purple.dark, strokeWidth: 2 },
     
     // Tasks
-    'bpmn:Task': { stroke: MATERIAL_COLORS.blue.dark, strokeWidth: 2 },
-    'bpmn:UserTask': { stroke: MATERIAL_COLORS.blue.main, strokeWidth: 2 },
-    'bpmn:ServiceTask': { stroke: MATERIAL_COLORS.purple.dark, strokeWidth: 2 },
-    'bpmn:ScriptTask': { stroke: MATERIAL_COLORS.teal.dark, strokeWidth: 2 },
-    'bpmn:BusinessRuleTask': { stroke: MATERIAL_COLORS.orange.dark, strokeWidth: 2 },
-    'bpmn:ManualTask': { stroke: MATERIAL_COLORS.brown.main, strokeWidth: 2 },
+    'bpmn:Task': { stroke: MATERIAL_COLORS.grey.dark, strokeWidth: 2 },
+    'bpmn:UserTask': { stroke: MATERIAL_COLORS.grey.main, strokeWidth: 2 },
+    'bpmn:ServiceTask': { stroke: MATERIAL_COLORS.grey.dark, strokeWidth: 2 },
+    'bpmn:ScriptTask': { stroke: MATERIAL_COLORS.grey.dark, strokeWidth: 2 },
+    'bpmn:BusinessRuleTask': { stroke: MATERIAL_COLORS.grey.dark, strokeWidth: 2 },
+    'bpmn:ManualTask': { stroke: MATERIAL_COLORS.grey.main, strokeWidth: 2 },
     
     // Gateways
     'bpmn:ExclusiveGateway': { stroke: MATERIAL_COLORS.amber.dark, strokeWidth: 2 },
