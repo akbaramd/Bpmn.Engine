@@ -145840,6 +145840,12 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _Providers_descriptors_magic_json__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./Providers/descriptors/magic.json */ "./src/Providers/descriptors/magic.json");
 function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
 function _regeneratorRuntime() { "use strict"; /*! regenerator-runtime -- Copyright (c) 2014-present, Facebook, Inc. -- license (MIT): https://github.com/facebook/regenerator/blob/main/LICENSE */ _regeneratorRuntime = function _regeneratorRuntime() { return e; }; var t, e = {}, r = Object.prototype, n = r.hasOwnProperty, o = Object.defineProperty || function (t, e, r) { t[e] = r.value; }, i = "function" == typeof Symbol ? Symbol : {}, a = i.iterator || "@@iterator", c = i.asyncIterator || "@@asyncIterator", u = i.toStringTag || "@@toStringTag"; function define(t, e, r) { return Object.defineProperty(t, e, { value: r, enumerable: !0, configurable: !0, writable: !0 }), t[e]; } try { define({}, ""); } catch (t) { define = function define(t, e, r) { return t[e] = r; }; } function wrap(t, e, r, n) { var i = e && e.prototype instanceof Generator ? e : Generator, a = Object.create(i.prototype), c = new Context(n || []); return o(a, "_invoke", { value: makeInvokeMethod(t, r, c) }), a; } function tryCatch(t, e, r) { try { return { type: "normal", arg: t.call(e, r) }; } catch (t) { return { type: "throw", arg: t }; } } e.wrap = wrap; var h = "suspendedStart", l = "suspendedYield", f = "executing", s = "completed", y = {}; function Generator() {} function GeneratorFunction() {} function GeneratorFunctionPrototype() {} var p = {}; define(p, a, function () { return this; }); var d = Object.getPrototypeOf, v = d && d(d(values([]))); v && v !== r && n.call(v, a) && (p = v); var g = GeneratorFunctionPrototype.prototype = Generator.prototype = Object.create(p); function defineIteratorMethods(t) { ["next", "throw", "return"].forEach(function (e) { define(t, e, function (t) { return this._invoke(e, t); }); }); } function AsyncIterator(t, e) { function invoke(r, o, i, a) { var c = tryCatch(t[r], t, o); if ("throw" !== c.type) { var u = c.arg, h = u.value; return h && "object" == _typeof(h) && n.call(h, "__await") ? e.resolve(h.__await).then(function (t) { invoke("next", t, i, a); }, function (t) { invoke("throw", t, i, a); }) : e.resolve(h).then(function (t) { u.value = t, i(u); }, function (t) { return invoke("throw", t, i, a); }); } a(c.arg); } var r; o(this, "_invoke", { value: function value(t, n) { function callInvokeWithMethodAndArg() { return new e(function (e, r) { invoke(t, n, e, r); }); } return r = r ? r.then(callInvokeWithMethodAndArg, callInvokeWithMethodAndArg) : callInvokeWithMethodAndArg(); } }); } function makeInvokeMethod(e, r, n) { var o = h; return function (i, a) { if (o === f) throw Error("Generator is already running"); if (o === s) { if ("throw" === i) throw a; return { value: t, done: !0 }; } for (n.method = i, n.arg = a;;) { var c = n.delegate; if (c) { var u = maybeInvokeDelegate(c, n); if (u) { if (u === y) continue; return u; } } if ("next" === n.method) n.sent = n._sent = n.arg;else if ("throw" === n.method) { if (o === h) throw o = s, n.arg; n.dispatchException(n.arg); } else "return" === n.method && n.abrupt("return", n.arg); o = f; var p = tryCatch(e, r, n); if ("normal" === p.type) { if (o = n.done ? s : l, p.arg === y) continue; return { value: p.arg, done: n.done }; } "throw" === p.type && (o = s, n.method = "throw", n.arg = p.arg); } }; } function maybeInvokeDelegate(e, r) { var n = r.method, o = e.iterator[n]; if (o === t) return r.delegate = null, "throw" === n && e.iterator["return"] && (r.method = "return", r.arg = t, maybeInvokeDelegate(e, r), "throw" === r.method) || "return" !== n && (r.method = "throw", r.arg = new TypeError("The iterator does not provide a '" + n + "' method")), y; var i = tryCatch(o, e.iterator, r.arg); if ("throw" === i.type) return r.method = "throw", r.arg = i.arg, r.delegate = null, y; var a = i.arg; return a ? a.done ? (r[e.resultName] = a.value, r.next = e.nextLoc, "return" !== r.method && (r.method = "next", r.arg = t), r.delegate = null, y) : a : (r.method = "throw", r.arg = new TypeError("iterator result is not an object"), r.delegate = null, y); } function pushTryEntry(t) { var e = { tryLoc: t[0] }; 1 in t && (e.catchLoc = t[1]), 2 in t && (e.finallyLoc = t[2], e.afterLoc = t[3]), this.tryEntries.push(e); } function resetTryEntry(t) { var e = t.completion || {}; e.type = "normal", delete e.arg, t.completion = e; } function Context(t) { this.tryEntries = [{ tryLoc: "root" }], t.forEach(pushTryEntry, this), this.reset(!0); } function values(e) { if (e || "" === e) { var r = e[a]; if (r) return r.call(e); if ("function" == typeof e.next) return e; if (!isNaN(e.length)) { var o = -1, i = function next() { for (; ++o < e.length;) if (n.call(e, o)) return next.value = e[o], next.done = !1, next; return next.value = t, next.done = !0, next; }; return i.next = i; } } throw new TypeError(_typeof(e) + " is not iterable"); } return GeneratorFunction.prototype = GeneratorFunctionPrototype, o(g, "constructor", { value: GeneratorFunctionPrototype, configurable: !0 }), o(GeneratorFunctionPrototype, "constructor", { value: GeneratorFunction, configurable: !0 }), GeneratorFunction.displayName = define(GeneratorFunctionPrototype, u, "GeneratorFunction"), e.isGeneratorFunction = function (t) { var e = "function" == typeof t && t.constructor; return !!e && (e === GeneratorFunction || "GeneratorFunction" === (e.displayName || e.name)); }, e.mark = function (t) { return Object.setPrototypeOf ? Object.setPrototypeOf(t, GeneratorFunctionPrototype) : (t.__proto__ = GeneratorFunctionPrototype, define(t, u, "GeneratorFunction")), t.prototype = Object.create(g), t; }, e.awrap = function (t) { return { __await: t }; }, defineIteratorMethods(AsyncIterator.prototype), define(AsyncIterator.prototype, c, function () { return this; }), e.AsyncIterator = AsyncIterator, e.async = function (t, r, n, o, i) { void 0 === i && (i = Promise); var a = new AsyncIterator(wrap(t, r, n, o), i); return e.isGeneratorFunction(r) ? a : a.next().then(function (t) { return t.done ? t.value : a.next(); }); }, defineIteratorMethods(g), define(g, u, "Generator"), define(g, a, function () { return this; }), define(g, "toString", function () { return "[object Generator]"; }), e.keys = function (t) { var e = Object(t), r = []; for (var n in e) r.push(n); return r.reverse(), function next() { for (; r.length;) { var t = r.pop(); if (t in e) return next.value = t, next.done = !1, next; } return next.done = !0, next; }; }, e.values = values, Context.prototype = { constructor: Context, reset: function reset(e) { if (this.prev = 0, this.next = 0, this.sent = this._sent = t, this.done = !1, this.delegate = null, this.method = "next", this.arg = t, this.tryEntries.forEach(resetTryEntry), !e) for (var r in this) "t" === r.charAt(0) && n.call(this, r) && !isNaN(+r.slice(1)) && (this[r] = t); }, stop: function stop() { this.done = !0; var t = this.tryEntries[0].completion; if ("throw" === t.type) throw t.arg; return this.rval; }, dispatchException: function dispatchException(e) { if (this.done) throw e; var r = this; function handle(n, o) { return a.type = "throw", a.arg = e, r.next = n, o && (r.method = "next", r.arg = t), !!o; } for (var o = this.tryEntries.length - 1; o >= 0; --o) { var i = this.tryEntries[o], a = i.completion; if ("root" === i.tryLoc) return handle("end"); if (i.tryLoc <= this.prev) { var c = n.call(i, "catchLoc"), u = n.call(i, "finallyLoc"); if (c && u) { if (this.prev < i.catchLoc) return handle(i.catchLoc, !0); if (this.prev < i.finallyLoc) return handle(i.finallyLoc); } else if (c) { if (this.prev < i.catchLoc) return handle(i.catchLoc, !0); } else { if (!u) throw Error("try statement without catch or finally"); if (this.prev < i.finallyLoc) return handle(i.finallyLoc); } } } }, abrupt: function abrupt(t, e) { for (var r = this.tryEntries.length - 1; r >= 0; --r) { var o = this.tryEntries[r]; if (o.tryLoc <= this.prev && n.call(o, "finallyLoc") && this.prev < o.finallyLoc) { var i = o; break; } } i && ("break" === t || "continue" === t) && i.tryLoc <= e && e <= i.finallyLoc && (i = null); var a = i ? i.completion : {}; return a.type = t, a.arg = e, i ? (this.method = "next", this.next = i.finallyLoc, y) : this.complete(a); }, complete: function complete(t, e) { if ("throw" === t.type) throw t.arg; return "break" === t.type || "continue" === t.type ? this.next = t.arg : "return" === t.type ? (this.rval = this.arg = t.arg, this.method = "return", this.next = "end") : "normal" === t.type && e && (this.next = e), y; }, finish: function finish(t) { for (var e = this.tryEntries.length - 1; e >= 0; --e) { var r = this.tryEntries[e]; if (r.finallyLoc === t) return this.complete(r.completion, r.afterLoc), resetTryEntry(r), y; } }, "catch": function _catch(t) { for (var e = this.tryEntries.length - 1; e >= 0; --e) { var r = this.tryEntries[e]; if (r.tryLoc === t) { var n = r.completion; if ("throw" === n.type) { var o = n.arg; resetTryEntry(r); } return o; } } throw Error("illegal catch attempt"); }, delegateYield: function delegateYield(e, r, n) { return this.delegate = { iterator: values(e), resultName: r, nextLoc: n }, "next" === this.method && (this.arg = t), y; } }, e; }
+function _toConsumableArray(r) { return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread(); }
+function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
+function _iterableToArray(r) { if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"]) return Array.from(r); }
+function _arrayWithoutHoles(r) { if (Array.isArray(r)) return _arrayLikeToArray(r); }
+function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
 function asyncGeneratorStep(n, t, e, r, o, a, c) { try { var i = n[a](c), u = i.value; } catch (n) { return void e(n); } i.done ? t(u) : Promise.resolve(u).then(r, o); }
 function _asyncToGenerator(n) { return function () { var t = this, e = arguments; return new Promise(function (r, o) { var a = n.apply(t, e); function _next(n) { asyncGeneratorStep(a, r, o, _next, _throw, "next", n); } function _throw(n) { asyncGeneratorStep(a, r, o, _next, _throw, "throw", n); } _next(void 0); }); }; }
 
@@ -145869,7 +145875,7 @@ var API_ENDPOINTS = {
   SAVE_DIAGRAM: '/api/bpmn/save' // POST
 };
 
-// Execution state enum (matching backend C# enum)
+// Numeric state enum to match backend C# enum
 var EXECUTION_STATE = {
   ACTIVE: 0,
   PAUSED: 1,
@@ -145879,14 +145885,39 @@ var EXECUTION_STATE = {
   DEACTIVE: 5
 };
 
+/**
+ * Get the state name from the numeric state value
+ * @param {number} stateValue - The numeric state value
+ * @returns {string} - The state name
+ */
+function getStateName(stateValue) {
+  switch (stateValue) {
+    case EXECUTION_STATE.ACTIVE:
+      return 'active';
+    case EXECUTION_STATE.PAUSED:
+      return 'paused';
+    case EXECUTION_STATE.COMPLETED:
+      return 'completed';
+    case EXECUTION_STATE.TERMINATED:
+      return 'terminated';
+    case EXECUTION_STATE.FAILED:
+      return 'failed';
+    case EXECUTION_STATE.DEACTIVE:
+      return 'deactive';
+    default:
+      console.warn("Unknown state value: ".concat(stateValue));
+      return 'unknown';
+  }
+}
+
 // Material Design color palette - A500 values
 var MATERIAL_COLORS = {
   // Primary colors
   green: {
-    main: '#4CAF50',
+    main: '#328534',
     light: '#81C784',
     dark: '#388E3C',
-    accent: '#00E676'
+    accent: '#10653e'
   },
   blue: {
     main: '#2196F3',
@@ -145943,10 +145974,10 @@ var MATERIAL_COLORS = {
     accent: '#8D6E63'
   },
   grey: {
-    main: '#9E9E9E',
+    main: '#4e4e4e',
     light: '#E0E0E0',
     dark: '#616161',
-    accent: '#BDBDBD'
+    accent: '#686868'
   },
   blueGrey: {
     main: '#607D8B',
@@ -146656,9 +146687,10 @@ function applyExecutionData(executionMap, activeContexts) {
   // Reset all elements to default appearance
   resetElementStyles(elementRegistry, canvas);
 
-  // Track non-executable elements to mark their outgoing flows as non-executable
+  // Track elements by their execution status
   var nonExecutableElements = new Set();
   var executableElements = new Set();
+  var processedFlows = new Set();
 
   // Process execution traces
   if (executionMap && executionMap.traces && Array.isArray(executionMap.traces)) {
@@ -146686,6 +146718,9 @@ function applyExecutionData(executionMap, activeContexts) {
               // Only mark as completed if the trace is executable
               if (trace.isExecutable) {
                 markElementAsCompleted(canvas, elementRegistry, element, elementId, trace);
+                executableElements.add(elementId);
+              } else {
+                nonExecutableElements.add(elementId);
               }
             }
           }
@@ -146704,105 +146739,189 @@ function applyExecutionData(executionMap, activeContexts) {
       }
     });
 
-    // Fourth pass: Process flow connections
-    elementRegistry.forEach(function (element) {
-      // Only process sequence flows
-      if (isSequenceFlow(element)) {
-        var _element$source, _element$target;
-        var sourceId = (_element$source = element.source) === null || _element$source === void 0 ? void 0 : _element$source.id;
-        var targetId = (_element$target = element.target) === null || _element$target === void 0 ? void 0 : _element$target.id;
+    // Process active contexts to highlight current elements
+    if (activeContexts && Array.isArray(activeContexts)) {
+      activeContexts.forEach(function (context) {
+        if (context.currentElementId) {
+          var element = elementRegistry.get(context.currentElementId);
+          if (element) {
+            // Convert string state to numeric if needed
+            var stateValue;
+            if (typeof context.state === 'string') {
+              // Map string state to numeric value
+              switch (context.state.toLowerCase()) {
+                case 'active':
+                  stateValue = EXECUTION_STATE.ACTIVE;
+                  break;
+                case 'paused':
+                  stateValue = EXECUTION_STATE.PAUSED;
+                  break;
+                case 'completed':
+                  stateValue = EXECUTION_STATE.COMPLETED;
+                  break;
+                case 'terminated':
+                  stateValue = EXECUTION_STATE.TERMINATED;
+                  break;
+                case 'failed':
+                  stateValue = EXECUTION_STATE.FAILED;
+                  break;
+                case 'deactive':
+                  stateValue = EXECUTION_STATE.DEACTIVE;
+                  break;
+                default:
+                  stateValue = EXECUTION_STATE.ACTIVE;
+              }
+            } else {
+              // Already numeric
+              stateValue = context.state;
+            }
 
-        // Check if source or target is non-executable
-        if (sourceId && nonExecutableElements.has(sourceId)) {
-          // Flow from non-executable element is always non-executable
-          markFlowAsNonExecutable(canvas, elementRegistry, element, element.id);
-        } else if (targetId && nonExecutableElements.has(targetId)) {
-          // Flow to non-executable element is always non-executable
-          markFlowAsNonExecutable(canvas, elementRegistry, element, element.id);
-        }
-      }
-    });
+            // Check if the context is executable
+            var isExecutable = stateValue === EXECUTION_STATE.ACTIVE;
+            markElementAsActive(canvas, elementRegistry, element, context.currentElementId, {
+              executionId: context.contextId,
+              state: stateValue,
+              isExecutable: isExecutable
+            });
 
-    // Fifth pass: Check for flows between elements and mark them appropriately
-    elementRegistry.forEach(function (element) {
-      if (isSequenceFlow(element)) {
-        var _element$source2, _element$target2;
-        var sourceId = (_element$source2 = element.source) === null || _element$source2 === void 0 ? void 0 : _element$source2.id;
-        var targetId = (_element$target2 = element.target) === null || _element$target2 === void 0 ? void 0 : _element$target2.id;
-
-        // If we have both source and target
-        if (sourceId && targetId) {
-          // If either source or target is in the non-executable set, mark flow as non-executable
-          if (nonExecutableElements.has(sourceId) || nonExecutableElements.has(targetId)) {
-            markFlowAsNonExecutable(canvas, elementRegistry, element, element.id);
-          }
-          // If both source and target are in the executable set, mark flow as executable
-          else if (executableElements.has(sourceId) && executableElements.has(targetId)) {
-            // Mark as executable
-            canvas.addMarker(element.id, 'executable');
-            canvas.addMarker(element.id, 'executable-flow');
-            var gfx = elementRegistry.getGraphics(element.id);
-            if (gfx) {
-              applyColorToElement(gfx, ELEMENT_COLORS.executable.stroke, ELEMENT_COLORS.executable.strokeWidth);
+            // If not executable, add to non-executable set for flow processing
+            if (!isExecutable) {
+              nonExecutableElements.add(context.currentElementId);
+            } else {
+              executableElements.add(context.currentElementId);
             }
           }
         }
-      }
-    });
-  }
+      });
+    }
 
-  // Process active contexts to highlight current elements
-  if (activeContexts && Array.isArray(activeContexts)) {
-    activeContexts.forEach(function (context) {
-      if (context.currentElementId) {
-        var element = elementRegistry.get(context.currentElementId);
-        if (element) {
-          // Convert string state to numeric if needed
-          var stateValue;
-          if (typeof context.state === 'string') {
-            // Map string state to numeric value
-            switch (context.state.toLowerCase()) {
-              case 'active':
-                stateValue = EXECUTION_STATE.ACTIVE;
-                break;
-              case 'paused':
-                stateValue = EXECUTION_STATE.PAUSED;
-                break;
-              case 'completed':
-                stateValue = EXECUTION_STATE.COMPLETED;
-                break;
-              case 'terminated':
-                stateValue = EXECUTION_STATE.TERMINATED;
-                break;
-              case 'failed':
-                stateValue = EXECUTION_STATE.FAILED;
-                break;
-              case 'deactive':
-                stateValue = EXECUTION_STATE.DEACTIVE;
-                break;
-              default:
-                stateValue = EXECUTION_STATE.ACTIVE;
+    // Process sequence flows from the backend
+    if (executionMap.sequenceFlows && Array.isArray(executionMap.sequenceFlows)) {
+      console.log('Processing sequence flows from backend:', executionMap.sequenceFlows);
+      try {
+        // Process each sequence flow from the backend
+        executionMap.sequenceFlows.forEach(function (flow) {
+          try {
+            // Find the flow element in the diagram
+            var flowElement = elementRegistry.get(flow.flowId);
+            if (flowElement) {
+              // Mark as processed to avoid duplicate processing
+              processedFlows.add(flow.flowId);
+
+              // Apply styling based on flow.isExecutable
+              if (flow.isExecutable) {
+                // Mark as executable
+                canvas.addMarker(flow.flowId, 'executable');
+                canvas.addMarker(flow.flowId, 'executable-flow');
+                var gfx = elementRegistry.getGraphics(flow.flowId);
+                if (gfx) {
+                  applyColorToElement(gfx, ELEMENT_COLORS.executable.stroke, ELEMENT_COLORS.executable.strokeWidth);
+                } else {
+                  console.warn("Could not get graphics for flow ".concat(flow.flowId));
+                }
+
+                // Add tooltip
+                addTooltipToElement(elementRegistry, flow.flowId, {
+                  title: "Executable Flow: ".concat(flow.flowId),
+                  content: "This flow is executable and connects ".concat(flow.sourceId, " to ").concat(flow.targetId, ".")
+                });
+              } else {
+                // Mark as non-executable
+                markFlowAsNonExecutable(canvas, elementRegistry, flowElement, flow.flowId);
+              }
+
+              // Update our element sets based on flow data
+              if (flow.isExecutable) {
+                executableElements.add(flow.sourceId);
+                executableElements.add(flow.targetId);
+              }
+            } else {
+              console.warn("Flow ".concat(flow.flowId, " not found in diagram"));
             }
-          } else {
-            // Already numeric
-            stateValue = context.state;
+          } catch (flowError) {
+            console.error("Error processing flow ".concat(flow.flowId, ":"), flowError);
           }
-
-          // Check if the context is executable
-          var isExecutable = stateValue === EXECUTION_STATE.ACTIVE;
-          markElementAsActive(canvas, elementRegistry, element, context.currentElementId, {
-            executionId: context.contextId,
-            state: stateValue,
-            isExecutable: isExecutable
-          });
-
-          // If not executable, add to non-executable set for flow processing
-          if (!isExecutable) {
-            nonExecutableElements.add(context.currentElementId);
-          }
-        }
+        });
+        console.log("Processed ".concat(processedFlows.size, " flow paths from backend"));
+      } catch (sequenceFlowsError) {
+        console.error('Error processing sequence flows from backend:', sequenceFlowsError);
       }
-    });
+    }
+
+    // Process any remaining flows that weren't in the backend data
+    try {
+      console.log('Processing remaining flow paths - executable elements:', _toConsumableArray(executableElements));
+      console.log('Processing remaining flow paths - non-executable elements:', _toConsumableArray(nonExecutableElements));
+      elementRegistry.forEach(function (element) {
+        try {
+          // Only process sequence flows that haven't been processed yet
+          if (isSequenceFlow(element) && !processedFlows.has(element.id)) {
+            var _element$source, _element$target;
+            var sourceId = (_element$source = element.source) === null || _element$source === void 0 ? void 0 : _element$source.id;
+            var targetId = (_element$target = element.target) === null || _element$target === void 0 ? void 0 : _element$target.id;
+
+            // Skip flows without proper source or target
+            if (!sourceId || !targetId) {
+              console.warn("Flow ".concat(element.id, " has missing source or target, skipping"));
+              return;
+            }
+
+            // Default to non-executable unless proven otherwise
+            var isFlowExecutable = false;
+
+            // Debug info
+            var sourceExecutable = executableElements.has(sourceId);
+            var targetExecutable = executableElements.has(targetId);
+            var sourceNonExecutable = nonExecutableElements.has(sourceId);
+            var targetNonExecutable = nonExecutableElements.has(targetId);
+            console.log("Flow ".concat(element.id, " from ").concat(sourceId, " to ").concat(targetId, ":"), {
+              sourceExecutable: sourceExecutable,
+              targetExecutable: targetExecutable,
+              sourceNonExecutable: sourceNonExecutable,
+              targetNonExecutable: targetNonExecutable
+            });
+
+            // A flow is executable ONLY if BOTH source AND target are executable
+            if (sourceExecutable && targetExecutable) {
+              isFlowExecutable = true;
+              console.log("Flow ".concat(element.id, " is executable because both source and target are executable"));
+            }
+
+            // If either source or target is non-executable, flow is non-executable
+            if (sourceNonExecutable || targetNonExecutable) {
+              isFlowExecutable = false;
+              console.log("Flow ".concat(element.id, " is non-executable because source or target is non-executable"));
+            }
+            try {
+              if (isFlowExecutable) {
+                // Mark as executable
+                canvas.addMarker(element.id, 'executable');
+                canvas.addMarker(element.id, 'executable-flow');
+                var gfx = elementRegistry.getGraphics(element.id);
+                if (gfx) {
+                  applyColorToElement(gfx, ELEMENT_COLORS.executable.stroke, ELEMENT_COLORS.executable.strokeWidth);
+                } else {
+                  console.warn("Could not get graphics for flow ".concat(element.id));
+                }
+              } else {
+                // Mark as non-executable
+                markFlowAsNonExecutable(canvas, elementRegistry, element, element.id);
+              }
+            } catch (styleError) {
+              console.error("Error styling flow ".concat(element.id, ":"), styleError);
+            }
+
+            // Mark as processed
+            processedFlows.add(element.id);
+          }
+        } catch (elementError) {
+          console.error("Error processing flow element ".concat(element.id, ":"), elementError);
+        }
+      });
+      console.log("Processed ".concat(processedFlows.size, " total flow paths"));
+    } catch (flowProcessingError) {
+      console.error('Error processing flow paths:', flowProcessingError);
+    }
   }
 
   // Initialize tooltips
@@ -146981,7 +147100,7 @@ function applyColorToElement(gfx, strokeColor, strokeWidth) {
         }
         if (strokeWidth) {
           // Increase stroke width for better visibility
-          path.style.strokeWidth = strokeWidth + 1 + 'px';
+          path.style.strokeWidth = 1 + 'px';
         }
 
         // Add dashed effect for non-executable flows

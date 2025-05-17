@@ -23,7 +23,7 @@ const API_ENDPOINTS = {
     SAVE_DIAGRAM: '/api/bpmn/save'                  // POST
 };
 
-// Execution state enum (matching backend C# enum)
+// Numeric state enum to match backend C# enum
 const EXECUTION_STATE = {
     ACTIVE: 0,
     PAUSED: 1,
@@ -33,10 +33,35 @@ const EXECUTION_STATE = {
     DEACTIVE: 5
 };
 
+/**
+ * Get the state name from the numeric state value
+ * @param {number} stateValue - The numeric state value
+ * @returns {string} - The state name
+ */
+function getStateName(stateValue) {
+    switch (stateValue) {
+        case EXECUTION_STATE.ACTIVE:
+            return 'active';
+        case EXECUTION_STATE.PAUSED:
+            return 'paused';
+        case EXECUTION_STATE.COMPLETED:
+            return 'completed';
+        case EXECUTION_STATE.TERMINATED:
+            return 'terminated';
+        case EXECUTION_STATE.FAILED:
+            return 'failed';
+        case EXECUTION_STATE.DEACTIVE:
+            return 'deactive';
+        default:
+            console.warn(`Unknown state value: ${stateValue}`);
+            return 'unknown';
+    }
+}
+
 // Material Design color palette - A500 values
 const MATERIAL_COLORS = {
     // Primary colors
-    green: { main: '#4CAF50', light: '#81C784', dark: '#388E3C', accent: '#00E676' },
+    green: { main: '#328534', light: '#81C784', dark: '#388E3C', accent: '#10653e' },
     blue: { main: '#2196F3', light: '#64B5F6', dark: '#1976D2', accent: '#448AFF' },
     purple: { main: '#9C27B0', light: '#BA68C8', dark: '#7B1FA2', accent: '#E040FB' },
     orange: { main: '#FF9800', light: '#FFB74D', dark: '#F57C00', accent: '#FFAB40' },
@@ -46,7 +71,7 @@ const MATERIAL_COLORS = {
     cyan: { main: '#00BCD4', light: '#4DD0E1', dark: '#0097A7', accent: '#18FFFF' },
     amber: { main: '#FFC107', light: '#FFD54F', dark: '#FFA000', accent: '#FFD740' },
     brown: { main: '#795548', light: '#A1887F', dark: '#5D4037', accent: '#8D6E63' },
-    grey: { main: '#9E9E9E', light: '#E0E0E0', dark: '#616161', accent: '#BDBDBD' },
+    grey: { main: '#4e4e4e', light: '#E0E0E0', dark: '#616161', accent: '#686868' },
     blueGrey: { main: '#607D8B', light: '#90A4AE', dark: '#455A64', accent: '#78909C' }
 };
 
@@ -60,7 +85,7 @@ const ELEMENT_COLORS = {
     failed: { stroke: MATERIAL_COLORS.red.main, strokeWidth: 2, textColor: MATERIAL_COLORS.red.main },
     deactive: { stroke: MATERIAL_COLORS.grey.light, strokeWidth: 1, textColor: MATERIAL_COLORS.grey.main },
     
-    // Executable status colors
+    // Executable status colors - always green for executable elements
     executable: { stroke: MATERIAL_COLORS.green.accent, strokeWidth: 3, textColor: MATERIAL_COLORS.green.accent },
     nonExecutable: { stroke: MATERIAL_COLORS.grey.main, strokeWidth: 2, textColor: MATERIAL_COLORS.grey.main },
     
@@ -429,9 +454,10 @@ function applyExecutionData(executionMap, activeContexts) {
     // Reset all elements to default appearance
     resetElementStyles(elementRegistry, canvas);
     
-    // Track non-executable elements to mark their outgoing flows as non-executable
+    // Track elements by their execution status
     const nonExecutableElements = new Set();
     const executableElements = new Set();
+    const processedFlows = new Set();
     
     // Process execution traces
     if (executionMap && executionMap.traces && Array.isArray(executionMap.traces)) {
@@ -459,6 +485,9 @@ function applyExecutionData(executionMap, activeContexts) {
                             // Only mark as completed if the trace is executable
                             if (trace.isExecutable) {
                                 markElementAsCompleted(canvas, elementRegistry, element, elementId, trace);
+                                executableElements.add(elementId);
+                            } else {
+                                nonExecutableElements.add(elementId);
                             }
                         }
                     }
@@ -477,91 +506,183 @@ function applyExecutionData(executionMap, activeContexts) {
             }
         });
         
-        // Fourth pass: Process flow connections
-        elementRegistry.forEach(element => {
-            // Only process sequence flows
-            if (isSequenceFlow(element)) {
-                const sourceId = element.source?.id;
-                const targetId = element.target?.id;
-                
-                // Check if source or target is non-executable
-                if (sourceId && nonExecutableElements.has(sourceId)) {
-                    // Flow from non-executable element is always non-executable
-                    markFlowAsNonExecutable(canvas, elementRegistry, element, element.id);
-                } else if (targetId && nonExecutableElements.has(targetId)) {
-                    // Flow to non-executable element is always non-executable
-                    markFlowAsNonExecutable(canvas, elementRegistry, element, element.id);
+        // Process active contexts to highlight current elements
+        if (activeContexts && Array.isArray(activeContexts)) {
+            activeContexts.forEach(context => {
+                if (context.currentElementId) {
+                    const element = elementRegistry.get(context.currentElementId);
+                    if (element) {
+                        // Convert string state to numeric if needed
+                        let stateValue;
+                        if (typeof context.state === 'string') {
+                            // Map string state to numeric value
+                            switch (context.state.toLowerCase()) {
+                                case 'active': stateValue = EXECUTION_STATE.ACTIVE; break;
+                                case 'paused': stateValue = EXECUTION_STATE.PAUSED; break;
+                                case 'completed': stateValue = EXECUTION_STATE.COMPLETED; break;
+                                case 'terminated': stateValue = EXECUTION_STATE.TERMINATED; break;
+                                case 'failed': stateValue = EXECUTION_STATE.FAILED; break;
+                                case 'deactive': stateValue = EXECUTION_STATE.DEACTIVE; break;
+                                default: stateValue = EXECUTION_STATE.ACTIVE;
+                            }
+                        } else {
+                            // Already numeric
+                            stateValue = context.state;
+                        }
+                        
+                        // Check if the context is executable
+                        const isExecutable = (stateValue === EXECUTION_STATE.ACTIVE);
+                        
+                        markElementAsActive(canvas, elementRegistry, element, context.currentElementId, {
+                            executionId: context.contextId,
+                            state: stateValue,
+                            isExecutable: isExecutable
+                        });
+                        
+                        // If not executable, add to non-executable set for flow processing
+                        if (!isExecutable) {
+                            nonExecutableElements.add(context.currentElementId);
+                        } else {
+                            executableElements.add(context.currentElementId);
+                        }
+                    }
                 }
-            }
-        });
+            });
+        }
         
-        // Fifth pass: Check for flows between elements and mark them appropriately
-        elementRegistry.forEach(element => {
-            if (isSequenceFlow(element)) {
-                const sourceId = element.source?.id;
-                const targetId = element.target?.id;
+        // Process sequence flows from the backend
+        if (executionMap.sequenceFlows && Array.isArray(executionMap.sequenceFlows)) {
+            console.log('Processing sequence flows from backend:', executionMap.sequenceFlows);
+            
+            try {
+                // Process each sequence flow from the backend
+                executionMap.sequenceFlows.forEach(flow => {
+                    try {
+                        // Find the flow element in the diagram
+                        const flowElement = elementRegistry.get(flow.flowId);
+                        
+                        if (flowElement) {
+                            // Mark as processed to avoid duplicate processing
+                            processedFlows.add(flow.flowId);
+                            
+                            // Apply styling based on flow.isExecutable
+                            if (flow.isExecutable) {
+                                // Mark as executable
+                                canvas.addMarker(flow.flowId, 'executable');
+                                canvas.addMarker(flow.flowId, 'executable-flow');
+                                const gfx = elementRegistry.getGraphics(flow.flowId);
+                                if (gfx) {
+                                    applyColorToElement(gfx, ELEMENT_COLORS.executable.stroke, ELEMENT_COLORS.executable.strokeWidth);
+                                } else {
+                                    console.warn(`Could not get graphics for flow ${flow.flowId}`);
+                                }
+                                
+                                // Add tooltip
+                                addTooltipToElement(elementRegistry, flow.flowId, {
+                                    title: `Executable Flow: ${flow.flowId}`,
+                                    content: `This flow is executable and connects ${flow.sourceId} to ${flow.targetId}.`
+                                });
+                            } else {
+                                // Mark as non-executable
+                                markFlowAsNonExecutable(canvas, elementRegistry, flowElement, flow.flowId);
+                            }
+                            
+                            // Update our element sets based on flow data
+                            if (flow.isExecutable) {
+                                executableElements.add(flow.sourceId);
+                                executableElements.add(flow.targetId);
+                            }
+                        } else {
+                            console.warn(`Flow ${flow.flowId} not found in diagram`);
+                        }
+                    } catch (flowError) {
+                        console.error(`Error processing flow ${flow.flowId}:`, flowError);
+                    }
+                });
                 
-                // If we have both source and target
-                if (sourceId && targetId) {
-                    // If either source or target is in the non-executable set, mark flow as non-executable
-                    if (nonExecutableElements.has(sourceId) || nonExecutableElements.has(targetId)) {
-                        markFlowAsNonExecutable(canvas, elementRegistry, element, element.id);
-                    }
-                    // If both source and target are in the executable set, mark flow as executable
-                    else if (executableElements.has(sourceId) && executableElements.has(targetId)) {
-                        // Mark as executable
-                        canvas.addMarker(element.id, 'executable');
-                        canvas.addMarker(element.id, 'executable-flow');
-                        const gfx = elementRegistry.getGraphics(element.id);
-                        if (gfx) {
-                            applyColorToElement(gfx, ELEMENT_COLORS.executable.stroke, ELEMENT_COLORS.executable.strokeWidth);
-                        }
-                    }
-                }
+                console.log(`Processed ${processedFlows.size} flow paths from backend`);
+            } catch (sequenceFlowsError) {
+                console.error('Error processing sequence flows from backend:', sequenceFlowsError);
             }
-        });
-    }
-    
-    // Process active contexts to highlight current elements
-    if (activeContexts && Array.isArray(activeContexts)) {
-        activeContexts.forEach(context => {
-            if (context.currentElementId) {
-                const element = elementRegistry.get(context.currentElementId);
-                if (element) {
-                    // Convert string state to numeric if needed
-                    let stateValue;
-                    if (typeof context.state === 'string') {
-                        // Map string state to numeric value
-                        switch (context.state.toLowerCase()) {
-                            case 'active': stateValue = EXECUTION_STATE.ACTIVE; break;
-                            case 'paused': stateValue = EXECUTION_STATE.PAUSED; break;
-                            case 'completed': stateValue = EXECUTION_STATE.COMPLETED; break;
-                            case 'terminated': stateValue = EXECUTION_STATE.TERMINATED; break;
-                            case 'failed': stateValue = EXECUTION_STATE.FAILED; break;
-                            case 'deactive': stateValue = EXECUTION_STATE.DEACTIVE; break;
-                            default: stateValue = EXECUTION_STATE.ACTIVE;
+        }
+        
+        // Process any remaining flows that weren't in the backend data
+        try {
+            console.log('Processing remaining flow paths - executable elements:', [...executableElements]);
+            console.log('Processing remaining flow paths - non-executable elements:', [...nonExecutableElements]);
+            
+            elementRegistry.forEach(element => {
+                try {
+                    // Only process sequence flows that haven't been processed yet
+                    if (isSequenceFlow(element) && !processedFlows.has(element.id)) {
+                        const sourceId = element.source?.id;
+                        const targetId = element.target?.id;
+                        
+                        // Skip flows without proper source or target
+                        if (!sourceId || !targetId) {
+                            console.warn(`Flow ${element.id} has missing source or target, skipping`);
+                            return;
                         }
-                    } else {
-                        // Already numeric
-                        stateValue = context.state;
+                        
+                        // Default to non-executable unless proven otherwise
+                        let isFlowExecutable = false;
+                        
+                        // Debug info
+                        const sourceExecutable = executableElements.has(sourceId);
+                        const targetExecutable = executableElements.has(targetId);
+                        const sourceNonExecutable = nonExecutableElements.has(sourceId);
+                        const targetNonExecutable = nonExecutableElements.has(targetId);
+                        
+                        console.log(`Flow ${element.id} from ${sourceId} to ${targetId}:`, {
+                            sourceExecutable,
+                            targetExecutable,
+                            sourceNonExecutable,
+                            targetNonExecutable
+                        });
+                        
+                        // A flow is executable ONLY if BOTH source AND target are executable
+                        if (sourceExecutable && targetExecutable) {
+                            isFlowExecutable = true;
+                            console.log(`Flow ${element.id} is executable because both source and target are executable`);
+                        }
+                        
+                        // If either source or target is non-executable, flow is non-executable
+                        if (sourceNonExecutable || targetNonExecutable) {
+                            isFlowExecutable = false;
+                            console.log(`Flow ${element.id} is non-executable because source or target is non-executable`);
+                        }
+                        
+                        try {
+                            if (isFlowExecutable) {
+                                // Mark as executable
+                                canvas.addMarker(element.id, 'executable');
+                                canvas.addMarker(element.id, 'executable-flow');
+                                const gfx = elementRegistry.getGraphics(element.id);
+                                if (gfx) {
+                                    applyColorToElement(gfx, ELEMENT_COLORS.executable.stroke, ELEMENT_COLORS.executable.strokeWidth);
+                                } else {
+                                    console.warn(`Could not get graphics for flow ${element.id}`);
+                                }
+                            } else {
+                                // Mark as non-executable
+                                markFlowAsNonExecutable(canvas, elementRegistry, element, element.id);
+                            }
+                        } catch (styleError) {
+                            console.error(`Error styling flow ${element.id}:`, styleError);
+                        }
+                        
+                        // Mark as processed
+                        processedFlows.add(element.id);
                     }
-                    
-                    // Check if the context is executable
-                    const isExecutable = (stateValue === EXECUTION_STATE.ACTIVE);
-                    
-                    markElementAsActive(canvas, elementRegistry, element, context.currentElementId, {
-                        executionId: context.contextId,
-                        state: stateValue,
-                        isExecutable: isExecutable
-                    });
-                    
-                    // If not executable, add to non-executable set for flow processing
-                    if (!isExecutable) {
-                        nonExecutableElements.add(context.currentElementId);
-                    }
+                } catch (elementError) {
+                    console.error(`Error processing flow element ${element.id}:`, elementError);
                 }
-            }
-        });
+            });
+            
+            console.log(`Processed ${processedFlows.size} total flow paths`);
+        } catch (flowProcessingError) {
+            console.error('Error processing flow paths:', flowProcessingError);
+        }
     }
 
     // Initialize tooltips
@@ -634,12 +755,12 @@ function markElementAsCompleted(canvas, elementRegistry, element, elementId, tra
 }
 
 /**
- * Mark an element as active
+ * Mark an element as active with the current state
  * @param {object} canvas - The BPMN.js canvas
  * @param {object} elementRegistry - The BPMN.js element registry
  * @param {object} element - The BPMN element
  * @param {string} elementId - The element ID
- * @param {object} trace - The execution trace data
+ * @param {object} trace - The execution trace
  */
 function markElementAsActive(canvas, elementRegistry, element, elementId, trace) {
     const gfx = elementRegistry.getGraphics(elementId);
@@ -662,6 +783,7 @@ function markElementAsActive(canvas, elementRegistry, element, elementId, trace)
     if (isSequenceFlow(element)) {
         // For sequence flows
         if (trace.isExecutable) {
+            // Always use green for executable flows
             applyColorToElement(gfx, FLOW_COLORS.executable.stroke, FLOW_COLORS.executable.strokeWidth);
         } else {
             applyColorToElement(gfx, FLOW_COLORS.nonExecutable.stroke, FLOW_COLORS.nonExecutable.strokeWidth);
@@ -669,20 +791,25 @@ function markElementAsActive(canvas, elementRegistry, element, elementId, trace)
     } else {
         // For other elements
         if (trace.isExecutable) {
+            // Always use green for executable elements, regardless of state
             applyColorToElement(gfx, ELEMENT_COLORS.executable.stroke, ELEMENT_COLORS.executable.strokeWidth);
+            
+            // Add tooltip with execution info
+            addTooltipToElement(elementRegistry, elementId, {
+                title: `Executable Element: ${elementId}`,
+                content: `State: ${stateName}<br>Execution ID: ${trace.executionId}`
+            });
         } else {
+            // Apply non-executable style
             applyColorToElement(gfx, ELEMENT_COLORS.nonExecutable.stroke, ELEMENT_COLORS.nonExecutable.strokeWidth);
+            
+            // Add tooltip with execution info
+            addTooltipToElement(elementRegistry, elementId, {
+                title: `Non-Executable Element: ${elementId}`,
+                content: `State: ${stateName}<br>Execution ID: ${trace.executionId}`
+            });
         }
     }
-    
-    // Add tooltip with execution information
-    const stateText = getStateName(trace.state).charAt(0).toUpperCase() + getStateName(trace.state).slice(1);
-    addTooltipToElement(elementRegistry, elementId, {
-        title: `${stateText}: ${elementId}`,
-        content: `Execution ID: ${trace.executionId}<br>
-                  State: ${stateText}<br>
-                  Executable: ${trace.isExecutable ? 'Yes' : 'No'}`
-    });
 }
 
 /**
@@ -749,7 +876,7 @@ function applyColorToElement(gfx, strokeColor, strokeWidth) {
                 }
                 if (strokeWidth) {
                     // Increase stroke width for better visibility
-                    path.style.strokeWidth = (strokeWidth + 1) + 'px';
+                    path.style.strokeWidth = 1 + 'px';
                 }
                 
                 // Add dashed effect for non-executable flows
