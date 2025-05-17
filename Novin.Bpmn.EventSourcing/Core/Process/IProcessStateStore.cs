@@ -13,4 +13,5 @@ public interface IProcessStateStore
 
     // (اختیاری) دریافت همه استیت‌ها برای عملیات مانیتورینگ یا مدیریت
     IEnumerable<ProcessState> GetAll();
+    IEnumerable<ProcessState> GetByDeploymentKey(Guid deploymentKey);
 }

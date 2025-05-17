@@ -7,6 +7,7 @@ using Novin.Bpmn.EventSourcing.Core.EventStore;
 using Novin.Bpmn.EventSourcing.Core.Executions;
 using Novin.Bpmn.EventSourcing.Core.Topology;
 using Novin.Bpmn.EventSourcing.Core.Process;
+using Novin.Bpmn.EventSourcing.Core.Services;
 using Novin.Bpmn.EventSourcing.Events;
 using Novin.Bpmn.Models.Models;
 
@@ -39,6 +40,8 @@ namespace Novin.Bpmn.EventSourcing
             // Deployment Service
             services.AddSingleton<IDeploymentService, DeploymentService>();
             services.AddSingleton<IJoinResolverService, JoinResolverService>();
+            services.AddSingleton<IForkHandlerService, ForkHandlerService>();
+            services.AddSingleton<IExecutionPathService, ExecutionPathService>();
 
             // Process Engine
             services.AddSingleton<IProcessEngine, ProcessEngine>();

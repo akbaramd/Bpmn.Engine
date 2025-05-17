@@ -21,16 +21,10 @@ public class DeploymentService : IDeploymentService
 
     public BpmnDeployment Deploy(string deploymentKey, string bpmnXml)
     {
-        // 1. ذخیره نسخه جدید از BPMN XML
         var deployment = _deploymentStore.Store(deploymentKey, bpmnXml);
-
-        // 2. تبدیل XML به BpmnDefinitions
         var definitions = DeserializeXml<BpmnDefinitions>(bpmnXml);
-
-        // 3. ساخت توپولوژی‌ها
         var topologies = _topologyBuilder.Build(deployment.DeploymentId, definitions);
 
-        // 4. ذخیره هر توپولوژی در TopologyStore
         foreach (var topology in topologies)
             _topologyStore.Save(topology);
 
@@ -50,6 +44,27 @@ public class DeploymentService : IDeploymentService
             Deployment = deployment,
             Topologies = topologies.ToList()
         };
+    }
+
+    public List<BpmnDeploymentDetails> GetAll()
+    {
+        // فرض: متد GetAllDeployments در IBpmnDeploymentStore اضافه شده و همه نسخه‌ها را برمی‌گرداند
+        var allDeployments = _deploymentStore.GetAllVersions();
+
+        var result = new List<BpmnDeploymentDetails>();
+
+        foreach (var deployment in allDeployments)
+        {
+            var topologies = _topologyStore.GetAllByDeployment(deployment.DeploymentId).ToList();
+
+            result.Add(new BpmnDeploymentDetails
+            {
+                Deployment = deployment,
+                Topologies = topologies
+            });
+        }
+
+        return result;
     }
 
     private static T DeserializeXml<T>(string xml)

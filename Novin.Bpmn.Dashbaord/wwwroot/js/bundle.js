@@ -145825,9 +145825,12 @@ var __webpack_exports__ = {};
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   exportDiagram: () => (/* binding */ exportDiagram),
+/* harmony export */   getAllProcesses: () => (/* binding */ getAllProcesses),
+/* harmony export */   getProcessInstance: () => (/* binding */ getProcessInstance),
 /* harmony export */   initializeModeler: () => (/* binding */ initializeModeler),
 /* harmony export */   initializeViewer: () => (/* binding */ initializeViewer),
 /* harmony export */   saveChanges: () => (/* binding */ saveChanges),
+/* harmony export */   stopRefreshing: () => (/* binding */ stopRefreshing),
 /* harmony export */   updateExecutionMap: () => (/* binding */ updateExecutionMap)
 /* harmony export */ });
 /* harmony import */ var bpmn_js_lib_Modeler__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! bpmn-js/lib/Modeler */ "./node_modules/bpmn-js/lib/Modeler.js");
@@ -145848,13 +145851,305 @@ function _asyncToGenerator(n) { return function () { var t = this, e = arguments
 // State variables
 var bpmnModeler;
 var currentViewer;
+var refreshIntervalId = null;
+var currentProcessInstanceId = null;
 
-// Constants
+// Constants - aligned with BpmnApiController.cs endpoints
 var API_ENDPOINTS = {
-  DEFINITION_CONTENT: '/api/bpmn/content',
-  PROCESS_CONTENT: '/api/bpmn/content/process',
+  INSTANCE: '/api/bpmn/instance',
+  // GET /{processInstanceId}
   EXECUTION_MAP: '/api/bpmn/execution-map',
-  SAVE_DIAGRAM: '/api/bpmn/save'
+  // GET /{processInstanceId}
+  ACTIVE_CONTEXTS: '/api/bpmn/active-contexts',
+  // GET /{processInstanceId}
+  PROCESS_CONTENT: '/api/bpmn/content/process',
+  // GET /{processInstanceId}
+  ALL_PROCESSES: '/api/bpmn/all',
+  // GET
+  SAVE_DIAGRAM: '/api/bpmn/save' // POST
+};
+
+// Execution state enum (matching backend C# enum)
+var EXECUTION_STATE = {
+  ACTIVE: 0,
+  PAUSED: 1,
+  COMPLETED: 2,
+  TERMINATED: 3,
+  FAILED: 4,
+  DEACTIVE: 5
+};
+
+// Material Design color palette - A500 values
+var MATERIAL_COLORS = {
+  // Primary colors
+  green: {
+    main: '#4CAF50',
+    light: '#81C784',
+    dark: '#388E3C',
+    accent: '#00E676'
+  },
+  blue: {
+    main: '#2196F3',
+    light: '#64B5F6',
+    dark: '#1976D2',
+    accent: '#448AFF'
+  },
+  purple: {
+    main: '#9C27B0',
+    light: '#BA68C8',
+    dark: '#7B1FA2',
+    accent: '#E040FB'
+  },
+  orange: {
+    main: '#FF9800',
+    light: '#FFB74D',
+    dark: '#F57C00',
+    accent: '#FFAB40'
+  },
+  red: {
+    main: '#F44336',
+    light: '#E57373',
+    dark: '#D32F2F',
+    accent: '#FF5252'
+  },
+  teal: {
+    main: '#009688',
+    light: '#4DB6AC',
+    dark: '#00796B',
+    accent: '#64FFDA'
+  },
+  indigo: {
+    main: '#3F51B5',
+    light: '#7986CB',
+    dark: '#303F9F',
+    accent: '#536DFE'
+  },
+  cyan: {
+    main: '#00BCD4',
+    light: '#4DD0E1',
+    dark: '#0097A7',
+    accent: '#18FFFF'
+  },
+  amber: {
+    main: '#FFC107',
+    light: '#FFD54F',
+    dark: '#FFA000',
+    accent: '#FFD740'
+  },
+  brown: {
+    main: '#795548',
+    light: '#A1887F',
+    dark: '#5D4037',
+    accent: '#8D6E63'
+  },
+  grey: {
+    main: '#9E9E9E',
+    light: '#E0E0E0',
+    dark: '#616161',
+    accent: '#BDBDBD'
+  },
+  blueGrey: {
+    main: '#607D8B',
+    light: '#90A4AE',
+    dark: '#455A64',
+    accent: '#78909C'
+  }
+};
+
+// Element state colors - using Material Design palette
+var ELEMENT_COLORS = {
+  // State-based colors
+  active: {
+    stroke: MATERIAL_COLORS.green.main,
+    strokeWidth: 3,
+    textColor: MATERIAL_COLORS.green.main
+  },
+  paused: {
+    stroke: MATERIAL_COLORS.orange.main,
+    strokeWidth: 2,
+    textColor: MATERIAL_COLORS.orange.main
+  },
+  completed: {
+    stroke: MATERIAL_COLORS.grey.main,
+    strokeWidth: 2,
+    textColor: MATERIAL_COLORS.grey.main
+  },
+  terminated: {
+    stroke: MATERIAL_COLORS.brown.main,
+    strokeWidth: 2,
+    textColor: MATERIAL_COLORS.brown.main
+  },
+  failed: {
+    stroke: MATERIAL_COLORS.red.main,
+    strokeWidth: 2,
+    textColor: MATERIAL_COLORS.red.main
+  },
+  deactive: {
+    stroke: MATERIAL_COLORS.grey.light,
+    strokeWidth: 1,
+    textColor: MATERIAL_COLORS.grey.main
+  },
+  // Executable status colors
+  executable: {
+    stroke: MATERIAL_COLORS.green.accent,
+    strokeWidth: 3,
+    textColor: MATERIAL_COLORS.green.accent
+  },
+  nonExecutable: {
+    stroke: MATERIAL_COLORS.grey.main,
+    strokeWidth: 2,
+    textColor: MATERIAL_COLORS.grey.main
+  },
+  // Default
+  "default": {
+    stroke: MATERIAL_COLORS.blueGrey.light,
+    strokeWidth: 1,
+    textColor: '#333333'
+  }
+};
+
+// Flow-specific colors (brighter for better visibility)
+var FLOW_COLORS = {
+  // State-based colors
+  active: {
+    stroke: MATERIAL_COLORS.green.accent,
+    strokeWidth: 4
+  },
+  paused: {
+    stroke: MATERIAL_COLORS.orange.accent,
+    strokeWidth: 3
+  },
+  completed: {
+    stroke: MATERIAL_COLORS.grey.accent,
+    strokeWidth: 3
+  },
+  terminated: {
+    stroke: MATERIAL_COLORS.brown.accent,
+    strokeWidth: 3
+  },
+  failed: {
+    stroke: MATERIAL_COLORS.red.accent,
+    strokeWidth: 3
+  },
+  deactive: {
+    stroke: MATERIAL_COLORS.grey.light,
+    strokeWidth: 2
+  },
+  // Executable status colors
+  executable: {
+    stroke: MATERIAL_COLORS.green.accent,
+    strokeWidth: 4
+  },
+  nonExecutable: {
+    stroke: MATERIAL_COLORS.grey.accent,
+    strokeWidth: 3
+  },
+  // Default
+  "default": {
+    stroke: MATERIAL_COLORS.blueGrey.light,
+    strokeWidth: 2
+  }
+};
+
+// Element type styles - using Material Design palette
+var ELEMENT_TYPE_STYLES = {
+  // Events
+  'bpmn:StartEvent': {
+    stroke: MATERIAL_COLORS.green.dark,
+    strokeWidth: 2
+  },
+  'bpmn:EndEvent': {
+    stroke: MATERIAL_COLORS.red.dark,
+    strokeWidth: 2
+  },
+  'bpmn:IntermediateThrowEvent': {
+    stroke: MATERIAL_COLORS.orange.dark,
+    strokeWidth: 2
+  },
+  'bpmn:IntermediateCatchEvent': {
+    stroke: MATERIAL_COLORS.orange.dark,
+    strokeWidth: 2
+  },
+  'bpmn:BoundaryEvent': {
+    stroke: MATERIAL_COLORS.purple.dark,
+    strokeWidth: 2
+  },
+  // Tasks
+  'bpmn:Task': {
+    stroke: MATERIAL_COLORS.blue.dark,
+    strokeWidth: 2
+  },
+  'bpmn:UserTask': {
+    stroke: MATERIAL_COLORS.blue.main,
+    strokeWidth: 2
+  },
+  'bpmn:ServiceTask': {
+    stroke: MATERIAL_COLORS.purple.dark,
+    strokeWidth: 2
+  },
+  'bpmn:ScriptTask': {
+    stroke: MATERIAL_COLORS.teal.dark,
+    strokeWidth: 2
+  },
+  'bpmn:BusinessRuleTask': {
+    stroke: MATERIAL_COLORS.orange.dark,
+    strokeWidth: 2
+  },
+  'bpmn:ManualTask': {
+    stroke: MATERIAL_COLORS.brown.main,
+    strokeWidth: 2
+  },
+  // Gateways
+  'bpmn:ExclusiveGateway': {
+    stroke: MATERIAL_COLORS.amber.dark,
+    strokeWidth: 2
+  },
+  'bpmn:ParallelGateway': {
+    stroke: MATERIAL_COLORS.teal.dark,
+    strokeWidth: 2
+  },
+  'bpmn:InclusiveGateway': {
+    stroke: MATERIAL_COLORS.purple.light,
+    strokeWidth: 2
+  },
+  'bpmn:Gateway': {
+    stroke: MATERIAL_COLORS.amber.dark,
+    strokeWidth: 2
+  },
+  // Flows - using the same colors as executable/non-executable for consistency
+  'bpmn:SequenceFlow': {
+    stroke: MATERIAL_COLORS.green.accent,
+    strokeWidth: 2
+  },
+  'bpmn:MessageFlow': {
+    stroke: MATERIAL_COLORS.brown.dark,
+    strokeWidth: 2
+  },
+  'bpmn:Association': {
+    stroke: MATERIAL_COLORS.blueGrey.accent,
+    strokeWidth: 1
+  },
+  // Other elements
+  'bpmn:FlowElement': {
+    stroke: MATERIAL_COLORS.blueGrey.accent,
+    strokeWidth: 2
+  },
+  'bpmn:FlowNode': {
+    stroke: MATERIAL_COLORS.blueGrey.accent,
+    strokeWidth: 2
+  },
+  'bpmn:DataObject': {
+    stroke: MATERIAL_COLORS.indigo.light,
+    strokeWidth: 2
+  },
+  'bpmn:DataStore': {
+    stroke: MATERIAL_COLORS.indigo.light,
+    strokeWidth: 2
+  },
+  'bpmn:TextAnnotation': {
+    stroke: MATERIAL_COLORS.blueGrey.main,
+    strokeWidth: 1
+  }
 };
 
 /**
@@ -145862,6 +146157,10 @@ var API_ENDPOINTS = {
  * @param {string} definitionKey - The BPMN definition key
  */
 function initializeModeler(definitionKey) {
+  // Stop any active refresh intervals
+  stopRefreshInterval();
+  currentProcessInstanceId = null;
+
   // Clear any existing viewer
   resetViewerContainer();
   bpmnModeler = new bpmn_js_lib_Modeler__WEBPACK_IMPORTED_MODULE_3__["default"]({
@@ -145874,211 +146173,633 @@ function initializeModeler(definitionKey) {
       magic: _Providers_descriptors_magic_json__WEBPACK_IMPORTED_MODULE_2__
     }
   });
-  fetch("".concat(API_ENDPOINTS.DEFINITION_CONTENT, "/").concat(definitionKey)).then(function (response) {
-    if (!response.ok) {
-      throw new Error("Error loading definition: ".concat(response.statusText));
-    }
-    return response.text();
-  }).then(function (bpmnXML) {
-    try {
-      bpmnModeler.importXML(bpmnXML);
-      var canvas = bpmnModeler.get('canvas');
-      canvas.zoom('fit-viewport');
-    } catch (e) {
-      console.error('Error parsing BPMN XML:', e);
-    }
-  })["catch"](function (err) {
-    console.error('Error loading BPMN diagram:', err);
-    showErrorMessage('Failed to load BPMN diagram. Please try again later.');
+
+  // Load diagram XML from static file or API
+  loadDiagramXml(definitionKey).then(function (bpmnXML) {
+    importDiagram(bpmnModeler, bpmnXML);
+  })["catch"](function (error) {
+    console.error('Error loading BPMN diagram:', error);
+    showErrorMessage("Failed to load BPMN diagram: ".concat(error.message));
   });
 }
 
 /**
  * Initialize BPMN Viewer (view mode with execution information)
- * @param {string} processId - The process instance ID
- * @param {boolean} includeVirtual - Whether to include virtual nodes/flows
+ * @param {string} processInstanceId - The process instance ID
+ * @param {boolean} autoRefresh - Whether to automatically refresh the execution map
+ * @param {number} refreshInterval - Refresh interval in milliseconds (default: 5000ms)
  */
-function initializeViewer(processId) {
-  var includeVirtual = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
+function initializeViewer(processInstanceId) {
+  var autoRefresh = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
+  var refreshInterval = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : 5000;
+  // Stop any active refresh intervals
+  stopRefreshInterval();
+
+  // Set current process instance ID
+  currentProcessInstanceId = processInstanceId;
+
   // Display loading state
   showLoadingState();
 
   // Clear any existing viewer
   resetViewerContainer();
+
+  // Initialize viewer
   currentViewer = new bpmn_js_lib_Viewer__WEBPACK_IMPORTED_MODULE_4__["default"]({
     container: '#canvas'
   });
-  console.log("Initializing viewer for process ".concat(processId));
+  console.log("Initializing viewer for process ".concat(processInstanceId));
 
-  // Step 1: Fetch the BPMN XML definition for this process
-  fetchProcessDefinition(processId).then(function (bpmnXML) {
-    console.log('BPMN XML loaded successfully');
-    return importBpmnDefinition(bpmnXML);
-  }).then(function () {
-    console.log('BPMN model imported successfully, fetching execution map');
-    return fetchExecutionMapData(processId, includeVirtual);
-  }).then(function (executionMap) {
-    console.log('Execution map data received:', executionMap);
-    applyExecutionMapToViewer(executionMap);
-  })["catch"](function (error) {
-    console.error('Error in viewer initialization:', error);
-    showErrorMessage('Failed to initialize process viewer: ' + error.message);
-  })["finally"](function () {
+  // Load process XML and execution data
+  loadProcessData(processInstanceId)["finally"](function () {
     hideLoadingState();
+
+    // Set up automatic refresh if enabled
+    if (autoRefresh && processInstanceId) {
+      refreshIntervalId = setInterval(function () {
+        if (currentProcessInstanceId) {
+          refreshExecutionData(currentProcessInstanceId);
+        } else {
+          stopRefreshInterval();
+        }
+      }, refreshInterval);
+    }
   });
 }
 
 /**
- * Fetch the BPMN process definition XML
- * @param {string} processId - The process instance ID
+ * Load process data (XML and execution map)
+ * @param {string} processInstanceId - The process instance ID
+ * @returns {Promise<void>}
+ */
+function loadProcessData(_x) {
+  return _loadProcessData.apply(this, arguments);
+}
+/**
+ * Refresh execution data for a process
+ * @param {string} processInstanceId - The process instance ID
+ * @returns {Promise<void>}
+ */
+function _loadProcessData() {
+  _loadProcessData = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee(processInstanceId) {
+    var bpmnXML;
+    return _regeneratorRuntime().wrap(function _callee$(_context) {
+      while (1) switch (_context.prev = _context.next) {
+        case 0:
+          _context.prev = 0;
+          _context.next = 3;
+          return fetchProcessDefinition(processInstanceId);
+        case 3:
+          bpmnXML = _context.sent;
+          console.log('Process XML loaded successfully');
+
+          // Step 2: Import the BPMN XML into the viewer
+          _context.next = 7;
+          return importDiagram(currentViewer, bpmnXML);
+        case 7:
+          console.log('Process model imported successfully');
+
+          // Step 3: Fetch and apply execution data
+          _context.next = 10;
+          return refreshExecutionData(processInstanceId);
+        case 10:
+          _context.next = 17;
+          break;
+        case 12:
+          _context.prev = 12;
+          _context.t0 = _context["catch"](0);
+          console.error('Error loading process data:', _context.t0);
+          showErrorMessage("Failed to load process data: ".concat(_context.t0.message));
+          throw _context.t0;
+        case 17:
+        case "end":
+          return _context.stop();
+      }
+    }, _callee, null, [[0, 12]]);
+  }));
+  return _loadProcessData.apply(this, arguments);
+}
+function refreshExecutionData(_x2) {
+  return _refreshExecutionData.apply(this, arguments);
+}
+/**
+ * Stop the refresh interval
+ */
+function _refreshExecutionData() {
+  _refreshExecutionData = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee2(processInstanceId) {
+    var executionMap, activeContexts;
+    return _regeneratorRuntime().wrap(function _callee2$(_context2) {
+      while (1) switch (_context2.prev = _context2.next) {
+        case 0:
+          _context2.prev = 0;
+          _context2.next = 3;
+          return fetchExecutionMap(processInstanceId);
+        case 3:
+          executionMap = _context2.sent;
+          console.log('Execution map loaded successfully');
+
+          // Fetch active contexts
+          _context2.next = 7;
+          return fetchActiveContexts(processInstanceId);
+        case 7:
+          activeContexts = _context2.sent;
+          console.log('Active contexts loaded successfully');
+
+          // Apply execution data to viewer
+          applyExecutionData(executionMap, activeContexts);
+          _context2.next = 15;
+          break;
+        case 12:
+          _context2.prev = 12;
+          _context2.t0 = _context2["catch"](0);
+          console.error('Error refreshing execution data:', _context2.t0);
+          // Don't show error message on refresh to avoid disrupting the user experience
+        case 15:
+        case "end":
+          return _context2.stop();
+      }
+    }, _callee2, null, [[0, 12]]);
+  }));
+  return _refreshExecutionData.apply(this, arguments);
+}
+function stopRefreshInterval() {
+  if (refreshIntervalId) {
+    clearInterval(refreshIntervalId);
+    refreshIntervalId = null;
+  }
+}
+
+/**
+ * Load diagram XML from static file or API
+ * @param {string} definitionKey - The definition key or filename
  * @returns {Promise<string>} - The BPMN XML
  */
-function fetchProcessDefinition(processId) {
-  console.log("Fetching process definition for ".concat(processId));
-  return fetch("".concat(API_ENDPOINTS.PROCESS_CONTENT, "/").concat(processId)).then(function (response) {
-    if (!response.ok) {
-      console.error('API response error:', response.status, response.statusText);
-      throw new Error("Error fetching process definition: ".concat(response.statusText));
-    }
-
-    // Check the content type of the response
-    var contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      return response.json().then(function (data) {
-        return data.value || data;
-      });
-    } else {
-      // Not JSON, treat as plain text (XML)
-      return response.text();
-    }
-  }).then(function (data) {
-    console.log('Process definition data received');
-    return data;
-  });
+function loadDiagramXml(_x3) {
+  return _loadDiagramXml.apply(this, arguments);
 }
-
 /**
  * Import BPMN XML definition into the viewer
+ * @param {object} viewer - The BPMN viewer or modeler instance
  * @param {string} bpmnXML - The BPMN XML definition
  * @returns {Promise<void>}
  */
-function importBpmnDefinition(bpmnXML) {
-  return currentViewer.importXML(bpmnXML).then(function () {
-    var canvas = currentViewer.get('canvas');
-    canvas.zoom('fit-viewport');
-  });
+function _loadDiagramXml() {
+  _loadDiagramXml = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee3(definitionKey) {
+    var _response, response;
+    return _regeneratorRuntime().wrap(function _callee3$(_context3) {
+      while (1) switch (_context3.prev = _context3.next) {
+        case 0:
+          _context3.prev = 0;
+          if (!definitionKey.includes('/')) {
+            _context3.next = 10;
+            break;
+          }
+          _context3.next = 4;
+          return fetch(definitionKey);
+        case 4:
+          _response = _context3.sent;
+          if (_response.ok) {
+            _context3.next = 7;
+            break;
+          }
+          throw new Error("Error loading definition: ".concat(_response.statusText));
+        case 7:
+          _context3.next = 9;
+          return _response.text();
+        case 9:
+          return _context3.abrupt("return", _context3.sent);
+        case 10:
+          _context3.next = 12;
+          return fetch("/".concat(definitionKey, ".bpmn"));
+        case 12:
+          response = _context3.sent;
+          if (response.ok) {
+            _context3.next = 15;
+            break;
+          }
+          throw new Error("Error loading definition: ".concat(response.statusText));
+        case 15:
+          _context3.next = 17;
+          return response.text();
+        case 17:
+          return _context3.abrupt("return", _context3.sent);
+        case 20:
+          _context3.prev = 20;
+          _context3.t0 = _context3["catch"](0);
+          console.error('Error loading diagram XML:', _context3.t0);
+          throw _context3.t0;
+        case 24:
+        case "end":
+          return _context3.stop();
+      }
+    }, _callee3, null, [[0, 20]]);
+  }));
+  return _loadDiagramXml.apply(this, arguments);
 }
-
+function importDiagram(_x4, _x5) {
+  return _importDiagram.apply(this, arguments);
+}
+/**
+ * Fetch the process instance details
+ * @param {string} processInstanceId - The process instance ID
+ * @returns {Promise<object>} - The process instance details
+ */
+function _importDiagram() {
+  _importDiagram = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee4(viewer, bpmnXML) {
+    var result, canvas;
+    return _regeneratorRuntime().wrap(function _callee4$(_context4) {
+      while (1) switch (_context4.prev = _context4.next) {
+        case 0:
+          _context4.prev = 0;
+          _context4.next = 3;
+          return viewer.importXML(bpmnXML);
+        case 3:
+          result = _context4.sent;
+          canvas = viewer.get('canvas');
+          canvas.zoom('fit-viewport');
+          return _context4.abrupt("return", result);
+        case 9:
+          _context4.prev = 9;
+          _context4.t0 = _context4["catch"](0);
+          console.error('Error importing BPMN XML:', _context4.t0);
+          throw _context4.t0;
+        case 13:
+        case "end":
+          return _context4.stop();
+      }
+    }, _callee4, null, [[0, 9]]);
+  }));
+  return _importDiagram.apply(this, arguments);
+}
+function fetchProcessInstance(_x6) {
+  return _fetchProcessInstance.apply(this, arguments);
+}
+/**
+ * Fetch the BPMN process definition XML
+ * @param {string} processInstanceId - The process instance ID
+ * @returns {Promise<string>} - The BPMN XML
+ */
+function _fetchProcessInstance() {
+  _fetchProcessInstance = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee5(processInstanceId) {
+    var response;
+    return _regeneratorRuntime().wrap(function _callee5$(_context5) {
+      while (1) switch (_context5.prev = _context5.next) {
+        case 0:
+          console.log("Fetching process instance details for ".concat(processInstanceId));
+          _context5.prev = 1;
+          _context5.next = 4;
+          return fetch("".concat(API_ENDPOINTS.INSTANCE, "/").concat(processInstanceId));
+        case 4:
+          response = _context5.sent;
+          if (response.ok) {
+            _context5.next = 7;
+            break;
+          }
+          throw new Error("Error fetching process instance: ".concat(response.statusText));
+        case 7:
+          _context5.next = 9;
+          return response.json();
+        case 9:
+          return _context5.abrupt("return", _context5.sent);
+        case 12:
+          _context5.prev = 12;
+          _context5.t0 = _context5["catch"](1);
+          console.error('Error fetching process instance:', _context5.t0);
+          throw _context5.t0;
+        case 16:
+        case "end":
+          return _context5.stop();
+      }
+    }, _callee5, null, [[1, 12]]);
+  }));
+  return _fetchProcessInstance.apply(this, arguments);
+}
+function fetchProcessDefinition(_x7) {
+  return _fetchProcessDefinition.apply(this, arguments);
+}
 /**
  * Fetch execution map data from API
- * @param {string} processId - The process instance ID
- * @param {boolean} includeVirtual - Whether to include virtual nodes/flows
+ * @param {string} processInstanceId - The process instance ID
  * @returns {Promise<object>} - The execution map data
  */
-function fetchExecutionMapData(processId) {
-  var includeVirtual = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
-  console.log("Fetching execution map for process ".concat(processId, ", includeVirtual=").concat(includeVirtual));
-  return fetch("".concat(API_ENDPOINTS.EXECUTION_MAP, "/").concat(processId, "?includeVirtual=").concat(includeVirtual)).then(function (response) {
-    if (!response.ok) {
-      console.error('API response error:', response.status, response.statusText);
-      throw new Error("Error fetching execution map: ".concat(response.statusText));
-    }
-
-    // Check the content type of the response
-    var contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      return response.json();
-    } else {
-      // If somehow not JSON, throw an error since we expect JSON here
-      throw new Error('Execution map data is not in JSON format');
-    }
-  }).then(function (data) {
-    console.log('Execution map data received:', data);
-    // Handle both raw data and data wrapped in a value property
-    return data.value || data;
-  });
+function _fetchProcessDefinition() {
+  _fetchProcessDefinition = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee6(processInstanceId) {
+    var response;
+    return _regeneratorRuntime().wrap(function _callee6$(_context6) {
+      while (1) switch (_context6.prev = _context6.next) {
+        case 0:
+          console.log("Fetching process definition for ".concat(processInstanceId));
+          _context6.prev = 1;
+          _context6.next = 4;
+          return fetch("".concat(API_ENDPOINTS.PROCESS_CONTENT, "/").concat(processInstanceId));
+        case 4:
+          response = _context6.sent;
+          if (response.ok) {
+            _context6.next = 7;
+            break;
+          }
+          throw new Error("Error fetching process definition: ".concat(response.statusText));
+        case 7:
+          _context6.next = 9;
+          return response.text();
+        case 9:
+          return _context6.abrupt("return", _context6.sent);
+        case 12:
+          _context6.prev = 12;
+          _context6.t0 = _context6["catch"](1);
+          console.error('Error fetching process definition:', _context6.t0);
+          throw _context6.t0;
+        case 16:
+        case "end":
+          return _context6.stop();
+      }
+    }, _callee6, null, [[1, 12]]);
+  }));
+  return _fetchProcessDefinition.apply(this, arguments);
 }
-
+function fetchExecutionMap(_x8) {
+  return _fetchExecutionMap.apply(this, arguments);
+}
 /**
- * Apply execution map data to the BPMN viewer
- * @param {object} executionMap - The execution map data
+ * Fetch active execution contexts
+ * @param {string} processInstanceId - The process instance ID
+ * @returns {Promise<Array>} - The active execution contexts
  */
-function applyExecutionMapToViewer(executionMap) {
+function _fetchExecutionMap() {
+  _fetchExecutionMap = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee7(processInstanceId) {
+    var response;
+    return _regeneratorRuntime().wrap(function _callee7$(_context7) {
+      while (1) switch (_context7.prev = _context7.next) {
+        case 0:
+          console.log("Fetching execution map for process ".concat(processInstanceId));
+          _context7.prev = 1;
+          _context7.next = 4;
+          return fetch("".concat(API_ENDPOINTS.EXECUTION_MAP, "/").concat(processInstanceId));
+        case 4:
+          response = _context7.sent;
+          if (response.ok) {
+            _context7.next = 7;
+            break;
+          }
+          throw new Error("Error fetching execution map: ".concat(response.statusText));
+        case 7:
+          _context7.next = 9;
+          return response.json();
+        case 9:
+          return _context7.abrupt("return", _context7.sent);
+        case 12:
+          _context7.prev = 12;
+          _context7.t0 = _context7["catch"](1);
+          console.error('Error fetching execution map:', _context7.t0);
+          throw _context7.t0;
+        case 16:
+        case "end":
+          return _context7.stop();
+      }
+    }, _callee7, null, [[1, 12]]);
+  }));
+  return _fetchExecutionMap.apply(this, arguments);
+}
+function fetchActiveContexts(_x9) {
+  return _fetchActiveContexts.apply(this, arguments);
+}
+/**
+ * Fetch all processes
+ * @returns {Promise<Array>} - List of all processes
+ */
+function _fetchActiveContexts() {
+  _fetchActiveContexts = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee8(processInstanceId) {
+    var response;
+    return _regeneratorRuntime().wrap(function _callee8$(_context8) {
+      while (1) switch (_context8.prev = _context8.next) {
+        case 0:
+          console.log("Fetching active contexts for process ".concat(processInstanceId));
+          _context8.prev = 1;
+          _context8.next = 4;
+          return fetch("".concat(API_ENDPOINTS.ACTIVE_CONTEXTS, "/").concat(processInstanceId));
+        case 4:
+          response = _context8.sent;
+          if (response.ok) {
+            _context8.next = 7;
+            break;
+          }
+          throw new Error("Error fetching active contexts: ".concat(response.statusText));
+        case 7:
+          _context8.next = 9;
+          return response.json();
+        case 9:
+          return _context8.abrupt("return", _context8.sent);
+        case 12:
+          _context8.prev = 12;
+          _context8.t0 = _context8["catch"](1);
+          console.error('Error fetching active contexts:', _context8.t0);
+          throw _context8.t0;
+        case 16:
+        case "end":
+          return _context8.stop();
+      }
+    }, _callee8, null, [[1, 12]]);
+  }));
+  return _fetchActiveContexts.apply(this, arguments);
+}
+function fetchAllProcesses() {
+  return _fetchAllProcesses.apply(this, arguments);
+}
+/**
+ * Apply execution data to the BPMN viewer
+ * @param {object} executionMap - The execution trace map from API
+ * @param {Array} activeContexts - The active execution contexts
+ */
+function _fetchAllProcesses() {
+  _fetchAllProcesses = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee9() {
+    var response;
+    return _regeneratorRuntime().wrap(function _callee9$(_context9) {
+      while (1) switch (_context9.prev = _context9.next) {
+        case 0:
+          console.log('Fetching all processes');
+          _context9.prev = 1;
+          _context9.next = 4;
+          return fetch(API_ENDPOINTS.ALL_PROCESSES);
+        case 4:
+          response = _context9.sent;
+          if (response.ok) {
+            _context9.next = 7;
+            break;
+          }
+          throw new Error("Error fetching all processes: ".concat(response.statusText));
+        case 7:
+          _context9.next = 9;
+          return response.json();
+        case 9:
+          return _context9.abrupt("return", _context9.sent);
+        case 12:
+          _context9.prev = 12;
+          _context9.t0 = _context9["catch"](1);
+          console.error('Error fetching all processes:', _context9.t0);
+          throw _context9.t0;
+        case 16:
+        case "end":
+          return _context9.stop();
+      }
+    }, _callee9, null, [[1, 12]]);
+  }));
+  return _fetchAllProcesses.apply(this, arguments);
+}
+function applyExecutionData(executionMap, activeContexts) {
   if (!currentViewer) {
-    console.error('No active viewer to apply execution map to');
+    console.error('No active viewer to apply execution data to');
     return;
   }
   var canvas = currentViewer.get('canvas');
   var elementRegistry = currentViewer.get('elementRegistry');
 
-  // Process nodes
-  if (executionMap.nodes && Array.isArray(executionMap.nodes)) {
-    executionMap.nodes.forEach(function (node) {
-      if (node.nodeId) {
-        var element = elementRegistry.get(node.nodeId);
-        if (element && node.isActive) {
-          applyStylesToElement(canvas, elementRegistry, element, node.nodeId, node);
-          addTooltipToElement(elementRegistry, node.nodeId, createNodeTooltipContent(node));
+  // Reset all elements to default appearance
+  resetElementStyles(elementRegistry, canvas);
+
+  // Track non-executable elements to mark their outgoing flows as non-executable
+  var nonExecutableElements = new Set();
+  var executableElements = new Set();
+
+  // Process execution traces
+  if (executionMap && executionMap.traces && Array.isArray(executionMap.traces)) {
+    console.log('Processing execution traces:', executionMap.traces);
+
+    // First pass: Identify executable and non-executable elements
+    executionMap.traces.forEach(function (trace) {
+      if (trace.currentElementId) {
+        if (trace.isExecutable) {
+          executableElements.add(trace.currentElementId);
+        } else {
+          nonExecutableElements.add(trace.currentElementId);
         }
       }
     });
-  }
 
-  // Process flows
-  if (executionMap.flows && Array.isArray(executionMap.flows)) {
-    executionMap.flows.forEach(function (flow) {
-      if (flow.flowId) {
-        var element = elementRegistry.get(flow.flowId);
-        if (element && flow.isActive) {
-          canvas.addMarker(flow.flowId, 'active-flow');
-          var gfx = elementRegistry.getGraphics(flow.flowId);
-          applyColorToElement(gfx, "#FF8C00", 2);
-          addTooltipToElement(elementRegistry, flow.flowId, createFlowTooltipContent(flow));
-        }
+    // Second pass: Mark all completed elements
+    executionMap.traces.forEach(function (trace) {
+      if (trace.path && Array.isArray(trace.path)) {
+        trace.path.forEach(function (elementId) {
+          var element = elementRegistry.get(elementId);
+          if (element) {
+            // Mark as completed unless it's the current element
+            if (!(elementId === trace.currentElementId)) {
+              // Only mark as completed if the trace is executable
+              if (trace.isExecutable) {
+                markElementAsCompleted(canvas, elementRegistry, element, elementId, trace);
+              }
+            }
+          }
+        });
       }
     });
-  }
 
-  // Process waiting tokens
-  if (executionMap.waitingTokens && Array.isArray(executionMap.waitingTokens)) {
-    executionMap.waitingTokens.forEach(function (token) {
-      if (token.currentElementId) {
-        var element = elementRegistry.get(token.currentElementId);
+    // Third pass: Mark current elements with their current state
+    executionMap.traces.forEach(function (trace) {
+      if (trace.currentElementId) {
+        var element = elementRegistry.get(trace.currentElementId);
         if (element) {
-          canvas.addMarker(token.currentElementId, 'waiting-token');
-          var gfx = elementRegistry.getGraphics(token.currentElementId);
-          applyColorToElement(gfx, "#BA55D3", 3);
-          addTooltipToElement(elementRegistry, token.currentElementId, createTokenTooltipContent(token, 'Waiting'));
+          // Pass the trace object which includes isExecutable property and state
+          markElementAsActive(canvas, elementRegistry, element, trace.currentElementId, trace);
+        }
+      }
+    });
+
+    // Fourth pass: Process flow connections
+    elementRegistry.forEach(function (element) {
+      // Only process sequence flows
+      if (isSequenceFlow(element)) {
+        var _element$source, _element$target;
+        var sourceId = (_element$source = element.source) === null || _element$source === void 0 ? void 0 : _element$source.id;
+        var targetId = (_element$target = element.target) === null || _element$target === void 0 ? void 0 : _element$target.id;
+
+        // Check if source or target is non-executable
+        if (sourceId && nonExecutableElements.has(sourceId)) {
+          // Flow from non-executable element is always non-executable
+          markFlowAsNonExecutable(canvas, elementRegistry, element, element.id);
+        } else if (targetId && nonExecutableElements.has(targetId)) {
+          // Flow to non-executable element is always non-executable
+          markFlowAsNonExecutable(canvas, elementRegistry, element, element.id);
+        }
+      }
+    });
+
+    // Fifth pass: Check for flows between elements and mark them appropriately
+    elementRegistry.forEach(function (element) {
+      if (isSequenceFlow(element)) {
+        var _element$source2, _element$target2;
+        var sourceId = (_element$source2 = element.source) === null || _element$source2 === void 0 ? void 0 : _element$source2.id;
+        var targetId = (_element$target2 = element.target) === null || _element$target2 === void 0 ? void 0 : _element$target2.id;
+
+        // If we have both source and target
+        if (sourceId && targetId) {
+          // If either source or target is in the non-executable set, mark flow as non-executable
+          if (nonExecutableElements.has(sourceId) || nonExecutableElements.has(targetId)) {
+            markFlowAsNonExecutable(canvas, elementRegistry, element, element.id);
+          }
+          // If both source and target are in the executable set, mark flow as executable
+          else if (executableElements.has(sourceId) && executableElements.has(targetId)) {
+            // Mark as executable
+            canvas.addMarker(element.id, 'executable');
+            canvas.addMarker(element.id, 'executable-flow');
+            var gfx = elementRegistry.getGraphics(element.id);
+            if (gfx) {
+              applyColorToElement(gfx, ELEMENT_COLORS.executable.stroke, ELEMENT_COLORS.executable.strokeWidth);
+            }
+          }
         }
       }
     });
   }
 
-  // Process active tokens
-  if (executionMap.activeTokens && Array.isArray(executionMap.activeTokens)) {
-    executionMap.activeTokens.forEach(function (token) {
-      if (token.currentElementId) {
-        var element = elementRegistry.get(token.currentElementId);
+  // Process active contexts to highlight current elements
+  if (activeContexts && Array.isArray(activeContexts)) {
+    activeContexts.forEach(function (context) {
+      if (context.currentElementId) {
+        var element = elementRegistry.get(context.currentElementId);
         if (element) {
-          canvas.addMarker(token.currentElementId, token.isExecutable ? 'highlight' : 'inactive');
-          var gfx = elementRegistry.getGraphics(token.currentElementId);
-          applyColorToElement(gfx, token.isExecutable ? "#1E90FF" : "#A9A9A9", token.isExecutable ? 3 : 1);
-          addTooltipToElement(elementRegistry, token.currentElementId, createTokenTooltipContent(token, 'Active'));
-        }
-      }
-    });
-  }
+          // Convert string state to numeric if needed
+          var stateValue;
+          if (typeof context.state === 'string') {
+            // Map string state to numeric value
+            switch (context.state.toLowerCase()) {
+              case 'active':
+                stateValue = EXECUTION_STATE.ACTIVE;
+                break;
+              case 'paused':
+                stateValue = EXECUTION_STATE.PAUSED;
+                break;
+              case 'completed':
+                stateValue = EXECUTION_STATE.COMPLETED;
+                break;
+              case 'terminated':
+                stateValue = EXECUTION_STATE.TERMINATED;
+                break;
+              case 'failed':
+                stateValue = EXECUTION_STATE.FAILED;
+                break;
+              case 'deactive':
+                stateValue = EXECUTION_STATE.DEACTIVE;
+                break;
+              default:
+                stateValue = EXECUTION_STATE.ACTIVE;
+            }
+          } else {
+            // Already numeric
+            stateValue = context.state;
+          }
 
-  // Process completed tokens
-  if (executionMap.completedTokens && Array.isArray(executionMap.completedTokens)) {
-    executionMap.completedTokens.forEach(function (token) {
-      if (token.currentElementId) {
-        var element = elementRegistry.get(token.currentElementId);
-        if (element) {
-          canvas.addMarker(token.currentElementId, 'completed-node');
-          var gfx = elementRegistry.getGraphics(token.currentElementId);
-          applyColorToElement(gfx, "#228B22", 2);
-          addTooltipToElement(elementRegistry, token.currentElementId, createTokenTooltipContent(token, 'Completed'));
+          // Check if the context is executable
+          var isExecutable = stateValue === EXECUTION_STATE.ACTIVE;
+          markElementAsActive(canvas, elementRegistry, element, context.currentElementId, {
+            executionId: context.contextId,
+            state: stateValue,
+            isExecutable: isExecutable
+          });
+
+          // If not executable, add to non-executable set for flow processing
+          if (!isExecutable) {
+            nonExecutableElements.add(context.currentElementId);
+          }
         }
       }
     });
@@ -146089,85 +146810,298 @@ function applyExecutionMapToViewer(executionMap) {
 }
 
 /**
- * Apply styles to a BPMN element based on its type
+ * Reset all element styles to default
+ * @param {object} elementRegistry - The BPMN.js element registry
+ * @param {object} canvas - The BPMN.js canvas
  */
-function applyStylesToElement(canvas, elementRegistry, element, id, node) {
-  var elementType = element.type;
-  var gfx = elementRegistry.getGraphics(id);
-  if (elementType.includes('StartEvent')) {
-    canvas.addMarker(id, 'start-event');
-    applyColorToElement(gfx, "#228B22", 3);
-  } else if (elementType.includes('EndEvent')) {
-    canvas.addMarker(id, 'end-event');
-    applyColorToElement(gfx, "#8B0000", 3);
-  } else if (elementType.includes('IntermediateThrowEvent') || elementType.includes('IntermediateCatchEvent')) {
-    canvas.addMarker(id, 'triggered-event');
-    applyColorToElement(gfx, "#FF8C00", 3);
-  } else if (elementType.includes('BoundaryEvent')) {
-    canvas.addMarker(id, 'boundary-event');
-    applyColorToElement(gfx, "#6A5ACD", 3);
-  } else if (elementType.includes('Task')) {
-    if (elementType.includes('UserTask')) {
-      canvas.addMarker(id, 'user-task');
-      applyColorToElement(gfx, "#4682B4", 3);
+function resetElementStyles(elementRegistry, canvas) {
+  elementRegistry.forEach(function (element) {
+    // Remove all markers
+    canvas.removeMarker(element.id, 'highlight');
+    canvas.removeMarker(element.id, 'active');
+    canvas.removeMarker(element.id, 'completed');
+    canvas.removeMarker(element.id, 'waiting');
+    canvas.removeMarker(element.id, 'error');
+
+    // Reset to default style based on element type
+    var elementType = element.type;
+    var defaultStyle = ELEMENT_TYPE_STYLES[elementType] || ELEMENT_COLORS["default"];
+    var gfx = elementRegistry.getGraphics(element.id);
+    if (gfx) {
+      applyColorToElement(gfx, defaultStyle.stroke, defaultStyle.fill, defaultStyle.strokeWidth);
+    }
+  });
+}
+
+/**
+ * Mark an element as completed
+ * @param {object} canvas - The BPMN.js canvas
+ * @param {object} elementRegistry - The BPMN.js element registry
+ * @param {object} element - The BPMN element
+ * @param {string} elementId - The element ID
+ * @param {object} trace - Optional trace data
+ */
+function markElementAsCompleted(canvas, elementRegistry, element, elementId, trace) {
+  canvas.addMarker(elementId, 'completed');
+  var gfx = elementRegistry.getGraphics(elementId);
+  if (!gfx) return;
+
+  // Check if this is an executable completed element
+  var isExecutable = trace ? trace.isExecutable : true;
+
+  // Apply different styles based on element type and executable status
+  if (isSequenceFlow(element)) {
+    // For sequence flows
+    if (isExecutable) {
+      applyColorToElement(gfx, FLOW_COLORS.executable.stroke, FLOW_COLORS.executable.strokeWidth);
     } else {
-      canvas.addMarker(id, 'highlight');
-      applyColorToElement(gfx, "#228B22", 2);
+      applyColorToElement(gfx, FLOW_COLORS.nonExecutable.stroke, FLOW_COLORS.nonExecutable.strokeWidth);
     }
   } else {
-    // Default styling for other nodes
-    canvas.addMarker(id, 'highlight');
-    applyColorToElement(gfx, "#228B22", 2);
+    // For other elements
+    if (isExecutable) {
+      applyColorToElement(gfx, ELEMENT_COLORS.executable.stroke, ELEMENT_COLORS.executable.strokeWidth);
+    } else {
+      applyColorToElement(gfx, ELEMENT_COLORS.nonExecutable.stroke, ELEMENT_COLORS.nonExecutable.strokeWidth);
+    }
   }
+
+  // Add tooltip with execution information
+  addTooltipToElement(elementRegistry, elementId, {
+    title: "Completed: ".concat(elementId),
+    content: "Element has been executed".concat(trace ? "<br>Executable: ".concat(isExecutable ? 'Yes' : 'No') : '')
+  });
+}
+
+/**
+ * Mark an element as active
+ * @param {object} canvas - The BPMN.js canvas
+ * @param {object} elementRegistry - The BPMN.js element registry
+ * @param {object} element - The BPMN element
+ * @param {string} elementId - The element ID
+ * @param {object} trace - The execution trace data
+ */
+function markElementAsActive(canvas, elementRegistry, element, elementId, trace) {
+  var gfx = elementRegistry.getGraphics(elementId);
+  if (!gfx) return;
+
+  // Get the state name from the numeric state value
+  var stateName = getStateName(trace.state);
+
+  // Add appropriate marker based on executable status
+  if (trace.isExecutable) {
+    canvas.addMarker(elementId, 'executable');
+  } else {
+    canvas.addMarker(elementId, 'non-executable');
+  }
+
+  // Add marker for state
+  canvas.addMarker(elementId, stateName);
+
+  // Apply different styles based on element type and executable status
+  if (isSequenceFlow(element)) {
+    // For sequence flows
+    if (trace.isExecutable) {
+      applyColorToElement(gfx, FLOW_COLORS.executable.stroke, FLOW_COLORS.executable.strokeWidth);
+    } else {
+      applyColorToElement(gfx, FLOW_COLORS.nonExecutable.stroke, FLOW_COLORS.nonExecutable.strokeWidth);
+    }
+  } else {
+    // For other elements
+    if (trace.isExecutable) {
+      applyColorToElement(gfx, ELEMENT_COLORS.executable.stroke, ELEMENT_COLORS.executable.strokeWidth);
+    } else {
+      applyColorToElement(gfx, ELEMENT_COLORS.nonExecutable.stroke, ELEMENT_COLORS.nonExecutable.strokeWidth);
+    }
+  }
+
+  // Add tooltip with execution information
+  var stateText = getStateName(trace.state).charAt(0).toUpperCase() + getStateName(trace.state).slice(1);
+  addTooltipToElement(elementRegistry, elementId, {
+    title: "".concat(stateText, ": ").concat(elementId),
+    content: "Execution ID: ".concat(trace.executionId, "<br>\n                  State: ").concat(stateText, "<br>\n                  Executable: ").concat(trace.isExecutable ? 'Yes' : 'No')
+  });
 }
 
 /**
  * Apply color to a BPMN element
+ * @param {object} gfx - The SVG graphics element
+ * @param {string} strokeColor - The stroke color
+ * @param {number} strokeWidth - The stroke width
  */
-function applyColorToElement(gfx, color, strokeWidth) {
+function applyColorToElement(gfx, strokeColor, strokeWidth) {
   if (!gfx) {
     console.warn('No graphics element provided to applyColorToElement');
     return;
   }
-  console.log('Applying color', color, 'to element', gfx);
   try {
-    // Direct styling for SVG elements
-    var selectors = ['path', 'rect', 'polygon', 'circle', 'polyline'];
-    var styled = false;
-    selectors.forEach(function (selector) {
-      var elements = gfx.querySelectorAll(selector);
-      if (elements.length > 0) {
-        styled = true;
-        elements.forEach(function (element) {
-          element.style.stroke = color;
-          if (strokeWidth) {
-            element.style.strokeWidth = strokeWidth + 'px';
-          }
-        });
+    var _gfx$parentElement;
+    // Determine if this is a flow/connection element
+    var isFlow = gfx.classList.contains('djs-connection') || ((_gfx$parentElement = gfx.parentElement) === null || _gfx$parentElement === void 0 ? void 0 : _gfx$parentElement.classList.contains('djs-connection')) || gfx.getAttribute('data-element-id') && (gfx.getAttribute('data-element-id').includes('Flow') || gfx.getAttribute('data-element-id').includes('Connection'));
+
+    // Get the textColor based on the strokeColor
+    var textColor = strokeColor;
+    Object.keys(ELEMENT_COLORS).forEach(function (key) {
+      if (strokeColor === ELEMENT_COLORS[key].stroke && ELEMENT_COLORS[key].textColor) {
+        textColor = ELEMENT_COLORS[key].textColor;
       }
     });
 
-    // If no elements were styled, try direct styling (for some simple elements)
-    if (!styled && gfx.tagName && selectors.includes(gfx.tagName.toLowerCase())) {
-      gfx.style.stroke = color;
-      if (strokeWidth) {
-        gfx.style.strokeWidth = strokeWidth + 'px';
+    // Apply styles to stroke elements (not text)
+    var strokeElements = ['path', 'rect', 'polygon', 'circle', 'polyline', 'line', 'ellipse', 'g', 'use', 'marker'];
+
+    // Apply stroke styles to non-text elements
+    strokeElements.forEach(function (selector) {
+      var elements = gfx.querySelectorAll(selector);
+      elements.forEach(function (element) {
+        if (strokeColor) {
+          element.style.stroke = strokeColor;
+        }
+        if (strokeWidth) {
+          element.style.strokeWidth = strokeWidth + 'px';
+        }
+      });
+    });
+
+    // Special handling for text elements - only change fill color, not stroke
+    var textElements = gfx.querySelectorAll('text, tspan');
+    textElements.forEach(function (textElement) {
+      textElement.style.stroke = 'none'; // No stroke for text
+      textElement.style.fill = textColor; // Use text color for fill
+    });
+
+    // Enhanced handling for flow lines (connections)
+    if (isFlow) {
+      var _gfx$parentElement2;
+      // Apply special flow styling
+      var allPaths = gfx.querySelectorAll('path, polyline, line');
+      allPaths.forEach(function (path) {
+        if (strokeColor) {
+          path.style.stroke = strokeColor;
+        }
+        if (strokeWidth) {
+          // Increase stroke width for better visibility
+          path.style.strokeWidth = strokeWidth + 1 + 'px';
+        }
+
+        // Add dashed effect for non-executable flows
+        if (strokeColor === ELEMENT_COLORS.nonExecutable.stroke) {
+          path.style.strokeDasharray = '5,3';
+        } else {
+          path.style.strokeDasharray = 'none';
+        }
+      });
+
+      // Handle markers (arrowheads) for flow direction
+      var markers = gfx.querySelectorAll('marker');
+      markers.forEach(function (marker) {
+        if (strokeColor) {
+          marker.style.stroke = strokeColor;
+
+          // Also color the marker's path
+          var markerPaths = marker.querySelectorAll('path');
+          markerPaths.forEach(function (markerPath) {
+            markerPath.style.stroke = strokeColor;
+            markerPath.style.fill = strokeColor;
+          });
+        }
+      });
+
+      // Apply color to all defs elements
+      var defs = gfx.querySelectorAll('defs path');
+      defs.forEach(function (defPath) {
+        if (strokeColor) {
+          defPath.style.stroke = strokeColor;
+          defPath.style.fill = strokeColor;
+        }
+      });
+
+      // Style the parent if it's a connection
+      if ((_gfx$parentElement2 = gfx.parentElement) !== null && _gfx$parentElement2 !== void 0 && _gfx$parentElement2.classList.contains('djs-connection')) {
+        var parentElement = gfx.parentElement;
+        parentElement.style.zIndex = '1000'; // Bring flows to front
+
+        // Apply stroke color to the parent element itself
+        if (strokeColor) {
+          parentElement.style.stroke = strokeColor;
+        }
+
+        // Apply to all visual elements
+        var visualGroup = parentElement.querySelector('.djs-visual');
+        if (visualGroup && strokeColor) {
+          visualGroup.style.stroke = strokeColor;
+        }
+
+        // Apply to all paths in the parent
+        var parentPaths = parentElement.querySelectorAll('path, polyline, line');
+        parentPaths.forEach(function (path) {
+          if (strokeColor) {
+            path.style.stroke = strokeColor;
+          }
+          if (strokeWidth) {
+            path.style.strokeWidth = strokeWidth + 1 + 'px';
+          }
+
+          // Add dashed effect for non-executable flows
+          if (strokeColor === ELEMENT_COLORS.nonExecutable.stroke) {
+            path.style.strokeDasharray = '5,3';
+          } else {
+            path.style.strokeDasharray = 'none';
+          }
+        });
+
+        // Apply to all markers in the parent
+        var parentMarkers = parentElement.querySelectorAll('marker');
+        parentMarkers.forEach(function (marker) {
+          if (strokeColor) {
+            marker.style.stroke = strokeColor;
+
+            // Also color the marker's path
+            var markerPaths = marker.querySelectorAll('path');
+            markerPaths.forEach(function (markerPath) {
+              markerPath.style.stroke = strokeColor;
+              markerPath.style.fill = strokeColor;
+            });
+          }
+        });
       }
     }
 
-    // Add styling class for CSS rules
-    if (color === "#228B22") {
-      // Forest green (completed)
-      gfx.classList.add('completed-node');
-    } else if (color === "#FF8C00") {
-      // Dark orange (active flow)
-      gfx.classList.add('active-flow');
-    } else if (color === "#1E90FF") {
-      // Dodger blue (active task)
-      gfx.classList.add('highlight');
-    } else if (color === "#BA55D3") {
-      // Medium orchid (waiting)
-      gfx.classList.add('waiting-token');
+    // If the element itself is an SVG element, style it directly
+    if (gfx.tagName) {
+      var tagName = gfx.tagName.toLowerCase();
+      if (strokeElements.includes(tagName)) {
+        if (strokeColor) {
+          gfx.style.stroke = strokeColor;
+        }
+        if (strokeWidth) {
+          gfx.style.strokeWidth = strokeWidth + 'px';
+        }
+      } else if (tagName === 'text' || tagName === 'tspan') {
+        gfx.style.stroke = 'none';
+        gfx.style.fill = textColor;
+      }
+    }
+
+    // Add appropriate CSS classes for additional styling
+    if (strokeColor === ELEMENT_COLORS.executable.stroke) {
+      gfx.classList.add('executable-element');
+      if (isFlow) gfx.classList.add('executable-flow');
+    } else if (strokeColor === ELEMENT_COLORS.nonExecutable.stroke) {
+      gfx.classList.add('non-executable-element');
+      if (isFlow) gfx.classList.add('non-executable-flow');
+    } else if (strokeColor === ELEMENT_COLORS.active.stroke) {
+      gfx.classList.add('active-element');
+      if (isFlow) gfx.classList.add('active-flow');
+    } else if (strokeColor === ELEMENT_COLORS.completed.stroke) {
+      gfx.classList.add('completed-element');
+      if (isFlow) gfx.classList.add('completed-flow');
+    } else if (strokeColor === ELEMENT_COLORS.paused.stroke) {
+      gfx.classList.add('paused-element');
+      if (isFlow) gfx.classList.add('paused-flow');
+    } else if (strokeColor === ELEMENT_COLORS.failed.stroke) {
+      gfx.classList.add('failed-element');
+      if (isFlow) gfx.classList.add('failed-flow');
     }
   } catch (error) {
     console.error('Error applying color to element:', error);
@@ -146176,6 +147110,9 @@ function applyColorToElement(gfx, color, strokeWidth) {
 
 /**
  * Add tooltip to a BPMN element
+ * @param {object} elementRegistry - The BPMN.js element registry
+ * @param {string} elementId - The element ID
+ * @param {object} tooltipContent - The tooltip content with title and content properties
  */
 function addTooltipToElement(elementRegistry, elementId, tooltipContent) {
   var gfx = elementRegistry.getGraphics(elementId);
@@ -146189,33 +147126,63 @@ function addTooltipToElement(elementRegistry, elementId, tooltipContent) {
 }
 
 /**
- * Create tooltip content for a node
+ * Check if element is a sequence flow
+ * @param {object} element - The BPMN element
+ * @returns {boolean} - True if element is a sequence flow
  */
-function createNodeTooltipContent(node) {
-  return {
-    title: "Node: ".concat(node.nodeId),
-    content: "Execution count: ".concat(node.executionCount, "<br>\n                  Last execution: ").concat(formatDateTime(node.lastExecutionTime))
-  };
+function isSequenceFlow(element) {
+  return element.type === 'bpmn:SequenceFlow' || element.type.includes('Flow') || element.type.includes('Connection') || element.waypoints && element.waypoints.length > 1;
 }
 
 /**
- * Create tooltip content for a flow
+ * Mark a flow as non-executable
+ * @param {object} canvas - The BPMN.js canvas
+ * @param {object} elementRegistry - The BPMN.js element registry
+ * @param {object} element - The BPMN element
+ * @param {string} elementId - The element ID
  */
-function createFlowTooltipContent(flow) {
-  return {
-    title: "Flow: ".concat(flow.flowId),
-    content: "Execution count: ".concat(flow.executionCount, "<br>\n                  Last execution: ").concat(formatDateTime(flow.lastExecutionTime))
-  };
+function markFlowAsNonExecutable(canvas, elementRegistry, element, elementId) {
+  // Add non-executable marker
+  canvas.addMarker(elementId, 'non-executable');
+  canvas.addMarker(elementId, 'non-executable-flow');
+  var gfx = elementRegistry.getGraphics(elementId);
+  if (!gfx) return;
+
+  // Apply non-executable styling
+  applyColorToElement(gfx, ELEMENT_COLORS.nonExecutable.stroke, ELEMENT_COLORS.nonExecutable.strokeWidth);
+
+  // Add tooltip
+  addTooltipToElement(elementRegistry, elementId, {
+    title: "Non-Executable Flow: ".concat(elementId),
+    content: "This flow is non-executable because it connects to or from a non-executable element."
+  });
 }
 
 /**
- * Create tooltip content for a token
+ * Check if element is a task
+ * @param {object} element - The BPMN element
+ * @returns {boolean} - True if element is a task
  */
-function createTokenTooltipContent(token, tokenType) {
-  return {
-    title: "".concat(tokenType, " Token: ").concat(token.currentElementId),
-    content: "Token ID: ".concat(token.id, "<br>\n                  ").concat(token.hasOwnProperty('isExecutable') ? "Executable: ".concat(token.isExecutable) : '')
-  };
+function isTask(element) {
+  return element.type.includes('Task');
+}
+
+/**
+ * Check if element is an event
+ * @param {object} element - The BPMN element
+ * @returns {boolean} - True if element is an event
+ */
+function isEvent(element) {
+  return element.type.includes('Event');
+}
+
+/**
+ * Check if element is a gateway
+ * @param {object} element - The BPMN element
+ * @returns {boolean} - True if element is a gateway
+ */
+function isGateway(element) {
+  return element.type.includes('Gateway');
 }
 
 /**
@@ -146299,6 +147266,7 @@ function showErrorMessage(message) {
 
 /**
  * Export BPMN diagram
+ * @returns {Promise<string>} The BPMN XML
  */
 function exportDiagram() {
   return _exportDiagram.apply(this, arguments);
@@ -146306,59 +147274,63 @@ function exportDiagram() {
 
 /**
  * Save diagram changes
+ * @param {string} definitionKey - The definition key
+ * @returns {Promise<object>} Result of the save operation
  */
 function _exportDiagram() {
-  _exportDiagram = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee() {
+  _exportDiagram = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee10() {
     var result;
-    return _regeneratorRuntime().wrap(function _callee$(_context) {
-      while (1) switch (_context.prev = _context.next) {
+    return _regeneratorRuntime().wrap(function _callee10$(_context10) {
+      while (1) switch (_context10.prev = _context10.next) {
         case 0:
           if (bpmnModeler) {
-            _context.next = 2;
+            _context10.next = 2;
             break;
           }
           throw new Error('BPMN Modeler is not initialized');
         case 2:
-          _context.prev = 2;
-          _context.next = 5;
+          _context10.prev = 2;
+          _context10.next = 5;
           return bpmnModeler.saveXML({
             format: true
           });
         case 5:
-          result = _context.sent;
-          return _context.abrupt("return", result.xml);
+          result = _context10.sent;
+          return _context10.abrupt("return", result.xml);
         case 9:
-          _context.prev = 9;
-          _context.t0 = _context["catch"](2);
-          console.error('Error exporting diagram:', _context.t0);
-          throw _context.t0;
+          _context10.prev = 9;
+          _context10.t0 = _context10["catch"](2);
+          console.error('Error exporting diagram:', _context10.t0);
+          throw _context10.t0;
         case 13:
         case "end":
-          return _context.stop();
+          return _context10.stop();
       }
-    }, _callee, null, [[2, 9]]);
+    }, _callee10, null, [[2, 9]]);
   }));
   return _exportDiagram.apply(this, arguments);
 }
-function saveChanges(_x) {
+function saveChanges(_x10) {
   return _saveChanges.apply(this, arguments);
 }
 
 /**
  * Update execution map for a process
+ * @param {string} processInstanceId - The process instance ID
+ * @param {boolean} autoRefresh - Whether to automatically refresh the execution map
  */
 function _saveChanges() {
-  _saveChanges = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee2(definitionKey) {
+  _saveChanges = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee11(definitionKey) {
     var updatedXML, response;
-    return _regeneratorRuntime().wrap(function _callee2$(_context2) {
-      while (1) switch (_context2.prev = _context2.next) {
+    return _regeneratorRuntime().wrap(function _callee11$(_context11) {
+      while (1) switch (_context11.prev = _context11.next) {
         case 0:
-          _context2.prev = 0;
-          _context2.next = 3;
+          _context11.prev = 0;
+          _context11.next = 3;
           return exportDiagram();
         case 3:
-          updatedXML = _context2.sent;
-          _context2.next = 6;
+          updatedXML = _context11.sent;
+          _context11.next = 6;
           return fetch(API_ENDPOINTS.SAVE_DIAGRAM, {
             method: 'POST',
             headers: {
@@ -146370,37 +147342,95 @@ function _saveChanges() {
             })
           });
         case 6:
-          response = _context2.sent;
+          response = _context11.sent;
           if (response.ok) {
-            _context2.next = 9;
+            _context11.next = 9;
             break;
           }
           throw new Error("Failed to save: ".concat(response.statusText));
         case 9:
-          return _context2.abrupt("return", {
+          return _context11.abrupt("return", {
             success: true,
             message: 'BPMN diagram saved successfully'
           });
         case 12:
-          _context2.prev = 12;
-          _context2.t0 = _context2["catch"](0);
-          console.error('Failed to save BPMN diagram:', _context2.t0);
-          return _context2.abrupt("return", {
+          _context11.prev = 12;
+          _context11.t0 = _context11["catch"](0);
+          console.error('Failed to save BPMN diagram:', _context11.t0);
+          return _context11.abrupt("return", {
             success: false,
             message: 'Failed to save BPMN diagram'
           });
         case 16:
         case "end":
-          return _context2.stop();
+          return _context11.stop();
       }
-    }, _callee2, null, [[0, 12]]);
+    }, _callee11, null, [[0, 12]]);
   }));
   return _saveChanges.apply(this, arguments);
 }
-function updateExecutionMap(processId) {
-  var includeVirtual = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
-  console.log("Updating execution map for process ".concat(processId, ", includeVirtual=").concat(includeVirtual));
-  initializeViewer(processId, includeVirtual);
+function updateExecutionMap(processInstanceId) {
+  var autoRefresh = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
+  console.log("Updating execution map for process ".concat(processInstanceId));
+  initializeViewer(processInstanceId, autoRefresh);
+}
+
+/**
+ * Get process instance details
+ * @param {string} processInstanceId - The process instance ID
+ * @returns {Promise<object>} The process instance details
+ */
+function getProcessInstance(_x11) {
+  return _getProcessInstance.apply(this, arguments);
+}
+
+/**
+ * Get all processes
+ * @returns {Promise<Array>} List of all processes
+ */
+function _getProcessInstance() {
+  _getProcessInstance = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee12(processInstanceId) {
+    return _regeneratorRuntime().wrap(function _callee12$(_context12) {
+      while (1) switch (_context12.prev = _context12.next) {
+        case 0:
+          _context12.next = 2;
+          return fetchProcessInstance(processInstanceId);
+        case 2:
+          return _context12.abrupt("return", _context12.sent);
+        case 3:
+        case "end":
+          return _context12.stop();
+      }
+    }, _callee12);
+  }));
+  return _getProcessInstance.apply(this, arguments);
+}
+function getAllProcesses() {
+  return _getAllProcesses.apply(this, arguments);
+}
+
+/**
+ * Stop automatic refreshing of execution data
+ */
+function _getAllProcesses() {
+  _getAllProcesses = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee13() {
+    return _regeneratorRuntime().wrap(function _callee13$(_context13) {
+      while (1) switch (_context13.prev = _context13.next) {
+        case 0:
+          _context13.next = 2;
+          return fetchAllProcesses();
+        case 2:
+          return _context13.abrupt("return", _context13.sent);
+        case 3:
+        case "end":
+          return _context13.stop();
+      }
+    }, _callee13);
+  }));
+  return _getAllProcesses.apply(this, arguments);
+}
+function stopRefreshing() {
+  stopRefreshInterval();
 }
 })();
 

@@ -1,38 +1,59 @@
 ﻿@using Microsoft.AspNetCore.Mvc.TagHelpers
-@model Novin.Bpmn.Dashbaord.Controllers.ProcessViewModel
+@model ProcessInstanceListViewModel
 
-<div class="card card-body  mb-3">
-    <h2 class="mb-3">@Model.DefinitionKey</h2>
+<div class="card card-body mb-4">
+    <h2 class="mb-3">Processes for Deployment: <code>@Model.DeploymentKey</code></h2>
 
-    <hr/>
     <div class="d-flex gap-3">
-        <a asp-action="Execute" asp-controller="Bpmn" asp-route-fileName="@Model.DefinitionKey" class="btn btn-secondary">Start New Process</a>
+        <a asp-action="Index" class="btn btn-outline-secondary">Back to Deployments</a>
     </div>
 </div>
 
+<div class="card card-body mb-3">
+    <h4 class="mb-3">Start a New Process</h4>
+    <form asp-action="Execute" method="get" class="row g-3">
+        <input type="hidden" name="deploymentKey" value="@Model.DeploymentKey" />
+        <div class="col-md-8">
+            <select class="form-select" name="processId" required>
+                <option value="">-- Select Process --</option>
+                @foreach (var p in Model.Instances.Select(i => i.ProcessId).Distinct())
+                {
+                    <option value="@p">@p</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-4">
+            <button type="submit" class="btn btn-success w-100">Start Process</button>
+        </div>
+    </form>
+</div>
+
 <div class="card card-body">
-    @if (Model.Processes.Any())
+    @if (Model.Instances.Any())
     {
-        <table class="table table-bordered">
+        <table class="table table-bordered align-middle">
             <thead>
             <tr>
-                <th>Process Instance ID</th>
+                <th>Instance ID</th>
+                <th>Process ID</th>
                 <th>Status</th>
+                <th>Started</th>
                 <th>Actions</th>
             </tr>
             </thead>
             <tbody>
-            @foreach (var process in Model.Processes)
+            @foreach (var instance in Model.Instances)
             {
                 <tr>
-                    <td>@process.Id</td>
-                    <td>
-                        <a asp-action="ProcessDetail" asp-controller="Bpmn" asp-route-id="@process.Id" type="submit" class="btn btn-secondary">Details</a>
-                    </td>
-                    <td>
-                        <form asp-action="DeleteProcess" asp-controller="Bpmn" method="post" class="d-inline">
-                            <input type="hidden" name="processId" value="@process.Id" />
-                            <button type="submit" class="btn btn-danger">Delete</button>
+                    <td><code>@instance.InstanceId</code></td>
+                    <td><code>@instance.ProcessId</code></td>
+                    <td>@instance.Status</td>
+                    <td>@instance.CreatedAt.ToLocalTime().ToString("g")</td>
+                    <td class="d-flex gap-2">
+                        <a asp-action="ProcessDetail" asp-route-id="@instance.InstanceId" class="btn btn-sm btn-primary">Details</a>
+                        <form asp-action="DeleteProcess" method="post" class="d-inline">
+                            <input type="hidden" name="processId" value="@instance.InstanceId" />
+                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this process instance?');">Delete</button>
                         </form>
                     </td>
                 </tr>
@@ -42,6 +63,6 @@
     }
     else
     {
-        <p>No processes available for this definition.</p>
+        <p class="text-muted">No process instances found for this deployment.</p>
     }
 </div>

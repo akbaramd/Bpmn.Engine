@@ -24,94 +24,66 @@ public class ElementCreatedEventHandler : BpmnEventHandlerBase<ElementCreated>
         _topologyStore = topologyStore ?? throw new ArgumentNullException(nameof(topologyStore));
         _joinResolver = joinResolver ?? throw new ArgumentNullException(nameof(joinResolver));
     }
+
     public override async Task HandleAsync(ElementCreated @event, CancellationToken cancellationToken = default)
     {
-        
-        //get current context 
-        var currentContext = _contextRepository.Get(@event.ExecutionId)
-                             ?? throw new InvalidOperationException("Context not found.");
+        var context = _contextRepository.Get(@event.ExecutionId)
+                      ?? throw new InvalidOperationException("Execution context not found.");
 
-        if (!currentContext.IsExecutable || !@event.IsExecutable)
-        {
-            AppendEvent(new ElementCompleted()
-            {
-                EventId = Guid.NewGuid(),
-                ExecutionId = @event.ExecutionId,
-                InstanceId = @event.InstanceId,
-                DeploymentId = @event.DeploymentId,
-                DeploymentKey = @event.DeploymentKey,
-                ProcessId = @event.ProcessId,
-                ElementId = @event.ElementId,
-                ElementType = @event.ElementType,
-                Timestamp = DateTime.UtcNow,
-                IsExecutable = false
-            });
-            return;
-        }
-        
-        
         var topology = _topologyStore.Get(@event.DeploymentId, @event.ProcessId)
-                       ?? throw new InvalidOperationException("Topology not found.");
+                       ?? throw new InvalidOperationException("Flow topology not found.");
 
         if (!topology.Nodes.TryGetValue(@event.ElementId, out var targetNode))
             throw new InvalidOperationException($"Node not found for ElementId '{@event.ElementId}'.");
 
-        // بررسی اینکه آیا نود Join است یا خیر
-        bool isJoinNode = targetNode.IsGateway && 
-                          topology.Incoming.TryGetValue(@event.ElementId, out var incomingFlows) ;
-
-        if (!isJoinNode)
+        if (!IsJoinNode(topology, @event.ElementId, targetNode))
         {
-            var elementProcessingEvent = new ElementProcessing()
-            {
-                EventId = Guid.NewGuid(),
-                ExecutionId = @event.ExecutionId,
-                InstanceId = @event.InstanceId,
-                DeploymentId = @event.DeploymentId,
-                DeploymentKey = @event.DeploymentKey,
-                ProcessId = @event.ProcessId,
-                ElementId = @event.ElementId,
-                ElementType = targetNode.ElementType,
-                Timestamp = DateTime.UtcNow,
-                IsExecutable = true
-            };
-
-            AppendEvent(elementProcessingEvent);
+            AppendEvent(CreateProcessingEvent(@event, targetNode.ElementType, @event.IsExecutable));
             return;
         }
 
-        // اگر نود Join هست، کانتکست‌های ورودی رو بگیر
-        var candidateContexts = _contextRepository.GetByInstanceId(@event.InstanceId)
-            .Where(c => topology.Incoming[@event.ElementId].Contains(c.PreviousElementId))
+        // نود Join است
+        var incomingIds = topology.Incoming[@event.ElementId];
+        var candidateContexts = _contextRepository
+            .GetByInstanceId(@event.InstanceId)
+            .Where(c => incomingIds.Contains(c.PreviousElementId))
             .ToList();
 
-        // بررسی آیا همه شاخه‌ها رسیدن
-        bool canJoin = _joinResolver.CanJoin(topology, @event.ElementId, candidateContexts);
+        context.Merged();
+        _contextRepository.Save(context);
 
-        if (!canJoin)
+        if (!_joinResolver.CanJoin(topology, @event.ElementId, candidateContexts))
         {
-            // همه شاخه‌ها نرسیدن، منتظر بمان
+            // منتظر رسیدن بقیه شاخه‌ها بمان
             return;
         }
 
-        
-         var elementProcessingEvent2 = new ElementProcessing()
-        {
-            EventId = Guid.NewGuid(),
-            ExecutionId = @event.ExecutionId,
-            InstanceId = @event.InstanceId,
-            DeploymentId = @event.DeploymentId,
-            DeploymentKey = @event.DeploymentKey,
-            ProcessId = @event.ProcessId,
-            ElementId = @event.ElementId,
-            ElementType = targetNode.ElementType,
-            Timestamp = DateTime.UtcNow,
-            IsExecutable = candidateContexts.Any(x=>x.IsExecutable)
-        };
+        // اگر همه شاخه‌ها رسیدند، ادامه بده
+        var isExecutable = candidateContexts.Any(c => c.IsExecutable);
+        AppendEvent(CreateProcessingEvent(@event, targetNode.ElementType, isExecutable));
 
-        AppendEvent(elementProcessingEvent2);
-        // حذف کانتکست‌های قبلی شاخه‌ه
         await Task.CompletedTask;
     }
 
+    private static bool IsJoinNode(FlowTopology topology, string nodeId, FlowNode node)
+    {
+        return node.IsGateway && topology.Incoming.TryGetValue(nodeId, out var incoming) && incoming.Count > 1;
+    }
+
+    private static ElementProcessing CreateProcessingEvent(ElementCreated e, string elementType, bool isExecutable)
+    {
+        return new ElementProcessing
+        {
+            EventId = Guid.NewGuid(),
+            ExecutionId = e.ExecutionId,
+            InstanceId = e.InstanceId,
+            DeploymentId = e.DeploymentId,
+            DeploymentKey = e.DeploymentKey,
+            ProcessId = e.ProcessId,
+            ElementId = e.ElementId,
+            ElementType = elementType,
+            Timestamp = DateTime.UtcNow,
+            IsExecutable = isExecutable
+        };
+    }
 }

@@ -12,8 +12,8 @@ public class JoinResolverService : IJoinResolverService
         if (!topology.Incoming.TryGetValue(joinNodeId, out var incomingIds) || incomingIds == null || incomingIds.Count == 0)
             return false;
 
-
-        return (allContexts.Count() == incomingIds.Count);
+        var res =  (allContexts.Where(x=>x.ReachedToMerge).Select(x=>x.PreviousElementId).Distinct().Count() == incomingIds.Count);
+        return res;
 
     }
 

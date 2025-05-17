@@ -1,29 +1,32 @@
 using Novin.Bpmn.Dashbaord.Data;
-using Novin.Bpmn.V3;
 using System;
 using System.Collections.Generic;
 using System.Dynamic;
+using ExecutionContext = Novin.Bpmn.EventSourcing.Core.Executions.ExecutionContext;
 
 namespace Novin.Bpmn.Dashbaord.Models
 {
     public class ProcessDetailViewModel
     {
-        public Process Process { get; set; }
-        public List<NodeExecutionInfo> ExecutedNodes { get; set; }
-        public List<FlowExecutionInfo> ExecutedFlows { get; set; }
-        public List<BpmnV3Token> ActiveTokens { get; set; }
-        public List<BpmnV3Token> WaitingTokens { get; set; }
-        public List<BpmnV3Token> CompletedTokens { get; set; }
-        public List<EventNodeInfo> TriggeredEvents { get; set; } = new List<EventNodeInfo>();
-        public List<EventNodeInfo> BoundaryEvents { get; set; } = new List<EventNodeInfo>();
-        public List<EventNodeInfo> StartEvents { get; set; } = new List<EventNodeInfo>();
-        public List<EventNodeInfo> EndEvents { get; set; } = new List<EventNodeInfo>();
-        public dynamic Variables { get; set; } = new ExpandoObject();
-        
-        // Properties needed for ProcessDetail.cshtml view
+        public Guid InstanceId { get; set; }
+
+        public string DeploymentKey { get; set; }
+
+        public string ProcessId { get; set; }
+
         public string Status { get; set; }
+
         public DateTime StartTime { get; set; }
+
         public DateTime? EndTime { get; set; }
+
+        public List<ExecutionTrace> Traces { get; set; } = new();
+
+        public List<ExecutionContext> ExecutionContexts { get; set; } = new();
+
+        public Dictionary<Guid, string> CurrentElementByContextId { get; set; } = new();
+
+        public dynamic Variables { get; set; } = new ExpandoObject();
     }
 
     public class EventNodeInfo

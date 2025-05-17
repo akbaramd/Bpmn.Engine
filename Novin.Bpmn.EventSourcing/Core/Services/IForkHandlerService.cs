@@ -1,6 +1,12 @@
-﻿namespace Novin.Bpmn.EventSourcing.Core.Services;
+﻿using Novin.Bpmn.EventSourcing.Events;
 
-public class IForkHandlerService
+namespace Novin.Bpmn.EventSourcing.Core.Services;
+using ExecutionContext = Novin.Bpmn.EventSourcing.Core.Executions.ExecutionContext;
+public interface IForkHandlerService
 {
-    
+    List<ExecutionContext> PrepareForks(
+        ExecutionContext sourceContext,
+        ElementCompleted @event,
+        FlowTopology topology,
+        List<string> targets);
 }

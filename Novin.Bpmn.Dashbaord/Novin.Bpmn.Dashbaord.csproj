@@ -31,10 +31,10 @@
       <Folder Include="wwwroot\uploads\" />
     </ItemGroup>
     <ItemGroup>
-      <ProjectReference Include="..\Novin.Bpmn\Novin.Bpmn.csproj" />
+      <_ContentIncludedByDefault Remove="Views\AddNumberToVariables\ShowForm.cshtml" />
     </ItemGroup>
     <ItemGroup>
-      <_ContentIncludedByDefault Remove="Views\AddNumberToVariables\ShowForm.cshtml" />
+      <ProjectReference Include="..\Novin.Bpmn.EventSourcing\Novin.Bpmn.EventSourcing.csproj" />
     </ItemGroup>
 
 </Project>

@@ -1,18 +1,17 @@
-using Novin.Bpmn.Contracts;
-using Novin.Bpmn.Core;
+using Novin.Bpmn.EventSourcing.Core.Process;
 
 namespace Novin.Bpmn.Dashbaord.Services
 {
     public class BpmnEngineFactory
     {
-        private readonly IBpmnEngine _engine;
+        private readonly IProcessEngine _engine;
 
-        public BpmnEngineFactory(IBpmnEngine engine)
+        public BpmnEngineFactory(IProcessEngine engine)
         {
             _engine = engine;
         }
 
-        public IBpmnEngine GetEngine()
+        public IProcessEngine GetEngine()
         {
             return _engine;
         }

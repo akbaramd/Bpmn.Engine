@@ -1,14 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
-using Novin.Bpmn.Contracts;
-using Novin.Bpmn.Core;
 using Novin.Bpmn.Dashbaord.Models;
 using Novin.Bpmn.Dashbaord.Services;
+using Novin.Bpmn.EventSourcing.Core.Deployments;
+using Novin.Bpmn.EventSourcing.Core.Process;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Novin.Bpmn.V3;
+using Novin.Bpmn.EventSourcing.Core.Executions;
+using Novin.Bpmn.EventSourcing.Core.Services;
 
 namespace Novin.Bpmn.Dashbaord.Controllers
 {
@@ -16,158 +17,127 @@ namespace Novin.Bpmn.Dashbaord.Controllers
     {
         private readonly BpmnEngineFactory _engineFactory;
         private readonly IWebHostEnvironment _environment;
+        private readonly IDeploymentService _deploymentService;
+        private readonly IProcessStateStore _processStateStore;
+        private readonly IExecutionPathService _executionPathService;
+        private readonly IExecutionContextRepository _contextRepository;
 
-        public BpmnController(BpmnEngineFactory engineFactory, IWebHostEnvironment environment)
+        public BpmnController(
+            BpmnEngineFactory engineFactory,
+            IWebHostEnvironment environment,
+            IDeploymentService deploymentService,
+            IProcessStateStore processStateStore,
+            IExecutionPathService executionPathService,
+            IExecutionContextRepository contextRepository)
         {
             _engineFactory = engineFactory;
             _environment = environment;
+            _deploymentService = deploymentService;
+            _processStateStore = processStateStore;
+            _executionPathService = executionPathService;
+            _contextRepository = contextRepository;
         }
 
-        public async Task<IActionResult> Index()
+        public IActionResult Index()
         {
-            var engine = _engineFactory.GetEngine();
-            var processDefinitions = await engine.GetAllProcessDefinitionsAsync();
-            return View(processDefinitions);
+            var deployments = _deploymentService.GetAll();
+            return View(deployments);
         }
 
-        public async Task<IActionResult> Processes(string fileName)
+        public IActionResult ProcessInstances(Guid deploymentKey)
         {
-            var engine = _engineFactory.GetEngine();
-            var instances = await engine.GetProcessInstancesByDeploymentKeyAsync(fileName);
-            
-            var model = new ProcessViewModel
+            var instances = _processStateStore.GetByDeploymentKey(deploymentKey);
+            return View(new ProcessInstanceListViewModel
             {
-                DefinitionKey = fileName,
-                Processes = instances.ToList()
-            };
-            
-            return View(model);
+                DeploymentKey = deploymentKey,
+                Instances = instances.ToList()
+            });
         }
 
-        public async Task<IActionResult> Execute(string fileName)
+        public async Task<IActionResult> Execute(string deploymentKey, string processId)
         {
-            var engine = _engineFactory.GetEngine();
-            var definition = await engine.GetProcessDefinitionAsync(fileName);
-            
-            if (definition == null)
+            try
             {
-                return NotFound();
+                var engine = _engineFactory.GetEngine();
+                var instance = await engine.StartProcessAsync(deploymentKey, processId,new Dictionary<string, object?>(){
+            ["num1"] = 3,
+            ["num2"] = 2,
+            ["operator"] = "sum"
+            });
+                return RedirectToAction("ProcessDetail", new { id = instance.InstanceId });
             }
-            
-            var instance = await engine.StartProcessAsync(definition.DeploymentKey, "process");
-            return RedirectToAction("ProcessDetail", new { id = instance.Id });
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = $"Execution failed: {ex.Message}";
+                return RedirectToAction("Index");
+            }
         }
-        
+
         [HttpPost]
         public async Task<IActionResult> Upload(IFormFile file, string deploymentKey, string label)
         {
-            if (file == null || file.Length == 0)
+            if (file == null || file.Length == 0 || string.IsNullOrWhiteSpace(deploymentKey))
             {
-                ModelState.AddModelError("file", "Please select a file to upload.");
-                return RedirectToAction("Index");
-            }
-
-            if (string.IsNullOrWhiteSpace(deploymentKey))
-            {
-                ModelState.AddModelError("deploymentKey", "Deployment key is required.");
+                TempData["ErrorMessage"] = "File and deployment key are required.";
                 return RedirectToAction("Index");
             }
 
             try
             {
-                var engine = _engineFactory.GetEngine();
-                
-                using (var stream = file.OpenReadStream())
-                {
-                    // Deploy the process using IBpmnEngine
-                    await engine.DeployProcessAsync(deploymentKey, stream, label);
-                }
-                
-                TempData["SuccessMessage"] = $"Process definition '{deploymentKey}' deployed successfully.";
+                using var reader = new StreamReader(file.OpenReadStream());
+                var bpmnXml = await reader.ReadToEndAsync();
+                _deploymentService.Deploy(deploymentKey, bpmnXml);
+
+                TempData["SuccessMessage"] = $"Deployment '{deploymentKey}' uploaded.";
             }
             catch (Exception ex)
             {
-                TempData["ErrorMessage"] = $"Error deploying process: {ex.Message}";
+                TempData["ErrorMessage"] = $"Deployment failed: {ex.Message}";
             }
-            
+
             return RedirectToAction("Index");
         }
 
-        public async Task<IActionResult> ProcessDetail(string id)
+        public IActionResult ProcessDetail(Guid id)
         {
-            var engine = _engineFactory.GetEngine();
-            var instance = await engine.GetProcessInstanceAsync(id);
-            
+            var instance = _processStateStore.Get(id);
             if (instance == null)
-            {
                 return NotFound();
-            }
-            
-            // Create view model with process details
+
             var viewModel = new ProcessDetailViewModel
             {
-                Process = new Process 
-                { 
-                    Id = Guid.Parse(instance.Id),
-                    Definition = new Definitions 
-                    { 
-                        DefinationKey = instance.DeploymentKey 
-                    }
-                },
-                Status = "Active",
-                StartTime = DateTime.Now,
-                ExecutedNodes = instance.GetExecutedNodes(),
-                ExecutedFlows = instance.GetExecutedFlows(),
-                ActiveTokens = instance.Tokens.Where(t => t.Status == TokenStatus.Active).ToList(),
-                WaitingTokens = instance.Tokens.Where(t => t.Status == TokenStatus.Waiting).ToList(),
-                CompletedTokens = instance.Tokens.Where(t => t.Status == TokenStatus.Completed).ToList(),
+                InstanceId = instance.InstanceId,
+                DeploymentKey = instance.DeploymentKey,
+                ProcessId = instance.ProcessId,
+                Status = instance.Status.ToString(),
+                StartTime = instance.CreatedAt,
+                EndTime = (instance.Status == ProcessStateStatus.Completed || instance.Status == ProcessStateStatus.Terminated)
+                    ? instance.LastUpdatedAt
+                    : null,
                 Variables = new System.Dynamic.ExpandoObject()
             };
-            
-            // Copy variables to dynamic object if available
+
             if (instance.Variables != null)
             {
-                var dict = viewModel.Variables as IDictionary<string, object>;
-                foreach (var kvp in instance.GetAllVariables())
-                {
+                var dict = (IDictionary<string, object>)viewModel.Variables;
+                foreach (var kvp in instance.Variables)
                     dict[kvp.Key] = kvp.Value;
-                }
             }
-            
+
             return View(viewModel);
         }
 
-        [HttpPost]
-        public async Task<IActionResult> DeleteProcess(string processId)
-        {
-            var engine = _engineFactory.GetEngine();
-            var instance = await engine.GetProcessInstanceAsync(processId);
-            
-            if (instance == null)
-            {
-                return NotFound();
-            }
-            
-            await engine.DeleteProcessInstanceAsync(processId);
-            return RedirectToAction("Processes", new { fileName = instance.DeploymentKey });
-        }
-        
-        [HttpPost]
-        public async Task<IActionResult> DeleteDefinition(string deploymentKey)
-        {
-            var engine = _engineFactory.GetEngine();
-            var result = await engine.DeleteProcessDefinitionAsync(deploymentKey);
-            
-            if (result)
-            {
-                TempData["SuccessMessage"] = $"Process definition '{deploymentKey}' deleted successfully.";
-            }
-            else
-            {
-                TempData["ErrorMessage"] = $"Failed to delete process definition '{deploymentKey}'.";
-            }
-            
-            return RedirectToAction("Index");
-        }
+
+      
     }
-} 
+}
+
+public class ProcessInstanceListViewModel
+{
+    public Guid DeploymentKey { get; set; }
+
+    public List<ProcessState> Instances { get; set; } = new();
+
+    // می‌توان خواص نمایشی کمکی نیز افزود:
+    public string? DeploymentLabel { get; set; } // برای نمایش عنوان در View
+}

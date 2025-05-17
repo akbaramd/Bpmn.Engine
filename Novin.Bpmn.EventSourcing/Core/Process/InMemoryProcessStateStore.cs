@@ -40,4 +40,9 @@ public class InMemoryProcessStateStore : IProcessStateStore
     {
         return _states.Values.ToList();
     }
+
+    public IEnumerable<ProcessState> GetByDeploymentKey(Guid deploymentKey)
+    {
+        return _states.Values.Where(state => state.DeploymentId == deploymentKey).ToList();
+    }
 }

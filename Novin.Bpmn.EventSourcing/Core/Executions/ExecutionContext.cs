@@ -52,6 +52,7 @@ public class ExecutionContext
     /// نسخه تغییرات برای مدیریت Versioning و بازپخش
     /// </summary>
     public int Version { get; private set; } = 0;
+    public bool ReachedToMerge { get; private set; } = false;
 
     /// <summary>
     /// مسیر پیمایش شده: لیست شناسه المان‌ها از ابتدا تا CurrentElementId
@@ -91,6 +92,11 @@ public class ExecutionContext
         }
     }
 
+    public void Merged()
+    {
+        ReachedToMerge = true;
+    }
+    
     /// <summary>
     /// کلون کانتکست برای Fork یا Branching
     /// ParentContextId در کلون به ContextId کانتکست فعلی ست می‌شود

@@ -21,6 +21,7 @@ public interface IBpmnDeploymentStore
     /// دریافت همه نسخه‌های موجود برای یک deployment.
     /// </summary>
     IReadOnlyList<BpmnDeployment> GetAllVersions(string deploymentKey);
+    IReadOnlyList<BpmnDeployment> GetAllVersions();
 
     /// <summary>
     /// دریافت deployment با شناسه یکتا.

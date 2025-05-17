@@ -1,6 +1,8 @@
-﻿namespace Novin.Bpmn.EventSourcing.Core.Services;
+﻿using Novin.Bpmn.EventSourcing.Core.Executions;
 
-public class IExecutionPathService
+namespace Novin.Bpmn.EventSourcing.Core.Services;
+
+public interface IExecutionPathService
 {
-    
+    ExecutionTraceMap BuildExecutionTraces(Guid instanceId);
 }

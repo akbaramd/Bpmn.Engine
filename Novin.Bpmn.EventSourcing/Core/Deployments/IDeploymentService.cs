@@ -11,6 +11,7 @@ public interface IDeploymentService
     /// دریافت یک deployment خاص به همراه توپولوژی‌های آن
     /// </summary>
     BpmnDeploymentDetails? GetDeploymentWithTopology(Guid deploymentId);
+    List<BpmnDeploymentDetails> GetAll();
 }
 
 public class BpmnDeploymentDetails

@@ -1,342 +1,132 @@
-﻿@using System.Text.Json
-@using JsonSerializer = System.Text.Json.JsonSerializer
-@using Novin.Bpmn.Dashbaord.Models
 @using Microsoft.AspNetCore.Mvc.TagHelpers
+@using Novin.Bpmn.Dashbaord.Models
 @model ProcessDetailViewModel
 
-<style>
-    .highlight {
-        stroke: green !important;
-        stroke-width: 3px !important;
-        fill: none !important; /* Ensure that only the border is colored if necessary */
-    }
-    
-    .user-task {
-        stroke: #4682B4 !important; /* Steel blue */
-        stroke-width: 3px !important;
-    }
-    
-    .completed-node {
-        stroke: #228B22 !important; /* Forest green */
-        stroke-width: 2px !important;
-    }
-    
-    .active-flow {
-        stroke: #FF8C00 !important; /* Dark orange */
-        stroke-width: 2px !important;
-    }
-    
-    .waiting-token {
-        stroke: #BA55D3 !important; /* Medium orchid */
-        stroke-width: 3px !important;
-    }
-    
-    /* New styles for events */
-    .start-event {
-        stroke: #228B22 !important; /* Forest green */
-        stroke-width: 3px !important;
-        fill: #E6F5E6 !important; /* Light green fill */
-    }
-    
-    .end-event {
-        stroke: #8B0000 !important; /* Dark red */
-        stroke-width: 3px !important;
-        fill: #FFE6E6 !important; /* Light red fill */
-    }
-    
-    .triggered-event {
-        stroke: #FF8C00 !important; /* Dark orange */
-        stroke-width: 3px !important;
-        fill: #FFEFD5 !important; /* Light orange fill */
-    }
-    
-    .boundary-event {
-        stroke: #6A5ACD !important; /* Slate blue */
-        stroke-width: 3px !important;
-        fill: #E6E6FA !important; /* Lavender fill */
-    }
-</style>
-
 <div class="container mt-4">
-    <h1 class="mb-4">BPMN Process Execution Details</h1>
+    <h1 class="mb-4">Process Execution Viewer</h1>
 
     <div class="row">
         <div class="col-md-4">
-            <div class="card mb-4">
-                <div class="card-header">
-                    Process Information
-                </div>
+            <div class="card mb-3">
+                <div class="card-header">Process Info</div>
                 <div class="card-body">
-                    <table class="table">
-                        <tr>
-                            <th>Process ID</th>
-                            <td>@Model.Process.Id</td>
-                        </tr>
-                        <tr>
-                            <th>Definition</th>
-                            <td>@Model.Process.Definition.DefinationKey</td>
-                        </tr>
-                        <tr>
-                            <th>Status</th>
-                            <td>@Model.Status</td>
-                        </tr>
-                        <tr>
-                            <th>Start Time</th>
-                            <td>@Model.StartTime</td>
-                        </tr>
-                    </table>
+                    <dl class="row">
+                        <dt class="col-sm-5">Instance ID:</dt>
+                        <dd class="col-sm-7">@Model.InstanceId</dd>
+
+                        <dt class="col-sm-5">Definition Key:</dt>
+                        <dd class="col-sm-7">@Model.DeploymentKey</dd>
+
+                        <dt class="col-sm-5">Process ID:</dt>
+                        <dd class="col-sm-7">@Model.ProcessId</dd>
+
+                        <dt class="col-sm-5">Status:</dt>
+                        <dd class="col-sm-7">@Model.Status</dd>
+
+                        <dt class="col-sm-5">Start Time:</dt>
+                        <dd class="col-sm-7">@Model.StartTime</dd>
+
+                        @if (Model.EndTime != null)
+                        {
+                            <dt class="col-sm-5">End Time:</dt>
+                            <dd class="col-sm-7">@Model.EndTime</dd>
+                        }
+                    </dl>
                 </div>
             </div>
 
-            <div class="card mb-4">
-                <div class="card-header">
-                    Variables
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Variables</span>
+                    <button class="btn btn-sm btn-outline-secondary" id="toggleVariables">Expand All</button>
                 </div>
-                <div class="card-body small">
-                    @{
-                        var variables = Model.Variables as IDictionary<string, object>;
-                        if (variables != null && variables.Any())
-                        {
-                            <pre class="small">@JsonSerializer.Serialize(variables, new JsonSerializerOptions { WriteIndented = true })</pre>
-                        }
-                        else
-                        {
-                            <p>No variables available.</p>
-                        }
+                <div class="card-body">
+                    @if (Model.Variables is IDictionary<string, object> vars && vars.Any())
+                    {
+                        <div class="variables-container">
+                            @foreach (var variable in vars)
+                            {
+                                <div class="variable-item mb-2">
+                                    <div class="variable-header d-flex justify-content-between align-items-center p-2 rounded" 
+                                         style="background-color: #f8f9fa; cursor: pointer;" 
+                                         onclick="toggleVariableContent(this)">
+                                        <span class="fw-bold">@variable.Key</span>
+                                        <span class="badge bg-secondary">@(variable.Value?.GetType().Name ?? "null")</span>
+                                    </div>
+                                    <div class="variable-content p-2 border-start border-end border-bottom rounded-bottom" style="display: none;">
+                                        @if (variable.Value != null)
+                                        {
+                                            <pre class="small text-wrap mb-0">@System.Text.Json.JsonSerializer.Serialize(variable.Value, new System.Text.Json.JsonSerializerOptions { WriteIndented = true })</pre>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">null</span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        <script>
+                            function toggleVariableContent(header) {
+                                const content = header.nextElementSibling;
+                                if (content.style.display === 'none') {
+                                    content.style.display = 'block';
+                                } else {
+                                    content.style.display = 'none';
+                                }
+                            }
+                            
+                            document.getElementById('toggleVariables').addEventListener('click', function() {
+                                const contents = document.querySelectorAll('.variable-content');
+                                const isAnyHidden = Array.from(contents).some(c => c.style.display === 'none');
+                                
+                                contents.forEach(content => {
+                                    content.style.display = isAnyHidden ? 'block' : 'none';
+                                });
+                                
+                                this.textContent = isAnyHidden ? 'Collapse All' : 'Expand All';
+                            });
+                        </script>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No variables available.</p>
                     }
                 </div>
             </div>
         </div>
 
         <div class="col-md-8">
-            <div class="card mb-3" style="height: 500px">
+            <div class="card mb-3" style="height: 500px;">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>Process Diagram</span>
-                    <div>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="showVirtualNodes" checked>
-                            <label class="form-check-label" for="showVirtualNodes">Show traversal-only paths</label>
-                        </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="showVirtualNodes" checked>
+                        <label class="form-check-label" for="showVirtualNodes">Show Virtual Paths</label>
                     </div>
                 </div>
-                <div style="height: 100%" id="canvas"></div>
-            </div>
-        </div>
-    </div>
-    
-    @if (Model.WaitingTokens != null && Model.WaitingTokens.Any())
-    {
-        <div class="row">
-            <div class="col-md-12">
-                <div class="card mb-4">
-                    <div class="card-header">
-                        Waiting User Tasks
-                    </div>
-                    <div class="card-body">
-                        <table class="table">
-                            <thead>
-                            <tr>
-                                <th>Token ID</th>
-                                <th>Element ID</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            @foreach (var token in Model.WaitingTokens)
-                            {
-                                <tr>
-                                    <td>@token.Id</td>
-                                    <td>@token.CurrentElementId</td>
-                                    <td>@token.Status</td>
-                                    <td>
-                                        <form method="post" action="@Url.Action("CompleteTask", "Bpmn")">
-                                            <input type="hidden" name="processId" value="@Model.Process.Id" />
-                                            <input type="hidden" name="tokenId" value="@token.Id" />
-                                            <button type="submit" class="btn btn-success">Complete Task</button>
-                                        </form>
-                                    </td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-    
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">
-                    Executed Nodes
-                </div>
-                <div class="card-body">
-                    @if (Model.ExecutedNodes != null && Model.ExecutedNodes.Any())
-                    {
-                        <table class="table table-sm">
-                            <thead>
-                            <tr>
-                                <th>Node ID</th>
-                                <th>Execution Count</th>
-                                <th>Status</th>
-                                <th>Last Execution</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            @foreach (var node in Model.ExecutedNodes)
-                            {
-                                <tr>
-                                    <td>@node.NodeId</td>
-                                    <td>@node.ExecutionCount</td>
-                                    <td>@(node.IsActive ? "Active" : "Inactive")</td>
-                                    <td>@node.LastExecutionTime.ToString("HH:mm:ss")</td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    }
-                    else
-                    {
-                        <p>No executed nodes available.</p>
-                    }
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">
-                    Executed Flows
-                </div>
-                <div class="card-body">
-                    @if (Model.ExecutedFlows != null && Model.ExecutedFlows.Any())
-                    {
-                        <table class="table table-sm">
-                            <thead>
-                            <tr>
-                                <th>Flow ID</th>
-                                <th>Execution Count</th>
-                                <th>Status</th>
-                                <th>Last Execution</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            @foreach (var flow in Model.ExecutedFlows)
-                            {
-                                <tr>
-                                    <td>@flow.FlowId</td>
-                                    <td>@flow.ExecutionCount</td>
-                                    <td>@(flow.IsActive ? "Active" : "Inactive")</td>
-                                    <td>@flow.LastExecutionTime.ToString("HH:mm:ss")</td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    }
-                    else
-                    {
-                        <p>No executed flows available.</p>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">
-                    Active Tokens
-                </div>
-                <div class="card-body">
-                    @if (Model.ActiveTokens != null && Model.ActiveTokens.Any())
-                    {
-                        <table class="table">
-                            <thead>
-                            <tr>
-                                <th>Token ID</th>
-                                <th>Current Element</th>
-                                @if (Model.ActiveTokens.First().GetType().GetProperty("IsExecutable") != null)
-                                {
-                                    <th>Executable</th>
-                                }
-                            </tr>
-                            </thead>
-                            <tbody>
-                            @foreach (var token in Model.ActiveTokens)
-                            {
-                                <tr>
-                                    <td>@token.Id</td>
-                                    <td>@(token.GetType().GetProperty("CurrentElementId")?.GetValue(token) ?? "Unknown")</td>
-                                    @if (token.GetType().GetProperty("IsExecutable") != null)
-                                    {
-                                        <td>@token.GetType().GetProperty("IsExecutable").GetValue(token)</td>
-                                    }
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    }
-                    else
-                    {
-                        <p>No active tokens available.</p>
-                    }
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">
-                    Completed Tokens
-                </div>
-                <div class="card-body">
-                    @if (Model.CompletedTokens != null && Model.CompletedTokens.Any())
-                    {
-                        <table class="table">
-                            <thead>
-                            <tr>
-                                <th>Token ID</th>
-                                <th>Current Element</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            @foreach (var token in Model.CompletedTokens)
-                            {
-                                <tr>
-                                    <td>@token.Id</td>
-                                    <td>@(token.GetType().GetProperty("CurrentElementId")?.GetValue(token) ?? "Unknown")</td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    }
-                    else
-                    {
-                        <p>No completed tokens available.</p>
-                    }
-                </div>
+                <div id="canvas" style="height: 100%; position: relative;"></div>
             </div>
         </div>
     </div>
 
-    <div class="mt-3">
-        <a asp-action="Processes" asp-route-fileName="@Model.Process.Definition.DefinationKey" class="btn btn-secondary">Back to Processes</a>
+    <div class="mt-4">
+        <a asp-action="ProcessInstances" asp-route-deploymentKey="@Model.DeploymentKey" class="btn btn-secondary">Back to Instances</a>
     </div>
 </div>
 
-<script src="~/js/bundle.js"></script>
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        // Initialize the viewer with process ID
-        bpmn.initializeViewer('@Model.Process.Id');
-        
-        // Add event listener for toggling virtual nodes
-        document.getElementById('showVirtualNodes').addEventListener('change', function(e) {
-            // Update execution map with include virtual flag
-            bpmn.updateExecutionMap('@Model.Process.Id', e.target.checked);
+@section Scripts {
+    <script src="~/js/bundle.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const pid     = '@Model.InstanceId';
+            const chk     = document.getElementById('showVirtualNodes');
+
+            bpmn.initializeViewer(pid, chk.checked);    // auto-refresh starts inside
+
+            chk.addEventListener('change', () =>
+                bpmn.updateExecutionMap(pid, chk.checked));
         });
-    });
-</script>
+
+    </script>
+}

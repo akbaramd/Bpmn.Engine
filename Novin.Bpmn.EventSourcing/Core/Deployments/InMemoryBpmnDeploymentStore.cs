@@ -69,6 +69,11 @@ public class InMemoryBpmnDeploymentStore : IBpmnDeploymentStore
             : new List<BpmnDeployment>();
     }
 
+    public IReadOnlyList<BpmnDeployment> GetAllVersions()
+    {
+        return _store.Values.SelectMany(x=>x.Values).ToList().AsReadOnly();
+    }
+
     public BpmnDeployment? GetById(Guid deploymentId)
     {
         return _store
