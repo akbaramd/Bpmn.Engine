@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,6 +16,11 @@ public class EventWorkerService : BackgroundService
     private readonly IEventStore _eventStore;
     private readonly IEventBus _eventBus;
     private readonly ILogger<EventWorkerService> _logger;
+
+    // Cache for loaded types to avoid reflection overhead
+    private readonly Dictionary<string, Type> _typeCache = new();
+
+    private const int BatchSize = 50;
 
     public EventWorkerService(
         IEventStore eventStore,
@@ -34,7 +40,7 @@ public class EventWorkerService : BackgroundService
         {
             try
             {
-                var eventEntities = _eventStore.GetIncompletedEvents();
+                var eventEntities = _eventStore.GetIncompletedEvents(BatchSize);
 
                 if (eventEntities.Count == 0)
                 {
@@ -44,21 +50,24 @@ public class EventWorkerService : BackgroundService
 
                 foreach (var eventEntity in eventEntities)
                 {
-                    BpmnEvent? bpmnEvent = null;
+                    if (stoppingToken.IsCancellationRequested) break;
+
+                    var bpmnEvent  = DeserializeEvent(eventEntity);;
 
                     try
                     {
-                        bpmnEvent = DeserializeEvent(eventEntity);
+                        
                         if (bpmnEvent == null)
                         {
                             _logger.LogWarning("Could not deserialize event {EventId}", eventEntity.EventId);
+                            await MarkEventFailed(eventEntity, "Deserialization returned null");
                             continue;
                         }
                     }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Failed to deserialize event {EventId}", eventEntity.EventId);
-                        _eventStore.UpdateStatus(eventEntity.EventId, EventStatus.Failed, ex.Message);
+                        await MarkEventFailed(eventEntity, ex.Message);
                         continue;
                     }
 
@@ -71,6 +80,29 @@ public class EventWorkerService : BackgroundService
                     catch (Exception pex)
                     {
                         _logger.LogError(pex, "Error publishing event {EventId}", eventEntity.EventId);
+
+                        // انتشار رویداد شکست فرآیند
+                        try
+                        {
+                            var processFailureEvent = new ProcessFailureEvent
+                            {
+                                EventId = Guid.NewGuid(),
+                                InstanceId = bpmnEvent?.InstanceId ?? Guid.Empty,
+                                DeploymentId = bpmnEvent.DeploymentId,
+                                DeploymentKey = bpmnEvent.DeploymentKey,
+                                ProcessId = bpmnEvent?.ProcessId ?? string.Empty,
+                                FailureReason = pex.Message,
+                                Timestamp = DateTime.UtcNow,
+                                Version = 1
+                            };
+                            await _eventBus.PublishAsync(processFailureEvent, stoppingToken);
+                        }
+                        catch (Exception innerEx)
+                        {
+                            _logger.LogError(innerEx, "Failed to publish ProcessFailureEvent for {EventId}", eventEntity.EventId);
+                        }
+
+                        // علامت‌گذاری رویداد به عنوان Failed بدون retry
                         _eventStore.UpdateStatus(eventEntity.EventId, EventStatus.Failed, pex.Message);
                     }
                 }
@@ -85,21 +117,32 @@ public class EventWorkerService : BackgroundService
         _logger.LogInformation("EventWorkerService stopped.");
     }
 
+    private async Task MarkEventFailed(EventEntity eventEntity, string message)
+    {
+        _eventStore.UpdateStatus(eventEntity.EventId, EventStatus.Failed, message);
+        await Task.CompletedTask;
+    }
+
     public BpmnEvent? DeserializeEvent(EventEntity entity)
     {
         if (string.IsNullOrWhiteSpace(entity.Payload) || string.IsNullOrWhiteSpace(entity.TypeFullName))
             return null;
 
-        var assembly = AppDomain.CurrentDomain.GetAssemblies()
-            .FirstOrDefault(a => a.GetName().Name == entity.AssemblyName);
+        if (!_typeCache.TryGetValue(entity.TypeFullName, out var eventType))
+        {
+            var assembly = AppDomain.CurrentDomain.GetAssemblies()
+                .FirstOrDefault(a => a.GetName().Name == entity.AssemblyName);
 
-        if (assembly == null)
-            throw new InvalidOperationException($"Assembly '{entity.AssemblyName}' not loaded.");
+            if (assembly == null)
+                throw new InvalidOperationException($"Assembly '{entity.AssemblyName}' not loaded.");
 
-        var eventType = assembly.GetType(entity.TypeFullName);
+            eventType = assembly.GetType(entity.TypeFullName);
 
-        if (eventType == null)
-            throw new InvalidOperationException($"Type '{entity.TypeFullName}' not found in assembly '{entity.AssemblyName}'.");
+            if (eventType == null)
+                throw new InvalidOperationException($"Type '{entity.TypeFullName}' not found in assembly '{entity.AssemblyName}'.");
+
+            _typeCache[entity.TypeFullName] = eventType;
+        }
 
         var settings = new JsonSerializerSettings
         {

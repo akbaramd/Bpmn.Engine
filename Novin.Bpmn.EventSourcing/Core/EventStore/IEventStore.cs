@@ -17,11 +17,11 @@ public interface IEventStore
     IReadOnlyList<EventEntity> GetEvents(Guid instanceId, EventStatus[]? statuses = null);
 
     // به‌روزرسانی وضعیت رویداد
-    void UpdateStatus(Guid eventId, EventStatus newStatus, string? errorMessage = null);
+    void UpdateStatus(Guid eventId, EventStatus newStatus, string? errorMessage = null,int? retryCount = null);
 
     // دریافت همه رویدادها (اختیاری با فیلتر وضعیت)
     IReadOnlyList<EventEntity> GetAll(EventStatus[]? statuses = null);
-    IReadOnlyList<EventEntity> GetIncompletedEvents();
+    IReadOnlyList<EventEntity> GetIncompletedEvents(int size);
 }
 
 public enum EventStatus

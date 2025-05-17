@@ -51,7 +51,7 @@ class Program
         var instanceId = Guid.NewGuid();
 
         // شروع اجرای پروسس
-        await processEngine.StartProcessAsync(deployment.DeploymentKey, "start_process", instanceId);
+        await processEngine.StartProcessAsync(deployment.DeploymentKey, "start_process");
 
         Console.WriteLine($"Process started with InstanceId: {instanceId}");
 

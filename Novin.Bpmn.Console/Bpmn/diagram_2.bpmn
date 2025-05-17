@@ -11,16 +11,18 @@
       </bpmn:extensionElements>
       <bpmn:outgoing>Flow_0zbrvyd</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:sequenceFlow id="Flow_0zbrvyd" sourceRef="StartEvent_1" targetRef="Gateway_1ivskry" />
-    <bpmn:exclusiveGateway id="Gateway_1ivskry" name="Operator Choice">
+    <bpmn:sequenceFlow id="Flow_0zbrvyd" sourceRef="StartEvent_1" targetRef="gateway_fork" />
+    <bpmn:exclusiveGateway id="gateway_fork" name="Operator Choice">
       <bpmn:incoming>Flow_0zbrvyd</bpmn:incoming>
       <bpmn:outgoing>Flow_sum</bpmn:outgoing>
       <bpmn:outgoing>Flow_minus</bpmn:outgoing>
+      <bpmn:outgoing>Flow_1bhp8ew</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:sequenceFlow id="Flow_sum" sourceRef="Gateway_1ivskry" targetRef="Activity_sum">
+    <bpmn:sequenceFlow id="Flow_sum" sourceRef="gateway_fork" targetRef="Activity_sum">
+      <bpmn:extensionElements />
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">operator = "sum"</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="Flow_minus" sourceRef="Gateway_1ivskry" targetRef="Activity_minus">
+    <bpmn:sequenceFlow id="Flow_minus" sourceRef="gateway_fork" targetRef="Activity_minus">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">operator = "minus"</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:scriptTask id="Activity_sum" name="Sum Task">
@@ -50,6 +52,7 @@
     <bpmn:exclusiveGateway id="Gateway_join" name="Join Gateway">
       <bpmn:incoming>Flow_join</bpmn:incoming>
       <bpmn:incoming>Flow_join2</bpmn:incoming>
+      <bpmn:incoming>Flow_0vwhdxi</bpmn:incoming>
       <bpmn:outgoing>Flow_end</bpmn:outgoing>
     </bpmn:exclusiveGateway>
     <bpmn:sequenceFlow id="Flow_join" sourceRef="Activity_sum" targetRef="Gateway_join" />
@@ -58,16 +61,55 @@
       <bpmn:incoming>Flow_end</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="Flow_end" sourceRef="Gateway_join" targetRef="Event_end" />
+    <bpmn:scriptTask id="Activity_sum2" name="Sum2 Task">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:input source="num1" target="num1" />
+          <zeebe:input source="num2" target="num2" />
+          <zeebe:output source="result" target="result" />
+        </zeebe:ioMapping>
+        <zeebe:script expression="= num1 - num2" resultVariable="result" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1bhp8ew</bpmn:incoming>
+      <bpmn:outgoing>Flow_1mr6zhp</bpmn:outgoing>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="Flow_1bhp8ew" sourceRef="gateway_fork" targetRef="Activity_sum2">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=operator = "sum"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:task id="Activity_sum2_2" name="Sum2_2 Task">
+      <bpmn:incoming>Flow_04stzn3</bpmn:incoming>
+      <bpmn:outgoing>Flow_1vdsa5x</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_1mr6zhp" sourceRef="Activity_sum2" targetRef="gateway_fork_2" />
+    <bpmn:sequenceFlow id="Flow_04stzn3" sourceRef="gateway_fork_2" targetRef="Activity_sum2_2" />
+    <bpmn:parallelGateway id="gateway_fork_2">
+      <bpmn:incoming>Flow_1mr6zhp</bpmn:incoming>
+      <bpmn:outgoing>Flow_04stzn3</bpmn:outgoing>
+      <bpmn:outgoing>Flow_1trj4z9</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="Activity_sum2_1" name="Sum2_1 Task">
+      <bpmn:incoming>Flow_1trj4z9</bpmn:incoming>
+      <bpmn:outgoing>Flow_0y5asl0</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_1trj4z9" sourceRef="gateway_fork_2" targetRef="Activity_sum2_1" />
+    <bpmn:exclusiveGateway id="Gateway_join_2">
+      <bpmn:incoming>Flow_1vdsa5x</bpmn:incoming>
+      <bpmn:incoming>Flow_0y5asl0</bpmn:incoming>
+      <bpmn:outgoing>Flow_0vwhdxi</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_1vdsa5x" sourceRef="Activity_sum2_2" targetRef="Gateway_join_2" />
+    <bpmn:sequenceFlow id="Flow_0y5asl0" sourceRef="Activity_sum2_1" targetRef="Gateway_join_2" />
+    <bpmn:sequenceFlow id="Flow_0vwhdxi" sourceRef="Gateway_join_2" targetRef="Gateway_join" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
-    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1yfa83g">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="start_process">
       <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
         <dc:Bounds x="182" y="102" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_1ivskry_di" bpmnElement="Gateway_1ivskry" isMarkerVisible="true">
+      <bpmndi:BPMNShape id="Gateway_1ivskry_di" bpmnElement="gateway_fork" isMarkerVisible="true">
         <dc:Bounds x="370" y="90" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="354" y="150" width="81" height="14" />
+          <dc:Bounds x="279" y="108" width="81" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Activity_sum_di" bpmnElement="Activity_sum">
@@ -76,14 +118,32 @@
       <bpmndi:BPMNShape id="Activity_minus_di" bpmnElement="Activity_minus">
         <dc:Bounds x="460" y="150" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_join_di" bpmnElement="Gateway_join" isMarkerVisible="true">
-        <dc:Bounds x="645" y="115" width="50" height="50" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="636" y="165" width="68" height="14" />
-        </bpmndi:BPMNLabel>
+      <bpmndi:BPMNShape id="BPMNShape_02x6by5" bpmnElement="Activity_sum2">
+        <dc:Bounds x="460" y="270" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_15sfcmc_di" bpmnElement="gateway_fork_2">
+        <dc:Bounds x="635" y="285" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1i6hlk0_di" bpmnElement="Activity_sum2_2">
+        <dc:Bounds x="710" y="220" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_1csdoje" bpmnElement="Activity_sum2_1">
+        <dc:Bounds x="710" y="320" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_19lnq3p_di" bpmnElement="Gateway_join_2" isMarkerVisible="true">
+        <dc:Bounds x="835" y="285" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_end_di" bpmnElement="Event_end">
-        <dc:Bounds x="762" y="122" width="36" height="36" />
+        <dc:Bounds x="1012" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_join_di" bpmnElement="Gateway_join" isMarkerVisible="true">
+        <dc:Bounds x="895" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="886" y="91" width="68" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_0zbrvyd_di" bpmnElement="Flow_0zbrvyd">
         <di:waypoint x="218" y="120" />
@@ -101,20 +161,58 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_join_di" bpmnElement="Flow_join">
         <di:waypoint x="560" y="90" />
-        <di:waypoint x="670" y="90" />
-        <di:waypoint x="670" y="115" />
+        <di:waypoint x="920" y="90" />
+        <di:waypoint x="920" y="115" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_join2_di" bpmnElement="Flow_join2">
         <di:waypoint x="560" y="190" />
         <di:waypoint x="603" y="190" />
         <di:waypoint x="603" y="140" />
-        <di:waypoint x="645" y="140" />
+        <di:waypoint x="895" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1bhp8ew_di" bpmnElement="Flow_1bhp8ew">
+        <di:waypoint x="395" y="140" />
+        <di:waypoint x="395" y="310" />
+        <di:waypoint x="460" y="310" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1mr6zhp_di" bpmnElement="Flow_1mr6zhp">
+        <di:waypoint x="560" y="310" />
+        <di:waypoint x="635" y="310" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04stzn3_di" bpmnElement="Flow_04stzn3">
+        <di:waypoint x="660" y="285" />
+        <di:waypoint x="660" y="260" />
+        <di:waypoint x="710" y="260" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_end_di" bpmnElement="Flow_end">
-        <di:waypoint x="695" y="140" />
-        <di:waypoint x="729" y="140" />
-        <di:waypoint x="729" y="137" />
-        <di:waypoint x="762" y="137" />
+        <di:waypoint x="945" y="140" />
+        <di:waypoint x="979" y="140" />
+        <di:waypoint x="979" y="137" />
+        <di:waypoint x="1012" y="137" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1trj4z9_di" bpmnElement="Flow_1trj4z9">
+        <di:waypoint x="685" y="310" />
+        <di:waypoint x="698" y="310" />
+        <di:waypoint x="698" y="360" />
+        <di:waypoint x="710" y="360" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1vdsa5x_di" bpmnElement="Flow_1vdsa5x">
+        <di:waypoint x="810" y="260" />
+        <di:waypoint x="823" y="260" />
+        <di:waypoint x="823" y="310" />
+        <di:waypoint x="835" y="310" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0y5asl0_di" bpmnElement="Flow_0y5asl0">
+        <di:waypoint x="810" y="360" />
+        <di:waypoint x="823" y="360" />
+        <di:waypoint x="823" y="310" />
+        <di:waypoint x="835" y="310" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0vwhdxi_di" bpmnElement="Flow_0vwhdxi">
+        <di:waypoint x="860" y="285" />
+        <di:waypoint x="860" y="225" />
+        <di:waypoint x="920" y="225" />
+        <di:waypoint x="920" y="165" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

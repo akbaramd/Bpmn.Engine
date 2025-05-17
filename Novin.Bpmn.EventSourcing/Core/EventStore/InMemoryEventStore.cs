@@ -70,11 +70,12 @@ public class InMemoryEventStore : IEventStore
         return query.OrderBy(e => e.Timestamp).ToList();
     }
 
-    public void UpdateStatus(Guid eventId, EventStatus newStatus, string? errorMessage = null)
+    public void UpdateStatus(Guid eventId, EventStatus newStatus, string? errorMessage = null,int? retryCount = null)
     {
         if (!_events.TryGetValue(eventId, out var eventEntity))
             throw new KeyNotFoundException($"Event with ID {eventId} not found");
 
+        eventEntity.RetryCount = retryCount ?? 0;
         eventEntity.Status = newStatus;
         eventEntity.ErrorMessage = errorMessage;
     }
@@ -88,12 +89,13 @@ public class InMemoryEventStore : IEventStore
         return query.OrderBy(e => e.Timestamp).ToList();
     }
 
-    public IReadOnlyList<EventEntity> GetIncompletedEvents()
+    public IReadOnlyList<EventEntity> GetIncompletedEvents(int size)
     {
         var incompleteStatuses = new[] { EventStatus.Pending, EventStatus.Failed };
         return _events.Values
             .Where(e => incompleteStatuses.Contains(e.Status))
             .OrderBy(e => e.Timestamp)
+            .Take(size)
             .ToList();
     }
 

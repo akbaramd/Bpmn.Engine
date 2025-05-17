@@ -9,40 +9,34 @@ public class JoinResolverService : IJoinResolverService
 {
     public bool CanJoin(FlowTopology topology, string joinNodeId, IEnumerable<ExecutionContext> allContexts)
     {
-        if (!topology.Incoming.TryGetValue(joinNodeId, out var incomingIds))
+        if (!topology.Incoming.TryGetValue(joinNodeId, out var incomingIds) || incomingIds == null || incomingIds.Count == 0)
             return false;
 
-        // کانتکست‌هایی که متعلق به شاخه‌های ورودی هستند (یعنی آخرین المان مسیرشان در incomingIds هست)
-        var relevantContexts = allContexts
-            .Where(c => c.Path != null && c.Path.Any())
-            .Where(c => incomingIds.Contains(c.Path.Last()))
-            .ToList();
 
-        var activeBranches = relevantContexts
-            .Select(c => c.Path.Last())
-            .Distinct()
-            .ToHashSet();
+        return (allContexts.Count() == incomingIds.Count);
 
-        foreach (var branch in activeBranches)
-        {
-            var ctx = relevantContexts.FirstOrDefault(c => c.Path.Last() == branch);
-            if (ctx == null || ctx.State != ExecutionState.Completed)
-                return false;
-        }
-
-        return true;
     }
 
-    public ExecutionContext MergeContexts(FlowTopology topology, string joinNodeId,ExecutionContext curernt, IEnumerable<ExecutionContext> executionContexts)
+    public ExecutionContext MergeContexts(FlowTopology topology, string joinNodeId, ExecutionContext current, IEnumerable<ExecutionContext> executionContexts)
     {
+        if (current.LocalVariables == null)
+            current.LocalVariables = new Dictionary<string, object?>();
 
+        // ادغام متغیرها با اولویت متغیرهای شاخه‌های ورودی (latest overwrite)
         foreach (var ctx in executionContexts)
         {
+            if (ctx.LocalVariables == null)
+                continue;
+
             foreach (var kv in ctx.LocalVariables)
-                curernt.LocalVariables[kv.Key] = kv.Value;
+            {
+                // اگر کلید وجود داشت بازنویسی کن، در غیر این صورت اضافه کن
+                current.LocalVariables[kv.Key] = kv.Value;
+            }
         }
 
-        return curernt;
-    }
+        // می‌توان اینجا سایر ادغام‌های احتمالی (مثل مسیر، وضعیت) را هم اضافه کرد
 
+        return current;
+    }
 }

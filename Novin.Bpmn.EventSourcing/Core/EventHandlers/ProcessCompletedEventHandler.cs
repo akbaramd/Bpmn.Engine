@@ -3,30 +3,41 @@ using Novin.Bpmn.EventSourcing.Events;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Novin.Bpmn.EventSourcing.Core.Process;
 
 public class ProcessCompletedEventHandler : BpmnEventHandlerBase<ProcessCompleted>
 {
+    private readonly IProcessStateStore _processStateStore;
     private readonly IExecutionContextRepository _contextRepository;
+    private readonly ILogger<ProcessCompletedEventHandler> _logger;
 
     public ProcessCompletedEventHandler(IServiceProvider serviceProvider,
-        IExecutionContextRepository contextRepository)
+        IProcessStateStore processStateStore,
+        ILogger<ProcessCompletedEventHandler> logger, IExecutionContextRepository contextRepository)
         : base(serviceProvider)
     {
-        _contextRepository = contextRepository ?? throw new ArgumentNullException(nameof(contextRepository));
+        _processStateStore = processStateStore ?? throw new ArgumentNullException(nameof(processStateStore));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _contextRepository = contextRepository;
     }
 
     public override async Task HandleAsync(ProcessCompleted @event, CancellationToken cancellationToken = default)
     {
-        // 1. می‌توان کانتکست‌های مرتبط با Instance را پاک یا به حالت نهایی ببریم
-        var contexts = _contextRepository.GetByInstanceId(@event.InstanceId);
-
-        foreach (var ctx in contexts)
+        var excutions =  _contextRepository.GetByInstanceId(@event.InstanceId);
+        var state = _processStateStore.Get(@event.InstanceId);
+        if (state != null)
         {
-            // اگر نیاز به پاکسازی است، اینجا حذف کنیم
-            _contextRepository.Remove(ctx.ContextId);
-        }
+            state.Status = ProcessStateStatus.Completed;
+            state.LastUpdatedAt = DateTime.UtcNow;
+            _processStateStore.Save(state);
 
-        // 2. منطق اضافه می‌تواند اینجا قرار گیرد (مانند نوتیفیکیشن، ثبت لاگ و ...)
+            _logger.LogInformation("Process {InstanceId} marked as Completed", @event.InstanceId);
+        }
+        else
+        {
+            _logger.LogWarning("ProcessState not found for Completed event, InstanceId: {InstanceId}", @event.InstanceId);
+        }
 
         await Task.CompletedTask;
     }

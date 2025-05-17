@@ -79,7 +79,6 @@ public class ElementProcessingEventHandler : BpmnEventHandlerBase<ElementProcess
     private void UpdateContextAndPublishCompleted(ElementProcessing evt, ExecutionContext context)
     {
         context.State = ExecutionState.Active;
-        context.Version++;
         _contextRepository.Save(context);
 
         var completedEvent = new ElementCompleted

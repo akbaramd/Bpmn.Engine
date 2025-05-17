@@ -74,6 +74,14 @@ namespace Novin.Bpmn.EventSourcing.Events
         public required string TerminationReason { get; init; }
     }
 
+    public record ProcessFailureEvent : BpmnEvent
+    {
+        public string FailureReason { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+        public int Version { get; set; } = 1;
+        public override string EventType => nameof(ProcessFailureEvent);
+    }
+    
 public record ProcessSuspended : BpmnEvent
     {
         public override string EventType => nameof(ProcessSuspended);

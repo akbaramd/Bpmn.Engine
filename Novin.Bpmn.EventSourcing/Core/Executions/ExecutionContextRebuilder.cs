@@ -7,7 +7,7 @@ public class ExecutionContextRebuilder : IExecutionContextRebuilder
 {
     public ExecutionContext Rebuild(Guid instanceId, IEnumerable<IBpmnEvent> events)
     {
-        var context = new ExecutionContext { InstanceId = instanceId };
+        var context = new ExecutionContext { InstanceId = instanceId ,IsExecutable = true};
         foreach (var e in events.OrderBy(e => e.Timestamp))
         {
             Apply(context, e);
@@ -22,12 +22,10 @@ public class ExecutionContextRebuilder : IExecutionContextRebuilder
             case ElementProcessing ep:
                 context.MoveToNext(ep.ElementId);
                 context.State = ExecutionState.Active;
-                context.Version++;
                 break;
             case ElementCompleted ec:
                 context.MoveToNext(ec.ElementId);
                 context.State = ExecutionState.Completed;
-                context.Version++;
                 break;
             case ElementFailed ef:
                 context.State = ExecutionState.Failed;

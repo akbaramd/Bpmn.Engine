@@ -27,6 +27,7 @@ namespace Novin.Bpmn.EventSourcing
 
             // Flow Topology Store (In-Memory)
             services.AddSingleton<IFlowTopologyStore, InMemoryFlowTopologyStore>();
+            services.AddSingleton<IProcessStateStore, InMemoryProcessStateStore>();
 
             // Execution Context Repository & Rebuilder
             services.AddSingleton<IExecutionContextRepository, InMemoryExecutionContextRepository>();
@@ -51,7 +52,8 @@ namespace Novin.Bpmn.EventSourcing
             services.AddTransient<IBpmnEventHandler<ElementProcessing>, ElementProcessingEventHandler>();
             services.AddTransient<IBpmnEventHandler<ElementCreated>, ElementCreatedEventHandler>();
             services.AddTransient<IBpmnEventHandler<ProcessCompleted>,ProcessCompletedEventHandler>();
-            // هندلرهای دیگر را اینجا اضافه کنید
+            services.AddTransient<IBpmnEventHandler<ProcessFailureEvent>,ProcessFailureEventHandler>();
+            // هندلرهای دیگر را اینجا اضافه کنید    
 
             // Hosted Services (Background Workers)
             services.AddHostedService<EventWorkerService>();
