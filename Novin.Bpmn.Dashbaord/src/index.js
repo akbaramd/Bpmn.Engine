@@ -78,7 +78,7 @@ const MATERIAL_COLORS = {
 // Element state colors - using Material Design palette
 const ELEMENT_COLORS = {
     // State-based colors
-    active: { stroke: MATERIAL_COLORS.green.main, strokeWidth: 1, textColor: MATERIAL_COLORS.green.main },
+    active: { stroke: MATERIAL_COLORS.green.main, strokeWidth: 2, textColor: MATERIAL_COLORS.green.main },
     paused: { stroke: MATERIAL_COLORS.orange.main, strokeWidth: 1, textColor: MATERIAL_COLORS.orange.main },
     completed: { stroke: MATERIAL_COLORS.grey.main, strokeWidth: 1, textColor: MATERIAL_COLORS.grey.main },
     terminated: { stroke: MATERIAL_COLORS.brown.main, strokeWidth: 1, textColor: MATERIAL_COLORS.brown.main },
@@ -96,7 +96,7 @@ const ELEMENT_COLORS = {
 // Flow-specific colors (brighter for better visibility)
 const FLOW_COLORS = {
     // State-based colors
-    active: { stroke: MATERIAL_COLORS.green.accent, strokeWidth: 1 },
+    active: { stroke: MATERIAL_COLORS.green.accent, strokeWidth: 2 },
     paused: { stroke: MATERIAL_COLORS.orange.accent, strokeWidth: 1 },
     completed: { stroke: MATERIAL_COLORS.grey.accent, strokeWidth: 1 },
     terminated: { stroke: MATERIAL_COLORS.brown.accent, strokeWidth: 1 },

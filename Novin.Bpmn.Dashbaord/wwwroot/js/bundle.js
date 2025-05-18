@@ -145992,27 +145992,27 @@ var ELEMENT_COLORS = {
   // State-based colors
   active: {
     stroke: MATERIAL_COLORS.green.main,
-    strokeWidth: 3,
+    strokeWidth: 2,
     textColor: MATERIAL_COLORS.green.main
   },
   paused: {
     stroke: MATERIAL_COLORS.orange.main,
-    strokeWidth: 2,
+    strokeWidth: 1,
     textColor: MATERIAL_COLORS.orange.main
   },
   completed: {
     stroke: MATERIAL_COLORS.grey.main,
-    strokeWidth: 2,
+    strokeWidth: 1,
     textColor: MATERIAL_COLORS.grey.main
   },
   terminated: {
     stroke: MATERIAL_COLORS.brown.main,
-    strokeWidth: 2,
+    strokeWidth: 1,
     textColor: MATERIAL_COLORS.brown.main
   },
   failed: {
     stroke: MATERIAL_COLORS.red.main,
-    strokeWidth: 2,
+    strokeWidth: 1,
     textColor: MATERIAL_COLORS.red.main
   },
   deactive: {
@@ -146023,12 +146023,12 @@ var ELEMENT_COLORS = {
   // Executable status colors - always green for executable elements
   executable: {
     stroke: MATERIAL_COLORS.green.accent,
-    strokeWidth: 3,
+    strokeWidth: 1,
     textColor: MATERIAL_COLORS.green.accent
   },
   nonExecutable: {
     stroke: MATERIAL_COLORS.grey.main,
-    strokeWidth: 2,
+    strokeWidth: 1,
     textColor: MATERIAL_COLORS.grey.main
   },
   // Default
@@ -146044,41 +146044,41 @@ var FLOW_COLORS = {
   // State-based colors
   active: {
     stroke: MATERIAL_COLORS.green.accent,
-    strokeWidth: 4
+    strokeWidth: 2
   },
   paused: {
     stroke: MATERIAL_COLORS.orange.accent,
-    strokeWidth: 3
+    strokeWidth: 1
   },
   completed: {
     stroke: MATERIAL_COLORS.grey.accent,
-    strokeWidth: 3
+    strokeWidth: 1
   },
   terminated: {
     stroke: MATERIAL_COLORS.brown.accent,
-    strokeWidth: 3
+    strokeWidth: 1
   },
   failed: {
     stroke: MATERIAL_COLORS.red.accent,
-    strokeWidth: 3
+    strokeWidth: 1
   },
   deactive: {
     stroke: MATERIAL_COLORS.grey.light,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   // Executable status colors
   executable: {
     stroke: MATERIAL_COLORS.green.accent,
-    strokeWidth: 4
+    strokeWidth: 1
   },
   nonExecutable: {
     stroke: MATERIAL_COLORS.grey.accent,
-    strokeWidth: 3
+    strokeWidth: 1
   },
   // Default
   "default": {
     stroke: MATERIAL_COLORS.blueGrey.light,
-    strokeWidth: 2
+    strokeWidth: 1
   }
 };
 
@@ -146087,74 +146087,74 @@ var ELEMENT_TYPE_STYLES = {
   // Events
   'bpmn:StartEvent': {
     stroke: MATERIAL_COLORS.green.dark,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:EndEvent': {
     stroke: MATERIAL_COLORS.red.dark,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:IntermediateThrowEvent': {
     stroke: MATERIAL_COLORS.orange.dark,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:IntermediateCatchEvent': {
     stroke: MATERIAL_COLORS.orange.dark,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:BoundaryEvent': {
     stroke: MATERIAL_COLORS.purple.dark,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   // Tasks
   'bpmn:Task': {
     stroke: MATERIAL_COLORS.grey.dark,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:UserTask': {
     stroke: MATERIAL_COLORS.grey.main,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:ServiceTask': {
     stroke: MATERIAL_COLORS.grey.dark,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:ScriptTask': {
     stroke: MATERIAL_COLORS.grey.dark,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:BusinessRuleTask': {
     stroke: MATERIAL_COLORS.grey.dark,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:ManualTask': {
     stroke: MATERIAL_COLORS.grey.main,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   // Gateways
   'bpmn:ExclusiveGateway': {
     stroke: MATERIAL_COLORS.amber.dark,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:ParallelGateway': {
     stroke: MATERIAL_COLORS.teal.dark,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:InclusiveGateway': {
     stroke: MATERIAL_COLORS.purple.light,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:Gateway': {
     stroke: MATERIAL_COLORS.amber.dark,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   // Flows - using the same colors as executable/non-executable for consistency
   'bpmn:SequenceFlow': {
     stroke: MATERIAL_COLORS.green.accent,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:MessageFlow': {
     stroke: MATERIAL_COLORS.brown.dark,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:Association': {
     stroke: MATERIAL_COLORS.blueGrey.accent,
@@ -146163,19 +146163,19 @@ var ELEMENT_TYPE_STYLES = {
   // Other elements
   'bpmn:FlowElement': {
     stroke: MATERIAL_COLORS.blueGrey.accent,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:FlowNode': {
     stroke: MATERIAL_COLORS.blueGrey.accent,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:DataObject': {
     stroke: MATERIAL_COLORS.indigo.light,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:DataStore': {
     stroke: MATERIAL_COLORS.indigo.light,
-    strokeWidth: 2
+    strokeWidth: 1
   },
   'bpmn:TextAnnotation': {
     stroke: MATERIAL_COLORS.blueGrey.main,
