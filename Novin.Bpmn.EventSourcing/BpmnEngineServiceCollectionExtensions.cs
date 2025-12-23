@@ -8,6 +8,10 @@ using Novin.Bpmn.EventSourcing.Core.Executions;
 using Novin.Bpmn.EventSourcing.Core.Topology;
 using Novin.Bpmn.EventSourcing.Core.Process;
 using Novin.Bpmn.EventSourcing.Core.Services;
+using Novin.Bpmn.EventSourcing.Core.Services.Gateway;
+using Novin.Bpmn.EventSourcing.Core.Join;
+using Novin.Bpmn.EventSourcing.Core.Services.Variable;
+using Novin.Bpmn.EventSourcing.Core.EventHandlers;
 using Novin.Bpmn.EventSourcing.Events;
 using Novin.Bpmn.Models.Models;
 
@@ -42,6 +46,20 @@ namespace Novin.Bpmn.EventSourcing
             services.AddSingleton<IJoinResolverService, JoinResolverService>();
             services.AddSingleton<IForkHandlerService, ForkHandlerService>();
             services.AddSingleton<IExecutionPathService, ExecutionPathService>();
+            
+            // Gateway Behavior Factory
+            services.AddSingleton<IGatewayBehaviorFactory, GatewayBehaviorFactory>();
+            
+            // Join State Store
+            services.AddSingleton<IJoinStateStore, InMemoryJoinStateStore>();
+            
+            // Variable Merge Service
+            services.AddSingleton<IVariableMergeService, VariableMergeService>();
+            
+            // Variable Event Handlers
+            services.AddTransient<IBpmnEventHandler<VariableSet>, VariableSetEventHandler>();
+            services.AddTransient<IBpmnEventHandler<VariablesSet>, VariablesSetEventHandler>();
+            services.AddTransient<IBpmnEventHandler<VariablesMerged>, VariablesMergedEventHandler>();
 
             // Process Engine
             services.AddSingleton<IProcessEngine, ProcessEngine>();

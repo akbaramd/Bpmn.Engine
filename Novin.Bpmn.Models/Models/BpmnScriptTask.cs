@@ -12,6 +12,7 @@ namespace Novin.Bpmn.Models.Models
     {
         public const string Bpmn  = "http://www.omg.org/spec/BPMN/20100524/MODEL";
         public const string Zeebe = "http://camunda.org/schema/zeebe/1.0";
+        public const string Bonyan = "http://bonyan.org/schema/bpmn/1.0";
         // سایر NS ها …
     }
     /* =======================================================================

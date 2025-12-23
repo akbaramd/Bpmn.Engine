@@ -58,38 +58,73 @@ public class ProcessStartedEventHandler : BpmnEventHandlerBase<ProcessStarted>
             _processStateStore.Save(state);
         }
 
-        var startNodes = topology.Nodes.Values.Where(n => n.IsStartEvent);
+        // پیدا کردن StartEvent که باید trigger شود
+        FlowNode? targetStartNode = null;
 
-        foreach (var startNode in startNodes)
+        if (!string.IsNullOrEmpty(@event.StartEventId))
         {
-            var context = new ExecutionContext
+            // اگر StartEventId مشخص شده، همان را پیدا کن
+            if (topology.Nodes.TryGetValue(@event.StartEventId, out var specifiedNode) && specifiedNode.IsStartEvent)
             {
-                IsExecutable = true,
-                ContextId = Guid.NewGuid(),
-                InstanceId = @event.InstanceId,
-                LocalVariables = state.Variables,
-                State = ExecutionState.Active,
-            };
-
-            context.MoveToNext(startNode.ElementId);
-
-            _contextRepository.Save(context);
-
-            var elementCreatedEvent = new ElementCreated()
+                targetStartNode = specifiedNode;
+            }
+            else
             {
-                ExecutionId = context.ContextId,
-                EventId = Guid.NewGuid(),
-                InstanceId = @event.InstanceId,
-                DeploymentKey = @event.DeploymentKey,
-                DeploymentId = @event.DeploymentId,
-                ProcessId = @event.ProcessId,
-                ElementId = startNode.ElementId,
-                ElementType = startNode.ElementType,
-                Timestamp = DateTime.UtcNow
-            };
-
-            AppendEvent(elementCreatedEvent);
+                _logger.LogWarning("Specified StartEventId '{StartEventId}' not found or is not a StartEvent. Falling back to None StartEvent.", @event.StartEventId);
+            }
         }
+
+        // اگر StartEventId مشخص نشده یا پیدا نشد، None StartEvent را پیدا کن
+        if (targetStartNode == null)
+        {
+            // اول None StartEvent را جستجو کن
+            targetStartNode = topology.Nodes.Values
+                .FirstOrDefault(n => n.IsStartEvent && 
+                    (n.StartEventType == "None" || 
+                     n.ElementType.Contains("noneStartEvent", StringComparison.OrdinalIgnoreCase) ||
+                     string.IsNullOrEmpty(n.StartEventType)));
+
+            // اگر None StartEvent پیدا نشد، اولین StartEvent را بگیر
+            if (targetStartNode == null)
+            {
+                targetStartNode = topology.Nodes.Values.FirstOrDefault(n => n.IsStartEvent);
+            }
+        }
+
+        if (targetStartNode == null)
+        {
+            _logger.LogError("No StartEvent found in process {ProcessId}", @event.ProcessId);
+            throw new InvalidOperationException($"No StartEvent found in process '{@event.ProcessId}'.");
+        }
+
+        // فقط یک ExecutionContext برای StartEvent مشخص شده بساز
+        var context = new ExecutionContext
+        {
+            IsExecutable = true,
+            ContextId = Guid.NewGuid(),
+            InstanceId = @event.InstanceId,
+            LocalVariables = new Dictionary<string, object?>(state.Variables),
+            State = ExecutionState.Active,
+        };
+
+        context.MoveToNext(targetStartNode.ElementId);
+
+        _contextRepository.Save(context);
+
+        var elementCreatedEvent = new ElementCreated()
+        {
+            ExecutionId = context.ContextId,
+            EventId = Guid.NewGuid(),
+            InstanceId = @event.InstanceId,
+            DeploymentKey = @event.DeploymentKey,
+            DeploymentId = @event.DeploymentId,
+            ProcessId = @event.ProcessId,
+            ElementId = targetStartNode.ElementId,
+            ElementType = targetStartNode.ElementType,
+            Timestamp = DateTime.UtcNow
+        };
+
+        AppendEvent(elementCreatedEvent);
 
         await Task.CompletedTask;
     }

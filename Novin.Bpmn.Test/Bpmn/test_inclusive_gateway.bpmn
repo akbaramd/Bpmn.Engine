@@ -1,113 +1,155 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bpsim="http://www.bpsim.org/schemas/1.0" xmlns:drools="http://www.jboss.org/drools" xmlns:xsi="xsi" id="_t13cgQ7XED6RwoXhtTwbAA" targetNamespace="http://www.omg.org/bpmn20" exporter="Camunda Modeler" exporterVersion="5.30.0">
-  <bpmn2:process id="test_inclusive_gateway" name="test_inclusive_gateway" processType="Public" isExecutable="true" drools:packageName="com.example" drools:version="1.0" drools:adHoc="false">
-    <bpmn2:startEvent id="StartEvent" name="StartEvent">
-      <bpmn2:outgoing>Flow_08ng2px</bpmn2:outgoing>
-    </bpmn2:startEvent>
-    <bpmn2:sequenceFlow id="Flow_08ng2px" sourceRef="StartEvent" targetRef="StartTask" />
-    <bpmn2:scriptTask id="StartTask" name="StartTask">
-      <bpmn2:incoming>Flow_08ng2px</bpmn2:incoming>
-      <bpmn2:outgoing>Flow_1ifmrp3</bpmn2:outgoing>
-      <bpmn2:script>Instance.Variables.Index = 1;</bpmn2:script>
-    </bpmn2:scriptTask>
-    <bpmn2:sequenceFlow id="Flow_1ifmrp3" sourceRef="StartTask" targetRef="ForkParallel" />
-    <bpmn2:task id="Activity1" name="Activity1">
-      <bpmn2:incoming>Flow_0mgxwvp</bpmn2:incoming>
-      <bpmn2:outgoing>Flow_1mdk4m7</bpmn2:outgoing>
-    </bpmn2:task>
-    <bpmn2:sequenceFlow id="Flow_0mgxwvp" sourceRef="ForkParallel" targetRef="Activity1" />
-    <bpmn2:task id="Activity_1wa74h6" name="Activity1">
-      <bpmn2:incoming>Flow_0q3wwv1</bpmn2:incoming>
-      <bpmn2:outgoing>Flow_02uuvjj</bpmn2:outgoing>
-    </bpmn2:task>
-    <bpmn2:sequenceFlow id="Flow_0q3wwv1" sourceRef="ForkParallel" targetRef="Activity_1wa74h6" />
-    <bpmn2:sequenceFlow id="Flow_1mdk4m7" sourceRef="Activity1" targetRef="MergeParallel" />
-    <bpmn2:sequenceFlow id="Flow_02uuvjj" sourceRef="Activity_1wa74h6" targetRef="MergeParallel" />
-    <bpmn2:endEvent id="EndEvent" name="EndEvent">
-      <bpmn2:incoming>Flow_1fhrfxf</bpmn2:incoming>
-    </bpmn2:endEvent>
-    <bpmn2:sequenceFlow id="Flow_1fhrfxf" sourceRef="MergeParallel" targetRef="EndEvent" />
-    <bpmn2:parallelGateway id="MergeParallel" name="MergeParallel">
-      <bpmn2:incoming>Flow_1mdk4m7</bpmn2:incoming>
-      <bpmn2:incoming>Flow_02uuvjj</bpmn2:incoming>
-      <bpmn2:outgoing>Flow_1fhrfxf</bpmn2:outgoing>
-    </bpmn2:parallelGateway>
-    <bpmn2:parallelGateway id="ForkParallel" name="ForkParallel">
-      <bpmn2:incoming>Flow_1ifmrp3</bpmn2:incoming>
-      <bpmn2:outgoing>Flow_0mgxwvp</bpmn2:outgoing>
-      <bpmn2:outgoing>Flow_0q3wwv1</bpmn2:outgoing>
-    </bpmn2:parallelGateway>
-  </bpmn2:process>
-  <bpmndi:BPMNDiagram>
-    <bpmndi:BPMNPlane bpmnElement="test_inclusive_gateway">
-      <bpmndi:BPMNShape id="Event_065ao3n_di" bpmnElement="StartEvent">
-        <dc:Bounds x="152" y="232" width="36" height="36" />
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.30.0">
+  <bpmn:process id="inclusive_test" name="Inclusive Gateway Test" isExecutable="true" camunda:historyTimeToLive="180">
+    <bpmn:startEvent id="event_start" name="Start">
+      <bpmn:outgoing>Flow_Start</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_Start" sourceRef="event_start" targetRef="Gateway_Fork" />
+    <bpmn:inclusiveGateway id="Gateway_Fork" name="Inclusive Fork">
+      <bpmn:incoming>Flow_Start</bpmn:incoming>
+      <bpmn:outgoing>Flow_Path1</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Path2</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Path3</bpmn:outgoing>
+    </bpmn:inclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_Path1" name="Path 1" sourceRef="Gateway_Fork" targetRef="Activity_1">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.condition1 == true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Path2" name="Path 2" sourceRef="Gateway_Fork" targetRef="Activity_2">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.condition2 == true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Path3" name="Path 3" sourceRef="Gateway_Fork" targetRef="Activity_3">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Instance.Variables.condition3 == true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:scriptTask id="Activity_1" name="Activity 1">
+      <bpmn:incoming>Flow_Path1</bpmn:incoming>
+      <bpmn:outgoing>Flow_1_to_Join</bpmn:outgoing>
+      <bpmn:script>Console.WriteLine("Executing Activity 1");
+Instance.Variables.activity1Executed = true;</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:scriptTask id="Activity_2" name="Activity 2">
+      <bpmn:incoming>Flow_Path2</bpmn:incoming>
+      <bpmn:outgoing>Flow_2_to_Join</bpmn:outgoing>
+      <bpmn:script>Console.WriteLine("Executing Activity 2");
+Instance.Variables.activity2Executed = true;</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:scriptTask id="Activity_3" name="Activity 3">
+      <bpmn:incoming>Flow_Path3</bpmn:incoming>
+      <bpmn:outgoing>Flow_3_to_Join</bpmn:outgoing>
+      <bpmn:script>Console.WriteLine("Executing Activity 3");
+Instance.Variables.activity3Executed = true;</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="Flow_1_to_Join" sourceRef="Activity_1" targetRef="Gateway_Join" />
+    <bpmn:sequenceFlow id="Flow_2_to_Join" sourceRef="Activity_2" targetRef="Gateway_Join" />
+    <bpmn:sequenceFlow id="Flow_3_to_Join" sourceRef="Activity_3" targetRef="Gateway_Join" />
+    <bpmn:inclusiveGateway id="Gateway_Join" name="Inclusive Join">
+      <bpmn:incoming>Flow_1_to_Join</bpmn:incoming>
+      <bpmn:incoming>Flow_2_to_Join</bpmn:incoming>
+      <bpmn:incoming>Flow_3_to_Join</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_End</bpmn:outgoing>
+    </bpmn:inclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_to_End" sourceRef="Gateway_Join" targetRef="Activity_4" />
+    <bpmn:scriptTask id="Activity_4" name="Activity 4">
+      <bpmn:incoming>Flow_to_End</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_event_end</bpmn:outgoing>
+      <bpmn:script>Console.WriteLine("Executing Activity 4");
+Instance.Variables.completed = true;</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="Flow_to_event_end" sourceRef="Activity_4" targetRef="event_end" />
+    <bpmn:endEvent id="event_end" name="End">
+      <bpmn:incoming>Flow_to_event_end</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="inclusive_test">
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="event_start">
+        <dc:Bounds x="152" y="209" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="144" y="275" width="53" height="14" />
+          <dc:Bounds x="158" y="252" width="25" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0p57n8t_di" bpmnElement="StartTask">
-        <dc:Bounds x="270" y="210" width="100" height="80" />
+      <bpmndi:BPMNShape id="Gateway_0ygimm2_di" bpmnElement="Gateway_Fork">
+        <dc:Bounds x="245" y="202" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="236" y="172" width="68" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1m8g5h3_di" bpmnElement="Activity_1">
+        <dc:Bounds x="380" y="80" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_0l4g79t_di" bpmnElement="Activity1">
-        <dc:Bounds x="570" y="80" width="100" height="80" />
+      <bpmndi:BPMNShape id="Activity_0mj2v9a_di" bpmnElement="Activity_2">
+        <dc:Bounds x="380" y="187" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Activity_1wa74h6_di" bpmnElement="Activity_1wa74h6">
-        <dc:Bounds x="570" y="290" width="100" height="80" />
+      <bpmndi:BPMNShape id="Activity_0nbi7nn_di" bpmnElement="Activity_3">
+        <dc:Bounds x="380" y="300" width="100" height="80" />
         <bpmndi:BPMNLabel />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Event_1p9j39t_di" bpmnElement="EndEvent">
-        <dc:Bounds x="852" y="212" width="36" height="36" />
+      <bpmndi:BPMNShape id="Gateway_1q2cykl_di" bpmnElement="Gateway_Join">
+        <dc:Bounds x="545" y="202" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="846" y="255" width="49" height="14" />
+          <dc:Bounds x="539" y="172" width="62" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_14ijcvo_di" bpmnElement="MergeParallel">
-        <dc:Bounds x="735" y="205" width="50" height="50" />
+      <bpmndi:BPMNShape id="Activity_01gfsz4_di" bpmnElement="Activity_4">
+        <dc:Bounds x="660" y="187" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_080mv6v_di" bpmnElement="event_end">
+        <dc:Bounds x="832" y="209" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="648" y="220" width="69" height="14" />
+          <dc:Bounds x="840" y="252" width="20" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_1ioge9m_di" bpmnElement="ForkParallel">
-        <dc:Bounds x="455" y="225" width="50" height="50" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="532" y="240" width="60" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Flow_08ng2px_di" bpmnElement="Flow_08ng2px">
-        <di:waypoint x="188" y="250" />
-        <di:waypoint x="270" y="250" />
+      <bpmndi:BPMNEdge id="Flow_1yfevpw_di" bpmnElement="Flow_Start">
+        <di:waypoint x="188" y="227" />
+        <di:waypoint x="245" y="227" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_1ifmrp3_di" bpmnElement="Flow_1ifmrp3">
-        <di:waypoint x="370" y="250" />
-        <di:waypoint x="455" y="250" />
+      <bpmndi:BPMNEdge id="Flow_1s8umjp_di" bpmnElement="Flow_Path1">
+        <di:waypoint x="270" y="202" />
+        <di:waypoint x="270" y="120" />
+        <di:waypoint x="380" y="120" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="302" y="102" width="31" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_0mgxwvp_di" bpmnElement="Flow_0mgxwvp">
-        <di:waypoint x="480" y="225" />
+      <bpmndi:BPMNEdge id="Flow_1yq3tok_di" bpmnElement="Flow_Path2">
+        <di:waypoint x="295" y="227" />
+        <di:waypoint x="380" y="227" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="324" y="209" width="31" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05v3ik8_di" bpmnElement="Flow_Path3">
+        <di:waypoint x="270" y="252" />
+        <di:waypoint x="270" y="340" />
+        <di:waypoint x="380" y="340" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="296" y="343" width="31" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0qtb5z1_di" bpmnElement="Flow_1_to_Join">
         <di:waypoint x="480" y="120" />
         <di:waypoint x="570" y="120" />
+        <di:waypoint x="570" y="202" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_0q3wwv1_di" bpmnElement="Flow_0q3wwv1">
-        <di:waypoint x="480" y="275" />
-        <di:waypoint x="480" y="330" />
-        <di:waypoint x="570" y="330" />
+      <bpmndi:BPMNEdge id="Flow_1jf9mxm_di" bpmnElement="Flow_2_to_Join">
+        <di:waypoint x="480" y="227" />
+        <di:waypoint x="545" y="227" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_1mdk4m7_di" bpmnElement="Flow_1mdk4m7">
-        <di:waypoint x="670" y="120" />
-        <di:waypoint x="760" y="120" />
-        <di:waypoint x="760" y="205" />
+      <bpmndi:BPMNEdge id="Flow_033d1y0_di" bpmnElement="Flow_3_to_Join">
+        <di:waypoint x="480" y="340" />
+        <di:waypoint x="570" y="340" />
+        <di:waypoint x="570" y="252" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_02uuvjj_di" bpmnElement="Flow_02uuvjj">
-        <di:waypoint x="670" y="330" />
-        <di:waypoint x="760" y="330" />
-        <di:waypoint x="760" y="255" />
+      <bpmndi:BPMNEdge id="Flow_1e3j4ld_di" bpmnElement="Flow_to_End">
+        <di:waypoint x="595" y="227" />
+        <di:waypoint x="660" y="227" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_1fhrfxf_di" bpmnElement="Flow_1fhrfxf">
-        <di:waypoint x="785" y="230" />
-        <di:waypoint x="852" y="230" />
+      <bpmndi:BPMNEdge id="Flow_0wxq5a7_di" bpmnElement="Flow_to_event_end">
+        <di:waypoint x="760" y="227" />
+        <di:waypoint x="832" y="227" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
-</bpmn2:definitions>
+</bpmn:definitions> 

@@ -39,7 +39,7 @@ namespace Novin.Bpmn.EventSourcing.Core.Process
             _processStateStore = processStateStore ?? throw new ArgumentNullException(nameof(processStateStore));
             _executionContextRepository = executionContextRepository ?? throw new ArgumentNullException(nameof(executionContextRepository));
         }
-public async Task<ProcessState> StartProcessAsync(string deploymentKey, string processId, Dictionary<string, object?>? initializeVariables = null, CancellationToken cancellationToken = default)
+public async Task<ProcessState> StartProcessAsync(string deploymentKey, string processId, Dictionary<string, object?>? initializeVariables = null, string? startEventId = null, CancellationToken cancellationToken = default)
 {
     var deployment = _deploymentStore.GetLatest(deploymentKey)
         ?? throw new InvalidOperationException($"Deployment with key '{deploymentKey}' not found.");
@@ -74,6 +74,7 @@ public async Task<ProcessState> StartProcessAsync(string deploymentKey, string p
         DeploymentId = deployment.DeploymentId,
         ProcessId = processId,
         InitializeVariables = initializeVariables ?? new Dictionary<string, object?>(),
+        StartEventId = startEventId,
         Timestamp = DateTime.UtcNow
     };
 
@@ -196,43 +197,58 @@ public async Task<ProcessState> StartProcessAsync(ProcessState state, Cancellati
 
         private async Task StartInitialElementsAsync(FlowTopology topology, ProcessState state, CancellationToken cancellationToken)
         {
-            var startNodes = topology.Nodes.Values.Where(n => n.IsStartEvent).ToList();
+            // پیدا کردن None StartEvent (یا اولین StartEvent)
+            var targetStartNode = topology.Nodes.Values
+                .FirstOrDefault(n => n.IsStartEvent && 
+                    (n.StartEventType == "None" || 
+                     n.ElementType.Contains("noneStartEvent", StringComparison.OrdinalIgnoreCase) ||
+                     string.IsNullOrEmpty(n.StartEventType)));
 
-            foreach (var startNode in startNodes)
+            // اگر None StartEvent پیدا نشد، اولین StartEvent را بگیر
+            if (targetStartNode == null)
             {
-                // **اینجا کانتکست جدید ساخته می‌شود**
-                var newContext = new ExecutionContext
-                {
-                    ContextId = Guid.NewGuid(),
-                    InstanceId = state.InstanceId,
-                    State = ExecutionState.Active,
-                    IsExecutable = true,
-                    LocalVariables = new Dictionary<string, object?>()
-                };
-
-                _executionContextRepository.Save(newContext);
-
-                var elementCreated = new ElementCreated
-                {
-                    EventId = Guid.NewGuid(),
-                    InstanceId = state.InstanceId,
-                    DeploymentId = topology.DeploymentId,
-                    DeploymentKey = state.DeploymentKey,
-                    ProcessId = topology.ProcessId,
-                    ElementId = startNode.ElementId,
-                    ElementType = startNode.ElementType,
-                    ExecutionId = newContext.ContextId, // شناسه کانتکست ساخته شده
-                    Timestamp = DateTime.UtcNow,
-                    IsExecutable = true,
-                    Version = 1,
-                    SourceElementId = null,
-                    SequenceFlowId = null
-                };
-
-                _eventStore.Append(elementCreated);
-
-                await Task.Delay(10, cancellationToken);
+                targetStartNode = topology.Nodes.Values.FirstOrDefault(n => n.IsStartEvent);
             }
+
+            if (targetStartNode == null)
+            {
+                throw new InvalidOperationException($"No StartEvent found in process '{topology.ProcessId}'.");
+            }
+
+            // فقط یک ExecutionContext برای None StartEvent بساز
+            var newContext = new ExecutionContext
+            {
+                ContextId = Guid.NewGuid(),
+                InstanceId = state.InstanceId,
+                State = ExecutionState.Active,
+                IsExecutable = true,
+                LocalVariables = new Dictionary<string, object?>(state.Variables)
+            };
+
+            newContext.MoveToNext(targetStartNode.ElementId);
+
+            _executionContextRepository.Save(newContext);
+
+            var elementCreated = new ElementCreated
+            {
+                EventId = Guid.NewGuid(),
+                InstanceId = state.InstanceId,
+                DeploymentId = topology.DeploymentId,
+                DeploymentKey = state.DeploymentKey,
+                ProcessId = topology.ProcessId,
+                ElementId = targetStartNode.ElementId,
+                ElementType = targetStartNode.ElementType,
+                ExecutionId = newContext.ContextId,
+                Timestamp = DateTime.UtcNow,
+                IsExecutable = true,
+                Version = 1,
+                SourceElementId = null,
+                SequenceFlowId = null
+            };
+
+            _eventStore.Append(elementCreated);
+
+            await Task.Delay(10, cancellationToken);
         }
 
         private IBpmnEvent? DeserializeEvent(EventEntity entity)

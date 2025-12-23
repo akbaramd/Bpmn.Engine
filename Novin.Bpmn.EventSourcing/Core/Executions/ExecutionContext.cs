@@ -37,6 +37,11 @@ public class ExecutionContext
     /// </summary>
     public string? PreviousElementId { get; private set; }
 
+    /// <summary>
+    /// شناسه SequenceFlow که از طریق آن به CurrentElementId رسیده‌ایم
+    /// </summary>
+    public string? LastSequenceFlowId { get; set; }
+
     public required bool IsExecutable { get; set; } = true;
     /// <summary>
     /// وضعیت فعلی کانتکست

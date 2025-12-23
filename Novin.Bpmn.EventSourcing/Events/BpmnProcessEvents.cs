@@ -21,6 +21,12 @@ namespace Novin.Bpmn.EventSourcing.Events
 
         public Dictionary<string, object?> InitializeVariables { get; set; } = [];
 
+        /// <summary>
+        /// شناسه StartEvent که trigger شده است.
+        /// اگر null باشد، None StartEvent (یا اولین StartEvent) استفاده می‌شود.
+        /// </summary>
+        public string? StartEventId { get; init; }
+
     }
 
     /// <summary>

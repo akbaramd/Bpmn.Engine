@@ -51,12 +51,48 @@ public class EventBus : IEventBus
         var handlerInterfaceType = typeof(IBpmnEventHandler<>).MakeGenericType(eventType);
 
         // گرفتن همه هندلرهای ثبت شده از DI برای این نوع اینترفیس
-        var handlers = (IEnumerable<object>)_serviceProvider.GetServices(handlerInterfaceType);
+        var handlers = (IEnumerable<object>)_serviceProvider.GetServices(handlerInterfaceType).ToList();
+
+        Console.WriteLine($"[EventBus] Looking for handlers for event type: {eventType.Name}, HandlerType: {handlerInterfaceType.FullName}");
+        Console.WriteLine($"[EventBus] Found {handlers.Count()} handlers for {eventType.Name}");
+
+        // If no handlers found for exact type, try base types (e.g., ElementProcessing for ScriptTaskProcessing)
+        if (!handlers.Any())
+        {
+            Console.WriteLine($"[EventBus] WARNING: No handlers found for {eventType.Name}. Checking base types...");
+            
+            var baseType = eventType.BaseType;
+            while (baseType != null && baseType != typeof(object))
+            {
+                var baseHandlerType = typeof(IBpmnEventHandler<>).MakeGenericType(baseType);
+                var baseHandlers = (IEnumerable<object>)_serviceProvider.GetServices(baseHandlerType).ToList();
+                Console.WriteLine($"[EventBus] Checking base type {baseType.Name}: Found {baseHandlers.Count()} handlers");
+                
+                if (baseHandlers.Any())
+                {
+                    Console.WriteLine($"[EventBus] Using {baseHandlers.Count()} handlers from base type {baseType.Name}");
+                    handlers = baseHandlers;
+                    handlerInterfaceType = baseHandlerType;
+                    break;
+                }
+                
+                baseType = baseType.BaseType;
+            }
+        }
+
+        if (!handlers.Any())
+        {
+            Console.WriteLine($"[EventBus] No handlers found for event {eventType.Name} or any of its base types");
+            _logger.LogWarning("No registered handlers found for event {EventType}", eventType.Name);
+            return;
+        }
 
         foreach (var handler in handlers)
         {
             try
             {
+                Console.WriteLine($"[EventBus] Invoking handler: {handler.GetType().Name} for event {eventType.Name}");
+                
                 // متد HandleAsync
                 var handleMethod = handlerInterfaceType.GetMethod("HandleAsync");
                 if (handleMethod == null)
@@ -71,6 +107,7 @@ public class EventBus : IEventBus
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"[EventBus] ERROR invoking handler {handler.GetType().Name}: {ex.Message}");
                 _logger.LogError(ex, "Error invoking handler {HandlerType} for event {EventType}", handler.GetType().Name, eventType.Name);
             }
         }

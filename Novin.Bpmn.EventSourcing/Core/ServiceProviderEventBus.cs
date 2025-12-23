@@ -102,8 +102,35 @@ public class ServiceProviderEventBus : IEventBus
         var handlerType = typeof(IBpmnEventHandler<>).MakeGenericType(eventType);
 
         // دریافت تمام هندلرها از تزریق وابستگی
+        Console.WriteLine($"[EventBus] Looking for handlers for event type: {eventType.Name}, HandlerType: {handlerType.FullName}");
         _logger.LogDebug("Attempting to resolve handlers for type {HandlerType}", handlerType.FullName);
-        var handlers = _serviceProvider.GetServices(handlerType);
+        var handlers = _serviceProvider.GetServices(handlerType).ToList();
+
+        Console.WriteLine($"[EventBus] Found {handlers.Count} handlers for {eventType.Name}");
+
+        if (!handlers.Any())
+        {
+            Console.WriteLine($"[EventBus] WARNING: No handlers found for {eventType.Name}. Checking base types...");
+            
+            // Try to find handlers for base types (e.g., ElementProcessing for ScriptTaskProcessing)
+            var baseType = eventType.BaseType;
+            while (baseType != null && baseType != typeof(object))
+            {
+                var baseHandlerType = typeof(IBpmnEventHandler<>).MakeGenericType(baseType);
+                var baseHandlers = _serviceProvider.GetServices(baseHandlerType).ToList();
+                Console.WriteLine($"[EventBus] Checking base type {baseType.Name}: Found {baseHandlers.Count} handlers");
+                
+                if (baseHandlers.Any())
+                {
+                    Console.WriteLine($"[EventBus] Using {baseHandlers.Count} handlers from base type {baseType.Name}");
+                    handlers = baseHandlers;
+                    handlerType = baseHandlerType;
+                    break;
+                }
+                
+                baseType = baseType.BaseType;
+            }
+        }
 
         if (!handlers.Any())
         {
@@ -151,6 +178,7 @@ public class ServiceProviderEventBus : IEventBus
         }
 
         // ساخت و فراخوانی متد HandleAsync برای هر هندلر
+        Console.WriteLine($"[EventBus] Invoking {handlers.Count()} handler(s) for event {eventType.Name}");
         _logger.LogDebug("Found {Count} handlers for event {EventType}", handlers.Count(), @event.EventType);
 
         // اجرای غیرهمزمان تمام هندلرها
@@ -159,11 +187,13 @@ public class ServiceProviderEventBus : IEventBus
         {
             try
             {
+                Console.WriteLine($"[EventBus] Invoking handler: {handler.GetType().Name} for event {eventType.Name}");
                 var task = (Task)handler.GetType().GetMethod("HandleAsync").Invoke(handler, new object[] { @event, cancellationToken });
                 tasks.Add(task);
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"[EventBus] ERROR invoking handler {handler.GetType().Name}: {ex.Message}");
                 _logger.LogError(ex, "Error invoking event handler {HandlerType} for event {EventType}",
                     handler.GetType().Name, @event.EventType);
             }

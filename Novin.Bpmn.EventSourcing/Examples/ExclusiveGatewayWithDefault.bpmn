@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:drools="http://www.jboss.org/drools" xmlns:novin="https://novin.bpmn.engine/ext" xmlns:bonyan="http://bonyan.org/schema/bpmn/1.0" id="Defs_ExclusiveGateway_Test" targetNamespace="http://example.com/bpmn/exclusive-test" exporter="Camunda Modeler" exporterVersion="5.4.2">
+ 
+  <bpmn:process id="Process_ExclusiveGateway_Test" name="Exclusive Gateway Test" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Start">
+      <bpmn:extensionElements>
+        <drools:metaData name="elementname">
+          <drools:metaValue>Start</drools:metaValue>
+        </drools:metaData>
+      </bpmn:extensionElements>
+      <bpmn:outgoing>Flow_Start_To_Task</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:exclusiveGateway id="Gateway_XOR" name="Score?">
+      <bpmn:extensionElements>
+        <drools:metaData name="elementname">
+          <drools:metaValue>Score?</drools:metaValue>
+        </drools:metaData>
+        <novin:variableMerge mergeStrategy="lastWriteWins" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Task_To_Gateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_Approved</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Default</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="Task_Approved" name="Approved Path">
+      <bpmn:extensionElements>
+        <drools:metaData name="elementname">
+          <drools:metaValue>Approved Path</drools:metaValue>
+        </drools:metaData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Approved</bpmn:incoming>
+      <bpmn:outgoing>Flow_Approved_To_End</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_Rejected" name="Rejected (Default) Path">
+      <bpmn:extensionElements>
+        <drools:metaData name="elementname">
+          <drools:metaValue>Rejected (Default) Path</drools:metaValue>
+        </drools:metaData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Default</bpmn:incoming>
+      <bpmn:outgoing>Flow_Default_To_End</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="EndEvent_Approved" name="End Approved">
+      <bpmn:extensionElements>
+        <drools:metaData name="elementname">
+          <drools:metaValue>End Approved</drools:metaValue>
+        </drools:metaData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Approved_To_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="EndEvent_Rejected" name="End Rejected">
+      <bpmn:extensionElements>
+        <drools:metaData name="elementname">
+          <drools:metaValue>End Rejected</drools:metaValue>
+        </drools:metaData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Default_To_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_To_Task" sourceRef="StartEvent_1" targetRef="Task_BeforeGateway" />
+    <bpmn:sequenceFlow id="Flow_Task_To_Gateway" sourceRef="Task_BeforeGateway" targetRef="Gateway_XOR" />
+    <bpmn:sequenceFlow id="Flow_Approved" sourceRef="Gateway_XOR" targetRef="Task_Approved">
+      <bpmn:extensionElements>
+        <drools:metaData name="elementname">
+          <drools:metaValue>approved</drools:metaValue>
+        </drools:metaData>
+        <novin:conditionEvaluation expressionLanguage="FEEL" variableScope="process" />
+      </bpmn:extensionElements>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= Variables.Check == true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Default" sourceRef="Gateway_XOR" targetRef="Task_Rejected">
+      <bpmn:extensionElements>
+        <drools:metaData name="elementname">
+          <drools:metaValue>default</drools:metaValue>
+        </drools:metaData>
+      </bpmn:extensionElements>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"> Variables.Check == false</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Approved_To_End" sourceRef="Task_Approved" targetRef="EndEvent_Approved" />
+    <bpmn:sequenceFlow id="Flow_Default_To_End" sourceRef="Task_Rejected" targetRef="EndEvent_Rejected" />
+    <bpmn:scriptTask id="Task_BeforeGateway" name="Before Gateway" scriptFormat="c#">
+      <bpmn:extensionElements>
+        <bonyan:ioMapping onMissingSource="skip" onMissingOutput="skip" overwrite="true">
+          <bonyan:input source="customerId" target="customerId"/>
+          <bonyan:input source="score" target="baseScore"/>
+          <bonyan:output source="resultScore" target="score"/>
+          <bonyan:output source="flag" target="flag"/>
+        </bonyan:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Start_To_Task</bpmn:incoming>
+      <bpmn:outgoing>Flow_Task_To_Gateway</bpmn:outgoing>
+      <bpmn:script><![CDATA[// Input variables are available: customerId, baseScore (mapped from process variables)
+// Calculate result based on inputs
+var resultScore = baseScore + 10;
+var flag = customerId != null && baseScore > 50;
+
+// Set output variables (will be mapped to process.score and process.flag via bonyan:ioMapping)
+// These node variables will be automatically mapped to process variables on completion
+Variables.resultScore = resultScore;
+Variables.flag = flag;
+
+// Set Check variable for gateway condition
+Variables.Check = flag;
+]]></bpmn:script>
+    </bpmn:scriptTask>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_ExclusiveGateway_Test">
+    <bpmndi:BPMNPlane id="BPMNPlane_ExclusiveGateway_Test" bpmnElement="Process_ExclusiveGateway_Test">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="160" y="150" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="166" y="193" width="25" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_XOR_di" bpmnElement="Gateway_XOR" isMarkerVisible="true">
+        <dc:Bounds x="420" y="143" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="480" y="161" width="35" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Approved_di" bpmnElement="Task_Approved">
+        <dc:Bounds x="530" y="78" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Rejected_di" bpmnElement="Task_Rejected">
+        <dc:Bounds x="530" y="178" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Approved_di" bpmnElement="EndEvent_Approved">
+        <dc:Bounds x="692" y="100" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="675" y="143" width="70" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Rejected_di" bpmnElement="EndEvent_Rejected">
+        <dc:Bounds x="692" y="200" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="677" y="243" width="67" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_14gkcge_di" bpmnElement="Task_BeforeGateway">
+        <dc:Bounds x="260" y="128" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_To_Task_di" bpmnElement="Flow_Start_To_Task">
+        <di:waypoint x="196" y="168" />
+        <di:waypoint x="260" y="168" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Task_To_Gateway_di" bpmnElement="Flow_Task_To_Gateway">
+        <di:waypoint x="360" y="168" />
+        <di:waypoint x="420" y="168" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Approved_di" bpmnElement="Flow_Approved">
+        <di:waypoint x="445" y="143" />
+        <di:waypoint x="445" y="118" />
+        <di:waypoint x="530" y="118" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="415" y="85" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Default_di" bpmnElement="Flow_Default">
+        <di:waypoint x="445" y="193" />
+        <di:waypoint x="445" y="233" />
+        <di:waypoint x="530" y="233" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="410" y="145" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Approved_To_End_di" bpmnElement="Flow_Approved_To_End">
+        <di:waypoint x="630" y="118" />
+        <di:waypoint x="692" y="118" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Default_To_End_di" bpmnElement="Flow_Default_To_End">
+        <di:waypoint x="630" y="218" />
+        <di:waypoint x="692" y="218" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
