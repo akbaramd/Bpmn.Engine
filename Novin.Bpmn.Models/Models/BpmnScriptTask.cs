@@ -93,9 +93,19 @@ namespace Novin.Bpmn.Models.Models
         public ZeebeScript? ZeebeScript { get; set; }
 
         /* -------------------------------------------------------------------
+         * BONYAN EXTENSIONS
+         * -----------------------------------------------------------------*/
+        [XmlElement("ioMapping", Namespace = BonyanNs)]
+        public BonyanIoMapping? BonyanIoMapping { get; set; }
+
+        [XmlElement("script", Namespace = BonyanNs)]      // <bonyan:script>
+        public BonyanScript? BonyanScript { get; set; }
+
+        /* -------------------------------------------------------------------
          * ثابت‌های فضای نام
          * -----------------------------------------------------------------*/
         public const string BpmnNs  = "http://www.omg.org/spec/BPMN/20100524/MODEL";
         public const string ZeebeNs = "http://camunda.org/schema/zeebe/1.0";
+        public const string BonyanNs = "http://bonyan.org/schema/bpmn/1.0";
     }
 }

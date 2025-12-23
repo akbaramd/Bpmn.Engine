@@ -1,0 +1,85 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Novin.Bpmn.Engine.Application.Common.Interfaces;
+using Novin.Bpmn.Engine.Domain.Entities;
+using Novin.Bpmn.Engine.Domain.ValueObjects;
+using Task = System.Threading.Tasks.Task;
+
+namespace Novin.Bpmn.Engine.Infrastructure.Persistence.Repositories;
+
+public class EfTokenRepository : ITokenRepository
+{
+    private readonly BpmnEngineDbContext _context;
+    private readonly ILogger<EfTokenRepository> _logger;
+
+    public EfTokenRepository(BpmnEngineDbContext context, ILogger<EfTokenRepository> logger)
+    {
+        _context = context ?? throw new ArgumentNullException(nameof(context));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public async Task<Token?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.Tokens
+            .Include(t => t.TokenHistory)
+            .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
+    }
+
+    public async Task<IEnumerable<Token>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        return await _context.Tokens
+            .Include(t => t.TokenHistory)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task AddAsync(Token aggregate, CancellationToken cancellationToken = default)
+    {
+        await _context.Tokens.AddAsync(aggregate, cancellationToken);
+        _logger.LogInformation("Token added: {TokenId}", aggregate.Id);
+    }
+
+
+
+    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var token = await GetByIdAsync(id, cancellationToken);
+        if (token != null)
+        {
+            _context.Tokens.Remove(token);
+            _logger.LogInformation("Token deleted: {TokenId}", id);
+        }
+    }
+
+    public async Task<IEnumerable<Token>> GetByProcessIdAsync(Guid processId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Tokens
+            .Include(t => t.TokenHistory)
+            .Where(t => t.ProcessId == processId)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IEnumerable<Token>> GetByStateAsync(Guid processId, TokenState state, CancellationToken cancellationToken = default)
+    {
+        return await _context.Tokens
+            .Include(t => t.TokenHistory)
+            .Where(t => t.ProcessId == processId && t.State == state)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IEnumerable<Token>> GetByElementIdAsync(Guid processId, string elementId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Tokens
+            .Include(t => t.TokenHistory)
+            .Where(t => t.ProcessId == processId && t.CurrentElementId == elementId)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IEnumerable<Token>> GetChildTokensAsync(Guid parentTokenId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Tokens
+            .Include(t => t.TokenHistory)
+            .Where(t => t.ParentTokenId == parentTokenId)
+            .ToListAsync(cancellationToken);
+    }
+}
+

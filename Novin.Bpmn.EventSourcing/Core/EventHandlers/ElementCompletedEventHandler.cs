@@ -2,7 +2,9 @@
 using Novin.Bpmn.EventSourcing.Core.Topology;
 using Novin.Bpmn.EventSourcing.Events;
 using Novin.Bpmn.EventSourcing.Core.Process;
+using Novin.Bpmn.EventSourcing.Core.Services;
 using Novin.Bpmn.EventSourcing.Core.Services.Gateway;
+using Novin.Bpmn.Models.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,6 +19,7 @@ public class ElementCompletedEventHandler : BpmnEventHandlerBase<ElementComplete
     private readonly IFlowTopologyStore _topologyStore;
     private readonly IProcessStateStore _processStateStore;
     private readonly IGatewayBehaviorFactory _gatewayBehaviorFactory;
+    private readonly IoMappingApplier _ioMappingApplier;
 
     public ElementCompletedEventHandler(IServiceProvider serviceProvider,
                                         IExecutionContextRepository contextRepository,
@@ -29,6 +32,7 @@ public class ElementCompletedEventHandler : BpmnEventHandlerBase<ElementComplete
         _topologyStore = topologyStore ?? throw new ArgumentNullException(nameof(topologyStore));
         _processStateStore = processStateStore;
         _gatewayBehaviorFactory = gatewayBehaviorFactory ?? throw new ArgumentNullException(nameof(gatewayBehaviorFactory));
+        _ioMappingApplier = new IoMappingApplier();
     }
 
     public override async Task HandleAsync(ElementCompleted @event, CancellationToken cancellationToken = default)
@@ -41,6 +45,9 @@ public class ElementCompletedEventHandler : BpmnEventHandlerBase<ElementComplete
 
         var processState = _processStateStore.Get(context.InstanceId)
                            ?? throw new InvalidOperationException($"ProcessState not found for InstanceId {context.InstanceId}");
+
+        // Apply output mappings: Node Variables → Process Variables (before syncing)
+        ApplyOutputMappings(@event, context, processState);
 
         // همگام‌سازی متغیرها با event-sourcing (به جای overwrite مستقیم)
         // فقط متغیرهایی که تغییر کرده‌اند را event می‌فرستیم
@@ -199,8 +206,11 @@ public class ElementCompletedEventHandler : BpmnEventHandlerBase<ElementComplete
 
                 context.MoveToNext(targetId);
 
-                foreach (var kv in sequenceFlow.Metadata)
-                    context.LocalVariables[kv.Key] = kv.Value;
+                if (sequenceFlow.Metadata != null)
+                {
+                    foreach (var kv in sequenceFlow.Metadata)
+                        context.LocalVariables[kv.Key] = kv.Value;
+                }
 
                 // اگر نود بعدی یک Gateway باشد، وضعیت را به Completed تغییر بده
                 if (topology.Nodes.TryGetValue(targetId, out var nextNode) && nextNode.IsGateway)
@@ -395,5 +405,66 @@ public class ElementCompletedEventHandler : BpmnEventHandlerBase<ElementComplete
         }
 
         await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Applies output mappings from node variables to process variables after script execution.
+    /// </summary>
+    private void ApplyOutputMappings(ElementCompleted evt, ExecutionContext context, ProcessState processState)
+    {
+        try
+        {
+            var topology = _topologyStore.Get(evt.DeploymentId, evt.ProcessId);
+            if (topology == null || !topology.Nodes.TryGetValue(evt.ElementId, out var node))
+            {
+                Console.WriteLine($"[IoMapping] Node not found for ElementId: {evt.ElementId}");
+                return;
+            }
+
+            // Get BonyanIoMapping from node metadata
+            if (!node.Metadata.TryGetValue("BonyanIoMapping", out var ioMappingObj) || 
+                ioMappingObj is not BonyanIoMapping ioMapping)
+            {
+                Console.WriteLine($"[IoMapping] No BonyanIoMapping found for ElementId: {evt.ElementId}");
+                return;
+            }
+
+            Console.WriteLine($"[IoMapping] Applying output mappings for ElementId: {evt.ElementId}");
+            Console.WriteLine($"[IoMapping] Node variables before mapping: {string.Join(", ", context.LocalVariables.Select(kv => $"{kv.Key}={kv.Value}"))}");
+            Console.WriteLine($"[IoMapping] Process variables before mapping: {string.Join(", ", processState.Variables.Select(kv => $"{kv.Key}={kv.Value}"))}");
+
+            // Apply output mappings: Node Variables → Process Variables
+            var result = _ioMappingApplier.ApplyOutputs(
+                ioMapping,
+                context.LocalVariables,
+                processState.Variables
+            );
+
+            if (result.Errors.Count > 0)
+            {
+                Console.WriteLine($"[IoMapping] Errors during output mapping: {string.Join("; ", result.Errors)}");
+            }
+
+            Console.WriteLine($"[IoMapping] Applied {result.AppliedMappings.Count} output mappings:");
+            foreach (var mapping in result.AppliedMappings)
+            {
+                Console.WriteLine($"[IoMapping]   {mapping.SourceVariable} → {mapping.TargetVariable} = {mapping.Value}");
+            }
+
+            Console.WriteLine($"[IoMapping] Process variables after output mapping: {string.Join(", ", processState.Variables.Select(kv => $"{kv.Key}={kv.Value}"))}");
+
+            // Save process state after output mapping
+            if (result.AppliedMappings.Count > 0)
+            {
+                processState.Version++;
+                processState.LastUpdatedAt = DateTime.UtcNow;
+                _processStateStore.Save(processState);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[IoMapping] Error applying output mappings: {ex.Message}");
+            Console.WriteLine($"[IoMapping] Stack trace: {ex.StackTrace}");
+        }
     }
 }

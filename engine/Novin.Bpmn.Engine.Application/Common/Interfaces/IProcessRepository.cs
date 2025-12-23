@@ -1,0 +1,13 @@
+using Novin.Bpmn.Engine.Domain.Entities;
+
+namespace Novin.Bpmn.Engine.Application.Common.Interfaces;
+
+/// <summary>
+/// Repository interface for Process aggregate
+/// </summary>
+public interface IProcessRepository : IRepository<Process>
+{
+    Task<Process?> GetByProcessDefinitionIdAsync(string processDefinitionId, CancellationToken cancellationToken = default);
+    Task<IEnumerable<Process>> GetByStateAsync(Domain.ValueObjects.ProcessState state, CancellationToken cancellationToken = default);
+}
+

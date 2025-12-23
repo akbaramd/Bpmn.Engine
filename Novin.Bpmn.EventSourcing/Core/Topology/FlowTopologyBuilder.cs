@@ -3,6 +3,8 @@ using Novin.Bpmn.Models.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
+using System.Xml.Serialization;
 
 public class FlowTopologyBuilder : IFlowTopologyBuilder
 {
@@ -107,12 +109,83 @@ public class FlowTopologyBuilder : IFlowTopologyBuilder
         /* Task-specific metadata */
         if (scriptTask is not null)
         {
-            var scriptExpr = scriptTask.ZeebeScript?.Expression ?? scriptTask.Script?.InnerText;
+            // Parse extension elements to find Bonyan extensions
+            BonyanIoMapping? bonyanIoMapping = scriptTask.BonyanIoMapping;
+            BonyanScript? bonyanScript = scriptTask.BonyanScript;
+            
+            // If not found in typed properties, try parsing from extensionElements
+            if (bonyanIoMapping == null || bonyanScript == null)
+            {
+                ParseBonyanExtensions(element.extensionElements, out var parsedIoMapping, out var parsedScript);
+                bonyanIoMapping ??= parsedIoMapping;
+                bonyanScript ??= parsedScript;
+            }
+            
+            // Priority: BonyanScript > ZeebeScript > Standard bpmn:script
+            string? scriptExpr = null;
+            string? scriptFormat = null;
+            
+            if (bonyanScript != null)
+            {
+                // Extract script body - try Body property first, then Text array
+                if (bonyanScript.ScriptBody != null)
+                {
+                    scriptExpr = !string.IsNullOrEmpty(bonyanScript.ScriptBody.Body)
+                        ? bonyanScript.ScriptBody.Body
+                        : (bonyanScript.ScriptBody.Text != null && bonyanScript.ScriptBody.Text.Length > 0
+                            ? string.Join(string.Empty, bonyanScript.ScriptBody.Text)
+                            : null);
+                }
+                
+                // Extract script format - try Format property first, then Text array
+                if (bonyanScript.ScriptFormat != null)
+                {
+                    scriptFormat = !string.IsNullOrEmpty(bonyanScript.ScriptFormat.Format)
+                        ? bonyanScript.ScriptFormat.Format
+                        : (bonyanScript.ScriptFormat.Text != null && bonyanScript.ScriptFormat.Text.Length > 0
+                            ? string.Join(string.Empty, bonyanScript.ScriptFormat.Text)
+                            : null);
+                }
+            }
+            else if (scriptTask.ZeebeScript != null)
+            {
+                scriptExpr = scriptTask.ZeebeScript.Expression;
+                scriptFormat = scriptTask.ZeebeScript.ResultVariable;
+            }
+            else
+            {
+                scriptExpr = scriptTask.Script?.InnerText;
+                scriptFormat = scriptTask.ScriptFormat;
+            }
+            
             meta["TaskType"]       = "Script";
             meta["Script"]         = scriptExpr;
-            meta["ScriptLanguage"] = scriptTask.ZeebeScript?.ResultVariable ?? scriptTask.ScriptFormat;
+            meta["ScriptLanguage"] = scriptFormat;
             meta["ZeebeExpression"] = scriptTask.ZeebeScript?.Expression;
             meta["ZeebeResultVariable"] = scriptTask.ZeebeScript?.ResultVariable;
+            
+            // Store Bonyan script details
+            if (bonyanScript != null)
+            {
+                meta["BonyanScriptFormat"] = scriptFormat; // Use the extracted format
+                meta["BonyanScriptBody"] = scriptExpr; // Use the extracted script body
+            }
+            
+            // Store Bonyan IO Mapping for variable mapping
+            if (bonyanIoMapping != null)
+            {
+                meta["BonyanIoMapping"] = bonyanIoMapping;
+            }
+        }
+        
+        // Check for IO mapping in extension elements for other task types
+        if (element.extensionElements?.Any != null)
+        {
+            ParseBonyanExtensions(element.extensionElements, out var ioMapping, out var script);
+            if (ioMapping != null && !meta.ContainsKey("BonyanIoMapping"))
+            {
+                meta["BonyanIoMapping"] = ioMapping;
+            }
         }
         else if (serviceTask is not null)
         {
@@ -152,5 +225,62 @@ public class FlowTopologyBuilder : IFlowTopologyBuilder
         if (!inDict.TryGetValue(tgt, out var ins))
             inDict[tgt] = ins = new List<string>();
         ins.Add(src);
+    }
+
+    /// <summary>
+    /// Parses Bonyan extension elements (ioMapping and script) from extensionElements.
+    /// </summary>
+    private static void ParseBonyanExtensions(BpmnExtensionElements? extensionElements, 
+                                             out BonyanIoMapping? ioMapping, 
+                                             out BonyanScript? script)
+    {
+        ioMapping = null;
+        script = null;
+
+        if (extensionElements?.Any == null)
+            return;
+
+        var serializer = new XmlSerializer(typeof(BonyanIoMapping));
+        var scriptSerializer = new XmlSerializer(typeof(BonyanScript));
+        const string bonyanNamespace = "http://bonyan.org/schema/bpmn/1.0";
+
+        foreach (var xmlElement in extensionElements.Any)
+        {
+            if (xmlElement == null)
+                continue;
+
+            // Check namespace
+            var namespaceUri = xmlElement.NamespaceURI;
+            if (namespaceUri != bonyanNamespace)
+                continue;
+
+            // Try to deserialize as BonyanIoMapping
+            if (xmlElement.LocalName == "ioMapping" && ioMapping == null)
+            {
+                try
+                {
+                    using var reader = new XmlNodeReader(xmlElement);
+                    ioMapping = serializer.Deserialize(reader) as BonyanIoMapping;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[FlowTopologyBuilder] Error deserializing BonyanIoMapping: {ex.Message}");
+                }
+            }
+
+            // Try to deserialize as BonyanScript
+            if (xmlElement.LocalName == "script" && script == null)
+            {
+                try
+                {
+                    using var reader = new XmlNodeReader(xmlElement);
+                    script = scriptSerializer.Deserialize(reader) as BonyanScript;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[FlowTopologyBuilder] Error deserializing BonyanScript: {ex.Message}");
+                }
+            }
+        }
     }
 }

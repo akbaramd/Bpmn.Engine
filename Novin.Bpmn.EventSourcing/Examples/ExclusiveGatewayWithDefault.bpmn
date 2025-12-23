@@ -76,7 +76,7 @@
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_Approved_To_End" sourceRef="Task_Approved" targetRef="EndEvent_Approved" />
     <bpmn:sequenceFlow id="Flow_Default_To_End" sourceRef="Task_Rejected" targetRef="EndEvent_Rejected" />
-    <bpmn:scriptTask id="Task_BeforeGateway" name="Before Gateway" scriptFormat="c#">
+    <bpmn:scriptTask id="Task_BeforeGateway" name="Before Gateway">
       <bpmn:extensionElements>
         <bonyan:ioMapping onMissingSource="skip" onMissingOutput="skip" overwrite="true">
           <bonyan:input source="customerId" target="customerId"/>
@@ -84,10 +84,9 @@
           <bonyan:output source="resultScore" target="score"/>
           <bonyan:output source="flag" target="flag"/>
         </bonyan:ioMapping>
-      </bpmn:extensionElements>
-      <bpmn:incoming>Flow_Start_To_Task</bpmn:incoming>
-      <bpmn:outgoing>Flow_Task_To_Gateway</bpmn:outgoing>
-      <bpmn:script><![CDATA[// Input variables are available: customerId, baseScore (mapped from process variables)
+        <bonyan:script>
+          <bonyan:scriptFormat>csharp</bonyan:scriptFormat>
+          <bonyan:scriptBody><![CDATA[// Input variables are available: customerId, baseScore (mapped from process variables)
 // Calculate result based on inputs
 var resultScore = baseScore + 10;
 var flag = customerId != null && baseScore > 50;
@@ -99,7 +98,11 @@ Variables.flag = flag;
 
 // Set Check variable for gateway condition
 Variables.Check = flag;
-]]></bpmn:script>
+]]></bonyan:scriptBody>
+        </bonyan:script>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Start_To_Task</bpmn:incoming>
+      <bpmn:outgoing>Flow_Task_To_Gateway</bpmn:outgoing>
     </bpmn:scriptTask>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_ExclusiveGateway_Test">

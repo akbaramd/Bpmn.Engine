@@ -258,16 +258,24 @@ public class ElementCreatedEventHandler : BpmnEventHandlerBase<ElementCreated>
             Console.WriteLine($"[CreateProcessingEvent] Creating ScriptTaskProcessing for ElementId: {e.ElementId}");
             Console.WriteLine($"[CreateProcessingEvent] Node Metadata keys: {string.Join(", ", node.Metadata.Keys)}");
             
-            var script = node.Metadata.TryGetValue("Script", out var scriptValue) 
-                ? scriptValue?.ToString() ?? string.Empty 
-                : string.Empty;
-            var scriptFormat = node.Metadata.TryGetValue("ScriptLanguage", out var formatValue)
-                ? formatValue?.ToString()
-                : null;
+            // Priority: BonyanScriptBody > Script (fallback)
+            var script = node.Metadata.TryGetValue("BonyanScriptBody", out var bonyanScriptBodyValue) 
+                ? bonyanScriptBodyValue?.ToString() ?? string.Empty
+                : (node.Metadata.TryGetValue("Script", out var scriptValue) 
+                    ? scriptValue?.ToString() ?? string.Empty 
+                    : string.Empty);
+            
+            var scriptFormat = node.Metadata.TryGetValue("BonyanScriptFormat", out var bonyanFormat)
+                ? bonyanFormat?.ToString()
+                : (node.Metadata.TryGetValue("ScriptLanguage", out var formatValue)
+                    ? formatValue?.ToString()
+                    : null);
 
             Console.WriteLine($"[CreateProcessingEvent] Extracted Script: '{script}', ScriptFormat: {scriptFormat}");
-            var scriptFromMeta = node.Metadata.TryGetValue("Script", out var sv) ? sv?.ToString() : "NOT FOUND";
-            Console.WriteLine($"[CreateProcessingEvent] Script value from metadata: {scriptFromMeta}");
+            var bonyanScriptBodyDebug = node.Metadata.TryGetValue("BonyanScriptBody", out var bs) ? bs?.ToString() : "NOT FOUND";
+            var scriptFallback = node.Metadata.TryGetValue("Script", out var s) ? s?.ToString() : "NOT FOUND";
+            Console.WriteLine($"[CreateProcessingEvent] BonyanScriptBody: {bonyanScriptBodyDebug}");
+            Console.WriteLine($"[CreateProcessingEvent] Script (fallback): {scriptFallback}");
 
             return new ScriptTaskProcessing
             {

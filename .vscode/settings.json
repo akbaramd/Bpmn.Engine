@@ -1,0 +1,4 @@
+{
+    "nuxt.isNuxtApp": false,
+    "dotnet.defaultSolution": "engine/Novin.Bpmn.Engine.sln"
+}
