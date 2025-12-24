@@ -1,22 +1,103 @@
+
 using Novin.Bpmn.Engine.Domain.Common;
 
-namespace Novin.Bpmn.Engine.Domain.Events;
+public sealed record TokenCreatedEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string StartElementId,
+    IReadOnlyCollection<Guid> ParentTokenIds,
+    DateTime OccurredAtUtc
+) : IDomainEvent;
 
-public class TokenMovedEvent : BaseDomainEvent
-{
-    public Guid TokenId { get; }
-    public Guid ProcessId { get; }
-    public string FromElementId { get; }
-    public string ToElementId { get; }
-    public DateTime MovedAt { get; }
+public sealed record TokenActivatedEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string ElementId,
+    DateTime OccurredAtUtc,
+    bool IsExecutable
+) : IDomainEvent;
 
-    public TokenMovedEvent(Guid tokenId, Guid processId, string fromElementId, string toElementId, DateTime movedAt)
-    {
-        TokenId = tokenId;
-        ProcessId = processId;
-        FromElementId = fromElementId;
-        ToElementId = toElementId;
-        MovedAt = movedAt;
-    }
-}
+public sealed record TokenProcessingRequestedEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string ElementId,
+    DateTime OccurredAtUtc,
+    bool IsExecutable,
+    Guid? ScopeId,
+    string? ArrivedViaFlowId
+) : IDomainEvent;
 
+public sealed record TokenMovedEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string FromElementId,
+    string ToElementId,
+    string? ViaFlowId,
+    DateTime OccurredAtUtc,
+    bool IsExecutable,
+    Guid? ScopeId
+) : IDomainEvent;
+
+public sealed record TokenWaitingEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string ElementId,
+    string? Reason,
+    DateTime OccurredAtUtc,
+    bool IsExecutable,
+    Guid? ScopeId
+) : IDomainEvent;
+
+public sealed record TokenResumedEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string ElementId,
+    DateTime OccurredAtUtc,
+    bool IsExecutable,
+    Guid? ScopeId
+) : IDomainEvent;
+
+public sealed record TokenCompletedEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string ElementId,
+    DateTime OccurredAtUtc,
+    bool IsExecutable,
+    Guid? ScopeId
+) : IDomainEvent;
+
+public sealed record TokenFailedEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string ElementId,
+    string Error,
+    DateTime OccurredAtUtc,
+    bool IsExecutable,
+    Guid? ScopeId
+) : IDomainEvent;
+
+public sealed record TokenTerminatedEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string ElementId,
+    string? Reason,
+    DateTime OccurredAtUtc,
+    bool IsExecutable,
+    Guid? ScopeId
+) : IDomainEvent;
+
+// Optional observability events (nice to have)
+public sealed record TokenBecameNonExecutableEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string ElementId,
+    DateTime OccurredAtUtc,
+    Guid? ScopeId
+) : IDomainEvent;
+
+public sealed record TokenScopeAssignedEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    Guid ScopeId,
+    DateTime OccurredAtUtc
+) : IDomainEvent;

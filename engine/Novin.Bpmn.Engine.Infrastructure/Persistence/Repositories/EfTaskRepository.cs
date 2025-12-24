@@ -4,7 +4,6 @@ using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 using Task = System.Threading.Tasks.Task;
-using TaskEntity = Novin.Bpmn.Engine.Domain.Entities.Task;
 using TaskStatus = Novin.Bpmn.Engine.Domain.ValueObjects.TaskStatus;
 
 namespace Novin.Bpmn.Engine.Infrastructure.Persistence.Repositories;
@@ -20,23 +19,23 @@ public class EfTaskRepository : ITaskRepository
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task<TaskEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<UserTask?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.Tasks.FindAsync(new object[] { id }, cancellationToken);
     }
 
-    public async Task<IEnumerable<TaskEntity>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<UserTask>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _context.Tasks.ToListAsync(cancellationToken);
     }
 
-    public async Task AddAsync(TaskEntity aggregate, CancellationToken cancellationToken = default)
+    public async Task AddAsync(UserTask aggregate, CancellationToken cancellationToken = default)
     {
         await _context.Tasks.AddAsync(aggregate, cancellationToken);
         _logger.LogInformation("Task added: {TaskId}", aggregate.Id);
     }
 
-    public Task UpdateAsync(TaskEntity aggregate, CancellationToken cancellationToken = default)
+    public Task UpdateAsync(UserTask aggregate, CancellationToken cancellationToken = default)
     {
         _context.Tasks.Update(aggregate);
         _logger.LogInformation("Task updated: {TaskId}", aggregate.Id);
@@ -53,27 +52,27 @@ public class EfTaskRepository : ITaskRepository
         }
     }
 
-    public async Task<IEnumerable<TaskEntity>> GetByProcessIdAsync(Guid processId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<UserTask>> GetByProcessIdAsync(Guid processId, CancellationToken cancellationToken = default)
     {
         return await _context.Tasks
             .Where(t => t.ProcessId == processId)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<TaskEntity?> GetByElementIdAsync(Guid processId, string elementId, CancellationToken cancellationToken = default)
+    public async Task<UserTask?> GetByElementIdAsync(Guid processId, string elementId, CancellationToken cancellationToken = default)
     {
         return await _context.Tasks
             .FirstOrDefaultAsync(t => t.ProcessId == processId && t.ElementId == elementId, cancellationToken);
     }
 
-    public async Task<IEnumerable<TaskEntity>> GetByStatusAsync(Guid processId, TaskStatus status, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<UserTask>> GetByStatusAsync(Guid processId, TaskStatus status, CancellationToken cancellationToken = default)
     {
         return await _context.Tasks
             .Where(t => t.ProcessId == processId && t.Status == status)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IEnumerable<TaskEntity>> GetByAssigneeAsync(string assignee, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<UserTask>> GetByAssigneeAsync(string assignee, CancellationToken cancellationToken = default)
     {
         return await _context.Tasks
             .Where(t => t.AssignedTo == assignee)

@@ -9,6 +9,7 @@ public enum TokenState
     Active,
     Waiting,
     Completed,
-    Terminated
+    Terminated,
+    Failed
 }
 

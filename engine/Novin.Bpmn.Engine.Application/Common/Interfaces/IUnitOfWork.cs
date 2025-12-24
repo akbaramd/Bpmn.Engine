@@ -7,7 +7,6 @@ public interface IUnitOfWork : IDisposable
 {
     IDeploymentRepository Deployments { get; }
     IProcessRepository Processes { get; }
-    INodeRepository Nodes { get; }
     ITokenRepository Tokens { get; }
     ITaskRepository Tasks { get; }
     

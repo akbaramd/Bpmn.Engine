@@ -5,370 +5,304 @@ using Novin.Bpmn.Engine.Domain.ValueObjects;
 namespace Novin.Bpmn.Engine.Domain.Entities;
 
 /// <summary>
-/// Aggregate root representing a token in BPMN execution flow
+/// Production-ready BPMN execution token (event-driven)
+/// - Emits events for all state transitions
+/// - Supports fork/merge correlation via ScopeId and ArrivedViaFlowId
+/// - Supports bypass tokens via IsExecutable=false
 /// </summary>
-public class Token : BaseAggregateRoot
+public sealed class Token : BaseAggregateRoot
 {
     public Guid ProcessId { get; private set; }
-    public string CurrentElementId { get; private set; }
-    public Guid? CurrentNodeId { get; private set; }
+    public string CurrentElementId { get; private set; } = default!;
     public TokenState State { get; private set; }
-    public Guid? ParentTokenId { get; private set; }
+
+    /// <summary>
+    /// If false => bypass-only token, never executes activities (only moves)
+    /// </summary>
+    public bool IsExecutable { get; private set; } = true;
+
+    /// <summary>
+    /// Correlation scope for fork/merge groups
+    /// </summary>
+    public Guid? ScopeId { get; private set; }
+
+    /// <summary>
+    /// Incoming SequenceFlow id that brought token to CurrentElementId
+    /// (used for merge barrier accounting)
+    /// </summary>
+    public string? ArrivedViaFlowId { get; private set; }
+
+    private readonly List<Guid> _parentTokenIds = new();
+    public IReadOnlyCollection<Guid> ParentTokenIds => _parentTokenIds.AsReadOnly();
+
+    // Token-scoped variables (optional; keep small)
+    private readonly Dictionary<string, object> _variables = new();
+    public IReadOnlyDictionary<string, object> Variables => _variables;
+
     public DateTime CreatedAt { get; private set; }
     public DateTime? ActivatedAt { get; private set; }
     public DateTime? CompletedAt { get; private set; }
-    
-    // History of nodes this token has passed through (Child Entities)
-    private readonly List<TokenHistoryEntry> _tokenHistory = new();
-    public IReadOnlyCollection<TokenHistoryEntry> TokenHistory => _tokenHistory.AsReadOnly();
-    
-    // Parent node IDs (for Fork/Join scenarios)
-    private readonly List<Guid> _parentNodeIds = new();
-    public IReadOnlyCollection<Guid> ParentNodeIds => _parentNodeIds.AsReadOnly();
-    
-    // Next nodes that token will visit (element IDs)
-    private readonly List<string> _nextNodes = new();
-    public IReadOnlyCollection<string> NextNodes => _nextNodes.AsReadOnly();
-    
-    private readonly List<string> _history = new();
-    public IReadOnlyCollection<string> History => _history.AsReadOnly();
 
-    private Token() : base()
+    private Token()
     {
         State = TokenState.Created;
         CreatedAt = DateTime.UtcNow;
     }
 
-    public Token(Guid processId, string initialElementId, Guid initialNodeId, Guid? parentTokenId = null) : this()
+    public Token(Guid processId, string startElementId, IEnumerable<Guid>? parentTokenIds = null)
+        : this()
     {
         if (processId == Guid.Empty)
-            throw new ArgumentException("Process ID cannot be empty", nameof(processId));
-        
-        if (string.IsNullOrWhiteSpace(initialElementId))
-            throw new ArgumentException("Initial element ID cannot be null or empty", nameof(initialElementId));
+            throw new ArgumentException("ProcessId cannot be empty", nameof(processId));
 
-        if (initialNodeId == Guid.Empty)
-            throw new ArgumentException("Initial node ID cannot be empty", nameof(initialNodeId));
+        if (string.IsNullOrWhiteSpace(startElementId))
+            throw new ArgumentException("Start element cannot be empty", nameof(startElementId));
 
         ProcessId = processId;
-        CurrentElementId = initialElementId;
-        CurrentNodeId = initialNodeId;
-        ParentTokenId = parentTokenId;
-        
-        AddToHistory($"Token created at element: {initialElementId} in node: {initialNodeId}");
-        AddDomainEvent(new TokenCreatedEvent(Id, ProcessId, initialElementId, parentTokenId, CreatedAt));
+        CurrentElementId = startElementId;
+
+        if (parentTokenIds != null)
+            _parentTokenIds.AddRange(parentTokenIds.Where(x => x != Guid.Empty).Distinct());
+
+        AddDomainEvent(new TokenCreatedEvent(
+            TokenId: Id,
+            ProcessId: ProcessId,
+            StartElementId: startElementId,
+            ParentTokenIds: _parentTokenIds.AsReadOnly(),
+            OccurredAtUtc: CreatedAt));
     }
 
+    // -------------------- Lifecycle --------------------
+
+    /// <summary>
+    /// Activate token and immediately request processing of current element.
+    /// </summary>
     public void Activate()
     {
-        if (State != TokenState.Created)
-            throw new InvalidOperationException($"Cannot activate token in {State} state.");
+        EnsureState(TokenState.Created);
 
         State = TokenState.Active;
         ActivatedAt = DateTime.UtcNow;
-        
+
+        AddDomainEvent(new TokenActivatedEvent(
+            TokenId: Id,
+            ProcessId: ProcessId,
+            ElementId: CurrentElementId,
+            OccurredAtUtc: DateTime.UtcNow,
+            IsExecutable: IsExecutable));
+
+        RequestProcessing();
     }
 
     /// <summary>
-    /// Moves token to the next step (element and node)
+    /// Put token into waiting state (user task / catch event / join barrier).
     /// </summary>
-    public void MoveToNextStep(string nextElementId, Guid nextNodeId)
+    public void Wait(string? reason = null)
     {
-        if (string.IsNullOrWhiteSpace(nextElementId))
-            throw new ArgumentException("Next element ID cannot be null or empty", nameof(nextElementId));
-
-        if (nextNodeId == Guid.Empty)
-            throw new ArgumentException("Next node ID cannot be empty", nameof(nextNodeId));
-
-        if (State != TokenState.Active)
-            throw new InvalidOperationException($"Cannot move token in {State} state. Token must be Active.");
-
-        if (!CurrentNodeId.HasValue)
-            throw new InvalidOperationException("Token must be in a node before moving to next step.");
-
-        var fromElementId = CurrentElementId;
-        var fromNodeId = CurrentNodeId.Value;
-        
-        // Add previous node as parent
-        if (!_parentNodeIds.Contains(fromNodeId))
-        {
-            _parentNodeIds.Add(fromNodeId);
-        }
-
-        // Update current position
-        CurrentElementId = nextElementId;
-        CurrentNodeId = nextNodeId;
-        
-        // Remove from next nodes if it was planned
-        _nextNodes.Remove(nextElementId);
-        
-        AddToHistory($"Token moved from {fromElementId} (Node: {fromNodeId}) to {nextElementId} (Node: {nextNodeId})");
-        AddDomainEvent(new TokenMovedEvent(Id, ProcessId, fromElementId, nextElementId, DateTime.UtcNow));
-    }
-
-    public void Wait()
-    {
-        if (State != TokenState.Active)
-            throw new InvalidOperationException($"Cannot set token to waiting in {State} state.");
+        EnsureState(TokenState.Active);
 
         State = TokenState.Waiting;
-        
+
+        AddDomainEvent(new TokenWaitingEvent(
+            TokenId: Id,
+            ProcessId: ProcessId,
+            ElementId: CurrentElementId,
+            Reason: reason,
+            OccurredAtUtc: DateTime.UtcNow,
+            IsExecutable: IsExecutable,
+            ScopeId: ScopeId));
     }
 
+    /// <summary>
+    /// Resume token and request processing again.
+    /// </summary>
     public void Resume()
     {
-        if (State != TokenState.Waiting)
-            throw new InvalidOperationException($"Cannot resume token in {State} state. Token must be Waiting.");
+        EnsureState(TokenState.Waiting);
 
         State = TokenState.Active;
-        
+
+        AddDomainEvent(new TokenResumedEvent(
+            TokenId: Id,
+            ProcessId: ProcessId,
+            ElementId: CurrentElementId,
+            OccurredAtUtc: DateTime.UtcNow,
+            IsExecutable: IsExecutable,
+            ScopeId: ScopeId));
+
+        RequestProcessing();
     }
 
     public void Complete()
     {
-        if (State != TokenState.Active)
-            throw new InvalidOperationException($"Cannot complete token in {State} state. Token must be Active.");
+        EnsureState(TokenState.Active);
 
         State = TokenState.Completed;
         CompletedAt = DateTime.UtcNow;
-        
+
+        AddDomainEvent(new TokenCompletedEvent(
+            TokenId: Id,
+            ProcessId: ProcessId,
+            ElementId: CurrentElementId,
+            OccurredAtUtc: DateTime.UtcNow,
+            IsExecutable: IsExecutable,
+            ScopeId: ScopeId));
     }
 
-    public void Terminate()
+    public void Fail(string error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+            throw new ArgumentException("Error cannot be empty", nameof(error));
+
+        if (State is TokenState.Completed or TokenState.Terminated)
+            throw new InvalidOperationException($"Cannot fail token in {State} state.");
+
+        State = TokenState.Failed;
+
+        AddDomainEvent(new TokenFailedEvent(
+            TokenId: Id,
+            ProcessId: ProcessId,
+            ElementId: CurrentElementId,
+            Error: error,
+            OccurredAtUtc: DateTime.UtcNow,
+            IsExecutable: IsExecutable,
+            ScopeId: ScopeId));
+    }
+
+    public void Terminate(string? reason = null)
     {
         if (State == TokenState.Completed)
-            throw new InvalidOperationException("Cannot terminate a completed token.");
+            throw new InvalidOperationException("Completed token cannot be terminated.");
 
         State = TokenState.Terminated;
-        
+
+        AddDomainEvent(new TokenTerminatedEvent(
+            TokenId: Id,
+            ProcessId: ProcessId,
+            ElementId: CurrentElementId,
+            Reason: reason,
+            OccurredAtUtc: DateTime.UtcNow,
+            IsExecutable: IsExecutable,
+            ScopeId: ScopeId));
     }
 
-    /// <summary>
-    /// Token reaches a node (enters the node)
-    /// </summary>
-    public void Reach(Guid nodeId, string elementId, Guid? parentNodeId = null)
-    {
-        if (nodeId == Guid.Empty)
-            throw new ArgumentException("Node ID cannot be empty", nameof(nodeId));
-
-        if (string.IsNullOrWhiteSpace(elementId))
-            throw new ArgumentException("Element ID cannot be null or empty", nameof(elementId));
-
-        if (State != TokenState.Active && State != TokenState.Created)
-            throw new InvalidOperationException($"Cannot reach node in {State} state. Token must be Active or Created.");
-
-        var previousNodeId = CurrentNodeId;
-        var previousElementId = CurrentElementId;
-
-        // Add previous node as parent if exists
-        if (previousNodeId.HasValue && !_parentNodeIds.Contains(previousNodeId.Value))
-        {
-            _parentNodeIds.Add(previousNodeId.Value);
-        }
-
-        // Add parent node if provided (for Fork scenarios)
-        if (parentNodeId.HasValue && parentNodeId.Value != Guid.Empty && !_parentNodeIds.Contains(parentNodeId.Value))
-        {
-            _parentNodeIds.Add(parentNodeId.Value);
-        }
-
-        CurrentNodeId = nodeId;
-        CurrentElementId = elementId;
-
-        // Remove from next nodes if it was planned
-        _nextNodes.Remove(elementId);
-        
-        AddToHistory($"Token reached node {nodeId} at element {elementId} (from: {previousElementId ?? "start"})");
-        
-        // If token was just created, activate it
-        if (State == TokenState.Created)
-        {
-            Activate();
-        }
-    }
+    // -------------------- Movement --------------------
 
     /// <summary>
-    /// Token enters a node (legacy method, use Reach instead)
+    /// Move token to another BPMN element (and request processing automatically).
+    /// viaFlowId is required for merge accounting (incoming flow id).
     /// </summary>
-    public void EnterNode(Guid nodeId, string elementId)
+    public void MoveTo(string nextElementId, string? viaFlowId)
     {
-        Reach(nodeId, elementId);
-    }
+        EnsureState(TokenState.Active);
 
-    /// <summary>
-    /// Token leaves the current node
-    /// </summary>
-    public void Leave()
-    {
-        if (!CurrentNodeId.HasValue)
-            throw new InvalidOperationException("Token is not currently in any node.");
-
-        var nodeId = CurrentNodeId.Value;
-        var elementId = CurrentElementId;
-        
-        CurrentNodeId = null;
-        
-        AddToHistory($"Token left node {nodeId} at element {elementId}");
-    }
-
-    /// <summary>
-    /// Token leaves node (legacy method, use Leave instead)
-    /// </summary>
-    public void LeaveNode()
-    {
-        Leave();
-    }
-
-    /// <summary>
-    /// Checks if token is currently in a node
-    /// </summary>
-    public bool IsInNode()
-    {
-        return CurrentNodeId.HasValue;
-    }
-
-    /// <summary>
-    /// Checks if token is at a specific node
-    /// </summary>
-    public bool IsAtNode(Guid nodeId)
-    {
-        return CurrentNodeId == nodeId;
-    }
-
-    /// <summary>
-    /// Checks if token is at a specific element
-    /// </summary>
-    public bool IsAtElement(string elementId)
-    {
-        return CurrentElementId == elementId;
-    }
-
-    /// <summary>
-    /// Adds next nodes that token will visit (for Gateway/Fork scenarios)
-    /// </summary>
-    public void AddNextNodes(IEnumerable<string> nextElementIds)
-    {
-        if (nextElementIds == null)
-            throw new ArgumentNullException(nameof(nextElementIds));
-
-        foreach (var elementId in nextElementIds)
-        {
-            if (!string.IsNullOrWhiteSpace(elementId) && !_nextNodes.Contains(elementId))
-            {
-                _nextNodes.Add(elementId);
-            }
-        }
-
-        AddToHistory($"Token planned to visit next nodes: {string.Join(", ", nextElementIds)}");
-    }
-
-    /// <summary>
-    /// Adds a single next node
-    /// </summary>
-    public void AddNextNode(string nextElementId)
-    {
         if (string.IsNullOrWhiteSpace(nextElementId))
-            throw new ArgumentException("Next element ID cannot be null or empty", nameof(nextElementId));
+            throw new ArgumentException("Next element id cannot be empty", nameof(nextElementId));
 
-        if (!_nextNodes.Contains(nextElementId))
-        {
-            _nextNodes.Add(nextElementId);
-            AddToHistory($"Token planned to visit next node: {nextElementId}");
-        }
+        var from = CurrentElementId;
+
+        CurrentElementId = nextElementId;
+        ArrivedViaFlowId = viaFlowId;
+
+        AddDomainEvent(new TokenMovedEvent(
+            TokenId: Id,
+            ProcessId: ProcessId,
+            FromElementId: from,
+            ToElementId: nextElementId,
+            ViaFlowId: viaFlowId,
+            OccurredAtUtc: DateTime.UtcNow,
+            IsExecutable: IsExecutable,
+            ScopeId: ScopeId));
+
+        RequestProcessing();
     }
 
-    /// <summary>
-    /// Clears all next nodes
-    /// </summary>
-    public void ClearNextNodes()
+    private void RequestProcessing()
     {
-        _nextNodes.Clear();
-        AddToHistory("Token next nodes cleared");
+        AddDomainEvent(new TokenProcessingRequestedEvent(
+            TokenId: Id,
+            ProcessId: ProcessId,
+            ElementId: CurrentElementId,
+            OccurredAtUtc: DateTime.UtcNow,
+            IsExecutable: IsExecutable,
+            ScopeId: ScopeId,
+            ArrivedViaFlowId: ArrivedViaFlowId));
     }
 
-    /// <summary>
-    /// Adds a history entry when token reaches a node
-    /// Internal method - only callable from within the Domain layer (aggregate roots)
-    /// </summary>
-    internal void AddHistoryEntry(Guid nodeId, string elementId, string nodeName, TokenState state, Dictionary<string, object>? variables = null)
+    // -------------------- Fork/Merge correlation --------------------
+
+    public void MarkNonExecutable(string? reason = null)
     {
-        var historyEntry = new TokenHistoryEntry(
-            Id,
-            nodeId,
-            elementId,
-            nodeName,
-            DateTime.UtcNow,
-            state,
-            variables);
-        
-        _tokenHistory.Add(historyEntry);
+        if (!IsExecutable) return;
+
+        IsExecutable = false;
+
+        AddDomainEvent(new TokenBecameNonExecutableEvent(
+            TokenId: Id,
+            ProcessId: ProcessId,
+            ElementId: CurrentElementId,
+            OccurredAtUtc: DateTime.UtcNow,
+            ScopeId: ScopeId));
     }
 
-    /// <summary>
-    /// Marks the last history entry as left
-    /// </summary>
-    public void MarkLastHistoryEntryLeft()
+    public void SetScope(Guid scopeId)
     {
-        var lastEntry = _tokenHistory.LastOrDefault();
-        if (lastEntry != null && !lastEntry.LeftAt.HasValue)
-        {
-            lastEntry.MarkLeft(DateTime.UtcNow);
-        }
+        if (scopeId == Guid.Empty)
+            throw new ArgumentException("ScopeId cannot be empty", nameof(scopeId));
+
+        ScopeId = scopeId;
+
+        AddDomainEvent(new TokenScopeAssignedEvent(
+            TokenId: Id,
+            ProcessId: ProcessId,
+            ScopeId: scopeId,
+            OccurredAtUtc: DateTime.UtcNow));
     }
 
-    /// <summary>
-    /// Checks if token has visited a specific node
-    /// </summary>
-    public bool HasVisitedNode(Guid nodeId)
+    public void ClearScope() => ScopeId = null;
+
+    public void ClearArrivedVia() => ArrivedViaFlowId = null;
+
+    // -------------------- Variables --------------------
+
+    public void SetVariable(string name, object value)
     {
-        return _tokenHistory.Any(th => th.NodeId == nodeId);
+        EnsureNotTerminal();
+
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Variable name cannot be empty", nameof(name));
+
+        _variables[name] = value;
     }
 
-    /// <summary>
-    /// Checks if token has visited a specific element
-    /// </summary>
-    public bool HasVisitedElement(string elementId)
+    public bool TryGetVariable(string name, out object? value)
     {
-        return _tokenHistory.Any(th => th.ElementId == elementId);
+        value = null;
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        return _variables.TryGetValue(name, out value);
     }
 
-    /// <summary>
-    /// Gets the last visited node
-    /// </summary>
-    public TokenHistoryEntry? GetLastHistoryEntry()
+    public object GetVariable(string name)
     {
-        return _tokenHistory.LastOrDefault();
+        if (!_variables.TryGetValue(name, out var value))
+            throw new KeyNotFoundException($"Variable '{name}' not found.");
+
+        return value;
     }
 
-    /// <summary>
-    /// Gets history entries for a specific node
-    /// </summary>
-    public IEnumerable<TokenHistoryEntry> GetHistoryEntriesForNode(Guid nodeId)
+    public bool HasVariable(string name) => _variables.ContainsKey(name);
+
+    // -------------------- Guards --------------------
+
+    private void EnsureState(TokenState required)
     {
-        return _tokenHistory.Where(th => th.NodeId == nodeId);
+        if (State != required)
+            throw new InvalidOperationException($"Token must be in {required} state but is {State}.");
     }
 
-    /// <summary>
-    /// Fork token - creates child tokens for parallel execution
-    /// Returns the next element IDs (not node IDs) so handler can create child tokens
-    /// </summary>
-    public List<string> Fork(IEnumerable<string> nextElementIds)
+    private void EnsureNotTerminal()
     {
-        if (nextElementIds == null || !nextElementIds.Any())
-            throw new ArgumentException("Next element IDs cannot be null or empty", nameof(nextElementIds));
-
-        // Add all next nodes
-        AddNextNodes(nextElementIds);
-
-        AddToHistory($"Token forked to {nextElementIds.Count()} paths: {string.Join(", ", nextElementIds)}");
-
-        // Return the next element IDs so handler can create child tokens
-        return nextElementIds.ToList();
-    }
-
-    private void AddToHistory(string entry)
-    {
-        _history.Add($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] {entry}");
+        if (State is TokenState.Completed or TokenState.Terminated)
+            throw new InvalidOperationException($"Token is terminal: {State}");
     }
 }
-

@@ -5,7 +5,6 @@ using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 using Novin.Bpmn.Models.Models;
-using Node = Novin.Bpmn.Engine.Domain.Entities.Node;
 
 namespace Novin.Bpmn.Engine.Application.Commands.StartProcess;
 

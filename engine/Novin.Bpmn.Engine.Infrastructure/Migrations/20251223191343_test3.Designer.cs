@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Novin.Bpmn.Engine.Infrastructure.Persistence;
 
@@ -10,9 +11,11 @@ using Novin.Bpmn.Engine.Infrastructure.Persistence;
 namespace Novin.Bpmn.Engine.Infrastructure.Migrations
 {
     [DbContext(typeof(BpmnEngineDbContext))]
-    partial class BpmnEngineDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251223191343_test3")]
+    partial class test3
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.0");
@@ -103,10 +106,6 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                     b.Property<DateTime?>("ActivatedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("ArrivedViaFlowId")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("TEXT");
 
@@ -118,25 +117,20 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("IsExecutable")
-                        .HasColumnType("INTEGER");
-
                     b.Property<Guid>("ProcessId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("ScopeId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Variables")
-                        .IsRequired()
+                    b.Property<string>("_history")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("_parentTokenIds")
-                        .IsRequired()
+                    b.Property<string>("_nextNodes")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("_parentNodeIds")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");

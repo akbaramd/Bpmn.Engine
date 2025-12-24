@@ -7,7 +7,5 @@ namespace Novin.Bpmn.Engine.Domain.Common;
 /// </summary>
 public interface IDomainEvent : INotification
 {
-    Guid EventId { get; }
-    DateTime OccurredOn { get; }
 }
 

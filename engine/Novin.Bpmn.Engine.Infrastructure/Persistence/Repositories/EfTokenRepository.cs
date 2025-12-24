@@ -21,14 +21,12 @@ public class EfTokenRepository : ITokenRepository
     public async Task<Token?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.Tokens
-            .Include(t => t.TokenHistory)
             .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
     }
 
     public async Task<IEnumerable<Token>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _context.Tokens
-            .Include(t => t.TokenHistory)
             .ToListAsync(cancellationToken);
     }
 
@@ -53,7 +51,6 @@ public class EfTokenRepository : ITokenRepository
     public async Task<IEnumerable<Token>> GetByProcessIdAsync(Guid processId, CancellationToken cancellationToken = default)
     {
         return await _context.Tokens
-            .Include(t => t.TokenHistory)
             .Where(t => t.ProcessId == processId)
             .ToListAsync(cancellationToken);
     }
@@ -61,7 +58,6 @@ public class EfTokenRepository : ITokenRepository
     public async Task<IEnumerable<Token>> GetByStateAsync(Guid processId, TokenState state, CancellationToken cancellationToken = default)
     {
         return await _context.Tokens
-            .Include(t => t.TokenHistory)
             .Where(t => t.ProcessId == processId && t.State == state)
             .ToListAsync(cancellationToken);
     }
@@ -69,7 +65,6 @@ public class EfTokenRepository : ITokenRepository
     public async Task<IEnumerable<Token>> GetByElementIdAsync(Guid processId, string elementId, CancellationToken cancellationToken = default)
     {
         return await _context.Tokens
-            .Include(t => t.TokenHistory)
             .Where(t => t.ProcessId == processId && t.CurrentElementId == elementId)
             .ToListAsync(cancellationToken);
     }
@@ -77,8 +72,7 @@ public class EfTokenRepository : ITokenRepository
     public async Task<IEnumerable<Token>> GetChildTokensAsync(Guid parentTokenId, CancellationToken cancellationToken = default)
     {
         return await _context.Tokens
-            .Include(t => t.TokenHistory)
-            .Where(t => t.ParentTokenId == parentTokenId)
+            .Where(t => t.ParentTokenIds.Any(x=>x == parentTokenId) )
             .ToListAsync(cancellationToken);
     }
 }

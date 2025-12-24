@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Infrastructure.EventBus;
-using Novin.Bpmn.Engine.Infrastructure.EventStore;
 using Novin.Bpmn.Engine.Infrastructure.Persistence;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.Repositories;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.UnitOfWork;
@@ -20,11 +19,6 @@ public static class DependencyInjection
             options.EnableSensitiveDataLogging(); // For development only
         });
 
-        // Event Bus
-        services.AddSingleton<IEventBus, InMemoryEventBus>();
-        
-        // Event Store
-        services.AddSingleton<IEventStore, InMemoryEventStore>();
         
         // Domain Event Dispatcher
         services.AddScoped<DomainEventDispatcher>();
@@ -32,7 +26,6 @@ public static class DependencyInjection
         // EF Core Repositories (Scoped - one per request/operation, tied to DbContext)
         services.AddScoped<IDeploymentRepository, EfDeploymentRepository>();
         services.AddScoped<IProcessRepository, EfProcessRepository>();
-        services.AddScoped<INodeRepository, EfNodeRepository>();
         services.AddScoped<ITokenRepository, EfTokenRepository>();
         services.AddScoped<ITaskRepository, EfTaskRepository>();
         

@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Novin.Bpmn.Engine.Domain.Common;
 using Novin.Bpmn.Engine.Domain.Events;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
@@ -6,225 +9,187 @@ namespace Novin.Bpmn.Engine.Domain.Entities;
 
 /// <summary>
 /// Aggregate root representing a BPMN process instance
+/// (token-driven, history-free, engine-safe)
 /// </summary>
-public class Process : BaseAggregateRoot
+public sealed class Process : BaseAggregateRoot
 {
     public string Name { get; private set; }
     public string ProcessDefinitionId { get; private set; }
     public ProcessState State { get; private set; }
-    public Dictionary<string, object> Variables { get; private set; }
+
     public DateTime CreatedAt { get; private set; }
     public DateTime? StartedAt { get; private set; }
     public DateTime? CompletedAt { get; private set; }
-    
-    // References to other aggregates (by ID only, following DDD principles)
-    private readonly List<Guid> _tokenIds = new();
-    public IReadOnlyCollection<Guid> TokenIds => _tokenIds.AsReadOnly();
-    
-    
-    // History of executed nodes in this process
-    private readonly List<ProcessHistory> _history = new();
-    public IReadOnlyCollection<ProcessHistory> History => _history.AsReadOnly();
 
-    private Process() : base()
+    // Tokens belong to the process (IDs only – DDD safe)
+    private readonly HashSet<Guid> _tokenIds = new();
+    public IReadOnlyCollection<Guid> TokenIds => _tokenIds;
+
+    // Variables for dynamic state
+    private readonly Dictionary<string, object> _variables = new();
+    public IReadOnlyDictionary<string, object> Variables => _variables;
+
+    private Process()
     {
-        Variables = new Dictionary<string, object>();
         State = ProcessState.Created;
         CreatedAt = DateTime.UtcNow;
     }
 
-    public Process(string name, string processDefinitionId, Dictionary<string, object>? initialVariables = null) : this()
+    public Process(
+        string name,
+        string processDefinitionId, Dictionary<string,object>? init) : this()
     {
         if (string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("Process name cannot be null or empty", nameof(name));
-        
+            throw new ArgumentException("Process name cannot be empty", nameof(name));
+
         if (string.IsNullOrWhiteSpace(processDefinitionId))
-            throw new ArgumentException("Process definition ID cannot be null or empty", nameof(processDefinitionId));
+            throw new ArgumentException("Process definition id cannot be empty", nameof(processDefinitionId));
 
         Name = name;
         ProcessDefinitionId = processDefinitionId;
-        Variables = initialVariables ?? new Dictionary<string, object>();
-        
-        AddDomainEvent(new ProcessCreatedEvent(Id, Name, ProcessDefinitionId, CreatedAt));
+        if (init != null)
+            foreach (var kv in init)
+                _variables[kv.Key] = kv.Value;
+
+        AddDomainEvent(new ProcessCreatedEvent(
+            Id,
+            Name,
+            ProcessDefinitionId,
+            CreatedAt));
     }
+
+    // -------------------- Lifecycle --------------------
 
     public void Start()
     {
-        if (State != ProcessState.Created)
-            throw new InvalidOperationException($"Cannot start process in {State} state. Process must be in Created state.");
+        EnsureState(ProcessState.Created);
 
         State = ProcessState.Running;
         StartedAt = DateTime.UtcNow;
-        
+
         AddDomainEvent(new ProcessStartedEvent(Id, StartedAt.Value));
     }
 
     public void Complete()
     {
-        if (State != ProcessState.Running)
-            throw new InvalidOperationException($"Cannot complete process in {State} state. Process must be in Running state.");
+        EnsureState(ProcessState.Running);
+
+        if (_tokenIds.Count > 0)
+            throw new InvalidOperationException(
+                "Cannot complete process while active tokens exist.");
 
         State = ProcessState.Completed;
         CompletedAt = DateTime.UtcNow;
-        
+
         AddDomainEvent(new ProcessCompletedEvent(Id, CompletedAt.Value));
     }
 
     public void Suspend()
     {
-        if (State != ProcessState.Running)
-            throw new InvalidOperationException($"Cannot suspend process in {State} state. Process must be in Running state.");
+        EnsureState(ProcessState.Running);
 
         State = ProcessState.Suspended;
-        
         AddDomainEvent(new ProcessSuspendedEvent(Id, DateTime.UtcNow));
     }
 
     public void Resume()
     {
-        if (State != ProcessState.Suspended)
-            throw new InvalidOperationException($"Cannot resume process in {State} state. Process must be in Suspended state.");
+        EnsureState(ProcessState.Suspended);
 
         State = ProcessState.Running;
-        
         AddDomainEvent(new ProcessResumedEvent(Id, DateTime.UtcNow));
     }
 
     public void Terminate(string? reason = null)
     {
-        if (State == ProcessState.Completed || State == ProcessState.Terminated)
-            throw new InvalidOperationException($"Cannot terminate process in {State} state.");
+        if (State is ProcessState.Completed or ProcessState.Terminated)
+            throw new InvalidOperationException(
+                $"Cannot terminate process in {State} state.");
 
         State = ProcessState.Terminated;
-        
         AddDomainEvent(new ProcessTerminatedEvent(Id, DateTime.UtcNow, reason));
     }
 
     public void Fail(string errorMessage)
     {
         if (string.IsNullOrWhiteSpace(errorMessage))
-            throw new ArgumentException("Error message cannot be null or empty", nameof(errorMessage));
+            throw new ArgumentException("Error message cannot be empty", nameof(errorMessage));
 
         State = ProcessState.Failed;
-        
         AddDomainEvent(new ProcessFailedEvent(Id, DateTime.UtcNow, errorMessage));
     }
 
-    public void SetVariable(string key, object value)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Variable key cannot be null or empty", nameof(key));
+    // -------------------- Token Ownership --------------------
 
-        Variables[key] = value;
-        
-        AddDomainEvent(new ProcessVariableUpdatedEvent(Id, key, value, DateTime.UtcNow));
-    }
-
-   
-    /// <summary>
-    /// Adds a token to the process
-    /// </summary>
     public void AddToken(Guid tokenId)
     {
+        EnsureState(ProcessState.Running);
+
         if (tokenId == Guid.Empty)
-            throw new ArgumentException("Token ID cannot be empty", nameof(tokenId));
+            throw new ArgumentException("Token id cannot be empty", nameof(tokenId));
 
-        if (_tokenIds.Contains(tokenId))
-            throw new InvalidOperationException($"Token {tokenId} is already part of this process.");
-
-        _tokenIds.Add(tokenId);
+        if (!_tokenIds.Add(tokenId))
+            throw new InvalidOperationException(
+                $"Token {tokenId} already exists in process.");
     }
 
-    /// <summary>
-    /// Removes a token from the process
-    /// </summary>
     public void RemoveToken(Guid tokenId)
     {
         if (!_tokenIds.Remove(tokenId))
-            throw new InvalidOperationException($"Token {tokenId} is not part of this process.");
+            throw new InvalidOperationException(
+                $"Token {tokenId} does not belong to process.");
+    }
+
+    public bool HasActiveTokens() => _tokenIds.Count > 0;
+
+    // -------------------- Variables --------------------
+
+    /// <summary>
+    /// Set a variable for the process
+    /// </summary>
+    public void SetVariable(string name, object value)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Variable name cannot be null or empty", nameof(name));
+
+        _variables[name] = value;
+
+        AddToHistory($"Variable {name} set to {value}");
     }
 
     /// <summary>
-    /// Records a node execution in the process history
+    /// Get a variable for the process
     /// </summary>
-    public void RecordNodeExecution(Guid nodeId, string elementId, string nodeName, NodeState state, Guid? tokenId = null)
+    public object GetVariable(string name)
     {
-        if (nodeId == Guid.Empty)
-            throw new ArgumentException("Node ID cannot be empty", nameof(nodeId));
+        if (!_variables.ContainsKey(name))
+            throw new KeyNotFoundException($"Variable '{name}' not found.");
 
-        if (string.IsNullOrWhiteSpace(elementId))
-            throw new ArgumentException("Element ID cannot be null or empty", nameof(elementId));
-
-        if (string.IsNullOrWhiteSpace(nodeName))
-            throw new ArgumentException("Node name cannot be null or empty", nameof(nodeName));
-
-        var historyEntry = new ProcessHistory(
-            Id,
-            nodeId,
-            elementId,
-            nodeName,
-            state,
-            tokenId);
-
-        _history.Add(historyEntry);
+        return _variables[name];
     }
 
     /// <summary>
-    /// Records that a token has reached a node in the token's history
-    /// This method coordinates between Process, Token, and Node aggregates
-    /// Only callable from within the Domain layer (aggregate roots)
+    /// Check if the process has a specific variable
     /// </summary>
-    public void RecordTokenNodeReached(Token token, Node node, Dictionary<string, object>? variables = null)
+    public bool HasVariable(string name)
     {
-        if (token == null)
-            throw new ArgumentNullException(nameof(token));
-
-        if (node == null)
-            throw new ArgumentNullException(nameof(node));
-
-        if (token.ProcessId != Id)
-            throw new InvalidOperationException($"Token {token.Id} does not belong to process {Id}.");
-
-        if (node.ProcessId != Id)
-            throw new InvalidOperationException($"Node {node.Id} does not belong to process {Id}.");
-
-        // Call internal method on Token to add history entry
-        // This is allowed since both are in the same Domain assembly
-        token.AddHistoryEntry(node.Id, node.ElementId, node.NodeName, token.State, variables);
+        return _variables.ContainsKey(name);
     }
 
-    /// <summary>
-    /// Gets the execution history for a specific node
-    /// </summary>
-    public IEnumerable<ProcessHistory> GetNodeExecutionHistory(Guid nodeId)
+    // -------------------- Guards --------------------
+
+    private void EnsureState(ProcessState required)
     {
-        return _history.Where(e => e.NodeId == nodeId);
+        if (State != required)
+            throw new InvalidOperationException(
+                $"Process must be in {required} state but is {State}.");
     }
 
-    /// <summary>
-    /// Gets the execution history for a specific element
-    /// </summary>
-    public IEnumerable<ProcessHistory> GetElementExecutionHistory(string elementId)
-    {
-        return _history.Where(e => e.ElementId == elementId);
-    }
+    // -------------------- History --------------------
 
-    /// <summary>
-    /// Gets all history entries
-    /// </summary>
-    public IEnumerable<ProcessHistory> GetAllHistory()
+    private void AddToHistory(string entry)
     {
-        return _history.AsEnumerable();
-    }
-
-    /// <summary>
-    /// Checks if all tokens are completed
-    /// </summary>
-    public bool AreAllTokensCompleted()
-    {
-        // This would need to check token states through repository
-        // For now, we'll assume process completion is handled externally
-        return false;
+        // You can implement a proper history mechanism here
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] {entry}");
     }
 }
-

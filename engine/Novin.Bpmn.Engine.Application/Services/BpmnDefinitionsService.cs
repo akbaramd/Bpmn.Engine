@@ -26,7 +26,13 @@ public class BpmnDefinitionsService
         
         return process;
     }
-
+    public bool EvaluateCondition(string condition, Dictionary<string, object> variables)
+    {
+        // This method evaluates a condition (in FEEL or other supported expression language)
+        // The simplest way would be to use something like C# Expression API or an external FEEL evaluator library
+        var expr = new ExpressionEvaluator();
+        return expr.Evaluate(condition, variables);
+    }
     /// <summary>
     /// Gets a process by ID
     /// </summary>
@@ -106,29 +112,32 @@ public class BpmnDefinitionsService
     /// <summary>
     /// Gets the next elements (targets) from an element
     /// </summary>
-    public List<BpmnFlowElement> GetNextElements(string processId, string elementId)
+    public List<BpmnFlowElement> GetNextElements(string processId, string elementId, Dictionary<string, object> variables)
     {
-        var outgoingFlows = GetOutgoingSequenceFlows(processId, elementId);
         var process = GetProcess(processId);
-        var allElements = process.Items?.OfType<BpmnFlowElement>().ToList() ?? new List<BpmnFlowElement>();
+        var element = process.Items?.OfType<BpmnFlowElement>().FirstOrDefault(e => e.id == elementId);
 
+        if (element == null)
+            throw new InvalidOperationException($"Element with id '{elementId}' not found in the process.");
+
+        var outgoingFlows = GetOutgoingSequenceFlows(processId, elementId);
         var nextElements = new List<BpmnFlowElement>();
-        
+
         foreach (var flow in outgoingFlows)
         {
-            if (!string.IsNullOrEmpty(flow.targetRef))
+            if (EvaluateCondition(flow.conditionExpression.Text[0], variables)) // Check condition
             {
-                var targetElement = allElements.FirstOrDefault(e => e.id == flow.targetRef);
-                if (targetElement != null)
-                {
-                    nextElements.Add(targetElement);
-                }
+                nextElements.Add(GetElement(flow.targetRef));
             }
         }
 
         return nextElements;
     }
-
+    public BpmnFlowElement GetElement(string elementId)
+    {
+        return _definitions.Items?.OfType<BpmnFlowElement>().FirstOrDefault(e => e.id == elementId);
+    }
+    
     /// <summary>
     /// Gets the previous elements (sources) of an element
     /// </summary>

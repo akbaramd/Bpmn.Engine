@@ -21,14 +21,12 @@ public class EfProcessRepository : IProcessRepository
     public async Task<Process?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.Processes
-            .Include(p => p.History)
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
     public async Task<IEnumerable<Process>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _context.Processes
-            .Include(p => p.History)
             .ToListAsync(cancellationToken);
     }
 
@@ -58,14 +56,12 @@ public class EfProcessRepository : IProcessRepository
     public async Task<Process?> GetByProcessDefinitionIdAsync(string processDefinitionId, CancellationToken cancellationToken = default)
     {
         return await _context.Processes
-            .Include(p => p.History)
             .FirstOrDefaultAsync(p => p.ProcessDefinitionId == processDefinitionId, cancellationToken);
     }
 
     public async Task<IEnumerable<Process>> GetByStateAsync(ProcessState state, CancellationToken cancellationToken = default)
     {
         return await _context.Processes
-            .Include(p => p.History)
             .Where(p => p.State == state)
             .ToListAsync(cancellationToken);
     }

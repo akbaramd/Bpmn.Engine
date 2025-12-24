@@ -20,7 +20,6 @@ public class EfUnitOfWork : IUnitOfWork
 
     public IDeploymentRepository Deployments { get; }
     public IProcessRepository Processes { get; }
-    public INodeRepository Nodes { get; }
     public ITokenRepository Tokens { get; }
     public ITaskRepository Tasks { get; }
 
@@ -28,7 +27,6 @@ public class EfUnitOfWork : IUnitOfWork
         BpmnEngineDbContext context,
         IDeploymentRepository deploymentRepository,
         IProcessRepository processRepository,
-        INodeRepository nodeRepository,
         ITokenRepository tokenRepository,
         ITaskRepository taskRepository,
         DomainEventDispatcher domainEventDispatcher,
@@ -37,7 +35,6 @@ public class EfUnitOfWork : IUnitOfWork
         _context = context ?? throw new ArgumentNullException(nameof(context));
         Deployments = deploymentRepository ?? throw new ArgumentNullException(nameof(deploymentRepository));
         Processes = processRepository ?? throw new ArgumentNullException(nameof(processRepository));
-        Nodes = nodeRepository ?? throw new ArgumentNullException(nameof(nodeRepository));
         Tokens = tokenRepository ?? throw new ArgumentNullException(nameof(tokenRepository));
         Tasks = taskRepository ?? throw new ArgumentNullException(nameof(taskRepository));
         _domainEventDispatcher = domainEventDispatcher ?? throw new ArgumentNullException(nameof(domainEventDispatcher));
