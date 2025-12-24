@@ -1,308 +1,311 @@
 using Novin.Bpmn.Engine.Domain.Common;
 using Novin.Bpmn.Engine.Domain.Events;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
+using System;
 
-namespace Novin.Bpmn.Engine.Domain.Entities;
-
-/// <summary>
-/// Production-ready BPMN execution token (event-driven)
-/// - Emits events for all state transitions
-/// - Supports fork/merge correlation via ScopeId and ArrivedViaFlowId
-/// - Supports bypass tokens via IsExecutable=false
-/// </summary>
-public sealed class Token : BaseAggregateRoot
+namespace Novin.Bpmn.Engine.Domain.Entities
 {
-    public Guid ProcessId { get; private set; }
-    public string CurrentElementId { get; private set; } = default!;
-    public TokenState State { get; private set; }
-
-    /// <summary>
-    /// If false => bypass-only token, never executes activities (only moves)
-    /// </summary>
-    public bool IsExecutable { get; private set; } = true;
-
-    /// <summary>
-    /// Correlation scope for fork/merge groups
-    /// </summary>
-    public Guid? ScopeId { get; private set; }
-
-    /// <summary>
-    /// Incoming SequenceFlow id that brought token to CurrentElementId
-    /// (used for merge barrier accounting)
-    /// </summary>
-    public string? ArrivedViaFlowId { get; private set; }
-
-    private readonly List<Guid> _parentTokenIds = new();
-    public IReadOnlyCollection<Guid> ParentTokenIds => _parentTokenIds.AsReadOnly();
-
-    // Token-scoped variables (optional; keep small)
-    private readonly Dictionary<string, object> _variables = new();
-    public IReadOnlyDictionary<string, object> Variables => _variables;
-
-    public DateTime CreatedAt { get; private set; }
-    public DateTime? ActivatedAt { get; private set; }
-    public DateTime? CompletedAt { get; private set; }
-
-    private Token()
+    public sealed class Token : BaseAggregateRoot
     {
-        State = TokenState.Created;
-        CreatedAt = DateTime.UtcNow;
-    }
+        public Guid ProcessId { get; private set; }
+        public string CurrentElementId { get; private set; } = default!;
+        public TokenState State { get; private set; }
 
-    public Token(Guid processId, string startElementId, IEnumerable<Guid>? parentTokenIds = null)
-        : this()
-    {
-        if (processId == Guid.Empty)
-            throw new ArgumentException("ProcessId cannot be empty", nameof(processId));
+        /// <summary>
+        /// If false => bypass-only token, never executes activities (only moves)
+        /// </summary>
+        public bool IsExecutable { get; private set; } = true;
 
-        if (string.IsNullOrWhiteSpace(startElementId))
-            throw new ArgumentException("Start element cannot be empty", nameof(startElementId));
+        public Guid? ScopeId { get; private set; }
+        public string? ArrivedViaFlowId { get; private set; }
 
-        ProcessId = processId;
-        CurrentElementId = startElementId;
+        private readonly List<Guid> _parentTokenIds = new();
+        public IReadOnlyCollection<Guid> ParentTokenIds => _parentTokenIds.AsReadOnly();
 
-        if (parentTokenIds != null)
-            _parentTokenIds.AddRange(parentTokenIds.Where(x => x != Guid.Empty).Distinct());
+        private readonly Dictionary<string, object> _variables = new();
+        public IReadOnlyDictionary<string, object> Variables => _variables;
 
-        AddDomainEvent(new TokenCreatedEvent(
-            TokenId: Id,
-            ProcessId: ProcessId,
-            StartElementId: startElementId,
-            ParentTokenIds: _parentTokenIds.AsReadOnly(),
-            OccurredAtUtc: CreatedAt));
-    }
+        public DateTime CreatedAt { get; private set; }
+        public DateTime? ActivatedAt { get; private set; }
+        public DateTime? CompletedAt { get; private set; }
 
-    // -------------------- Lifecycle --------------------
+        private Token()
+        {
+            State = TokenState.Created;
+            CreatedAt = DateTime.UtcNow;
+        }
 
-    /// <summary>
-    /// Activate token and immediately request processing of current element.
-    /// </summary>
-    public void Activate()
-    {
-        EnsureState(TokenState.Created);
+        public Token(Guid processId, string startElementId, IEnumerable<Guid>? parentTokenIds = null)
+            : this()
+        {
+            if (processId == Guid.Empty)
+                throw new ArgumentException("ProcessId cannot be empty", nameof(processId));
 
-        State = TokenState.Active;
-        ActivatedAt = DateTime.UtcNow;
+            if (string.IsNullOrWhiteSpace(startElementId))
+                throw new ArgumentException("Start element cannot be empty", nameof(startElementId));
 
-        AddDomainEvent(new TokenActivatedEvent(
-            TokenId: Id,
-            ProcessId: ProcessId,
-            ElementId: CurrentElementId,
-            OccurredAtUtc: DateTime.UtcNow,
-            IsExecutable: IsExecutable));
+            ProcessId = processId;
+            CurrentElementId = startElementId;
 
-        RequestProcessing();
-    }
+            if (parentTokenIds != null)
+                _parentTokenIds.AddRange(parentTokenIds.Where(x => x != Guid.Empty).Distinct());
 
-    /// <summary>
-    /// Put token into waiting state (user task / catch event / join barrier).
-    /// </summary>
-    public void Wait(string? reason = null)
-    {
-        EnsureState(TokenState.Active);
+            AddDomainEvent(new TokenCreatedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                StartElementId: startElementId,
+                ParentTokenIds: _parentTokenIds.AsReadOnly(),
+                OccurredAtUtc: CreatedAt));
+        }
 
-        State = TokenState.Waiting;
+        // -------------------- Lifecycle --------------------
+        public void Activate()
+        {
+            EnsureState(TokenState.Created);
 
-        AddDomainEvent(new TokenWaitingEvent(
-            TokenId: Id,
-            ProcessId: ProcessId,
-            ElementId: CurrentElementId,
-            Reason: reason,
-            OccurredAtUtc: DateTime.UtcNow,
-            IsExecutable: IsExecutable,
-            ScopeId: ScopeId));
-    }
+            State = TokenState.Active;
+            ActivatedAt = DateTime.UtcNow;
 
-    /// <summary>
-    /// Resume token and request processing again.
-    /// </summary>
-    public void Resume()
-    {
-        EnsureState(TokenState.Waiting);
+            AddDomainEvent(new TokenActivatedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable));
 
-        State = TokenState.Active;
+            RequestProcessing();
+        }
 
-        AddDomainEvent(new TokenResumedEvent(
-            TokenId: Id,
-            ProcessId: ProcessId,
-            ElementId: CurrentElementId,
-            OccurredAtUtc: DateTime.UtcNow,
-            IsExecutable: IsExecutable,
-            ScopeId: ScopeId));
+        public void Wait(string? reason = null)
+        {
+            EnsureState(TokenState.Active);
 
-        RequestProcessing();
-    }
+            State = TokenState.Waiting;
 
-    public void Complete()
-    {
-        EnsureState(TokenState.Active);
+            AddDomainEvent(new TokenWaitingEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                Reason: reason,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable,
+                ScopeId: ScopeId));
+        }
+        public void SetArrivedVia(string? flowId)
+        {
+            if (string.IsNullOrWhiteSpace(flowId))
+                throw new ArgumentException("FlowId cannot be empty or null", nameof(flowId));
 
-        State = TokenState.Completed;
-        CompletedAt = DateTime.UtcNow;
+            ArrivedViaFlowId = flowId;
 
-        AddDomainEvent(new TokenCompletedEvent(
-            TokenId: Id,
-            ProcessId: ProcessId,
-            ElementId: CurrentElementId,
-            OccurredAtUtc: DateTime.UtcNow,
-            IsExecutable: IsExecutable,
-            ScopeId: ScopeId));
-    }
+            // ایجاد رویداد برای ثبت رسیدن توکن از طریق جریان مشخص
+            AddDomainEvent(new TokenArrivedViaFlowEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                ArrivedViaFlowId: flowId,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable,
+                ScopeId: ScopeId));
+        }
+        public void Resume()
+        {
+            EnsureState(TokenState.Waiting);
 
-    public void Fail(string error)
-    {
-        if (string.IsNullOrWhiteSpace(error))
-            throw new ArgumentException("Error cannot be empty", nameof(error));
+            State = TokenState.Active;
 
-        if (State is TokenState.Completed or TokenState.Terminated)
-            throw new InvalidOperationException($"Cannot fail token in {State} state.");
+            AddDomainEvent(new TokenResumedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable,
+                ScopeId: ScopeId));
 
-        State = TokenState.Failed;
+            RequestProcessing();
+        }
 
-        AddDomainEvent(new TokenFailedEvent(
-            TokenId: Id,
-            ProcessId: ProcessId,
-            ElementId: CurrentElementId,
-            Error: error,
-            OccurredAtUtc: DateTime.UtcNow,
-            IsExecutable: IsExecutable,
-            ScopeId: ScopeId));
-    }
+        public void Complete()
+        {
+            EnsureState(TokenState.Active);
 
-    public void Terminate(string? reason = null)
-    {
-        if (State == TokenState.Completed)
-            throw new InvalidOperationException("Completed token cannot be terminated.");
+            State = TokenState.Completed;
+            CompletedAt = DateTime.UtcNow;
 
-        State = TokenState.Terminated;
+            AddDomainEvent(new TokenCompletedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable,
+                ScopeId: ScopeId));
+        }
 
-        AddDomainEvent(new TokenTerminatedEvent(
-            TokenId: Id,
-            ProcessId: ProcessId,
-            ElementId: CurrentElementId,
-            Reason: reason,
-            OccurredAtUtc: DateTime.UtcNow,
-            IsExecutable: IsExecutable,
-            ScopeId: ScopeId));
-    }
+        public void Fail(string error)
+        {
+            if (string.IsNullOrWhiteSpace(error))
+                throw new ArgumentException("Error cannot be empty", nameof(error));
 
-    // -------------------- Movement --------------------
+            if (State is TokenState.Completed or TokenState.Terminated)
+                throw new InvalidOperationException($"Cannot fail token in {State} state.");
 
-    /// <summary>
-    /// Move token to another BPMN element (and request processing automatically).
-    /// viaFlowId is required for merge accounting (incoming flow id).
-    /// </summary>
-    public void MoveTo(string nextElementId, string? viaFlowId)
-    {
-        EnsureState(TokenState.Active);
+            State = TokenState.Failed;
 
-        if (string.IsNullOrWhiteSpace(nextElementId))
-            throw new ArgumentException("Next element id cannot be empty", nameof(nextElementId));
+            AddDomainEvent(new TokenFailedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                Error: error,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable,
+                ScopeId: ScopeId));
+        }
 
-        var from = CurrentElementId;
+        public void Terminate(string? reason = null)
+        {
+            if (State == TokenState.Completed)
+                throw new InvalidOperationException("Completed token cannot be terminated.");
 
-        CurrentElementId = nextElementId;
-        ArrivedViaFlowId = viaFlowId;
+            State = TokenState.Terminated;
 
-        AddDomainEvent(new TokenMovedEvent(
-            TokenId: Id,
-            ProcessId: ProcessId,
-            FromElementId: from,
-            ToElementId: nextElementId,
-            ViaFlowId: viaFlowId,
-            OccurredAtUtc: DateTime.UtcNow,
-            IsExecutable: IsExecutable,
-            ScopeId: ScopeId));
+            AddDomainEvent(new TokenTerminatedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                Reason: reason,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable,
+                ScopeId: ScopeId));
+        }
+        public void ClearLocalVariables()
+        {
+            EnsureNotTerminal();
+            _variables.Clear();
+        }
+        // -------------------- Movement --------------------
+        public void MoveTo(string nextElementId, string? viaFlowId)
+        {
+            EnsureState(TokenState.Active);
 
-        RequestProcessing();
-    }
+            if (string.IsNullOrWhiteSpace(nextElementId))
+                throw new ArgumentException("Next element id cannot be empty", nameof(nextElementId));
 
-    private void RequestProcessing()
-    {
-        AddDomainEvent(new TokenProcessingRequestedEvent(
-            TokenId: Id,
-            ProcessId: ProcessId,
-            ElementId: CurrentElementId,
-            OccurredAtUtc: DateTime.UtcNow,
-            IsExecutable: IsExecutable,
-            ScopeId: ScopeId,
-            ArrivedViaFlowId: ArrivedViaFlowId));
-    }
+            var from = CurrentElementId;
+            CurrentElementId = nextElementId;
+            ArrivedViaFlowId = viaFlowId;
 
-    // -------------------- Fork/Merge correlation --------------------
+            AddDomainEvent(new TokenMovedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                FromElementId: from,
+                ToElementId: nextElementId,
+                ViaFlowId: viaFlowId,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable,
+                ScopeId: ScopeId));
 
-    public void MarkNonExecutable(string? reason = null)
-    {
-        if (!IsExecutable) return;
+            RequestProcessing();
+        }
+        public void ResumeWithoutProcessing()
+        {
+            EnsureState(TokenState.Waiting);
 
-        IsExecutable = false;
+            State = TokenState.Active;
 
-        AddDomainEvent(new TokenBecameNonExecutableEvent(
-            TokenId: Id,
-            ProcessId: ProcessId,
-            ElementId: CurrentElementId,
-            OccurredAtUtc: DateTime.UtcNow,
-            ScopeId: ScopeId));
-    }
+            AddDomainEvent(new TokenResumedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable,
+                ScopeId: ScopeId));
 
-    public void SetScope(Guid scopeId)
-    {
-        if (scopeId == Guid.Empty)
-            throw new ArgumentException("ScopeId cannot be empty", nameof(scopeId));
+            // ❌ عمداً RequestProcessing نمی‌زنیم
+        }
+        private void RequestProcessing()
+        {
+            AddDomainEvent(new TokenProcessingRequestedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable,
+                ScopeId: ScopeId,
+                ArrivedViaFlowId: ArrivedViaFlowId));
+        }
 
-        ScopeId = scopeId;
+        // -------------------- Fork/Merge correlation --------------------
+        public void MarkNonExecutable(string? reason = null)
+        {
+            if (!IsExecutable) return;
 
-        AddDomainEvent(new TokenScopeAssignedEvent(
-            TokenId: Id,
-            ProcessId: ProcessId,
-            ScopeId: scopeId,
-            OccurredAtUtc: DateTime.UtcNow));
-    }
+            IsExecutable = false;
 
-    public void ClearScope() => ScopeId = null;
+            AddDomainEvent(new TokenBecameNonExecutableEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                OccurredAtUtc: DateTime.UtcNow,
+                ScopeId: ScopeId));
+        }
 
-    public void ClearArrivedVia() => ArrivedViaFlowId = null;
+        public void SetScope(Guid scopeId)
+        {
+            if (scopeId == Guid.Empty)
+                throw new ArgumentException("ScopeId cannot be empty", nameof(scopeId));
 
-    // -------------------- Variables --------------------
+            ScopeId = scopeId;
 
-    public void SetVariable(string name, object value)
-    {
-        EnsureNotTerminal();
+            AddDomainEvent(new TokenScopeAssignedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ScopeId: scopeId,
+                OccurredAtUtc: DateTime.UtcNow));
+        }
 
-        if (string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("Variable name cannot be empty", nameof(name));
+        public void ClearScope() => ScopeId = null;
 
-        _variables[name] = value;
-    }
+        public void ClearArrivedVia() => ArrivedViaFlowId = null;
 
-    public bool TryGetVariable(string name, out object? value)
-    {
-        value = null;
-        if (string.IsNullOrWhiteSpace(name)) return false;
-        return _variables.TryGetValue(name, out value);
-    }
+        // -------------------- Variables --------------------
+        public void SetVariable(string name, object value)
+        {
+            EnsureNotTerminal();
 
-    public object GetVariable(string name)
-    {
-        if (!_variables.TryGetValue(name, out var value))
-            throw new KeyNotFoundException($"Variable '{name}' not found.");
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("Variable name cannot be empty", nameof(name));
 
-        return value;
-    }
+            _variables[name] = value;
+        }
 
-    public bool HasVariable(string name) => _variables.ContainsKey(name);
+        public bool TryGetVariable(string name, out object? value)
+        {
+            value = null;
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            return _variables.TryGetValue(name, out value);
+        }
 
-    // -------------------- Guards --------------------
+        public object GetVariable(string name)
+        {
+            if (!_variables.TryGetValue(name, out var value))
+                throw new KeyNotFoundException($"Variable '{name}' not found.");
 
-    private void EnsureState(TokenState required)
-    {
-        if (State != required)
-            throw new InvalidOperationException($"Token must be in {required} state but is {State}.");
-    }
+            return value;
+        }
 
-    private void EnsureNotTerminal()
-    {
-        if (State is TokenState.Completed or TokenState.Terminated)
-            throw new InvalidOperationException($"Token is terminal: {State}");
+        public bool HasVariable(string name) => _variables.ContainsKey(name);
+
+        // -------------------- Guards --------------------
+        private void EnsureState(TokenState required)
+        {
+            if (State != required)
+                throw new InvalidOperationException($"Token must be in {required} state but is {State}.");
+        }
+
+        private void EnsureNotTerminal()
+        {
+            if (State is TokenState.Completed or TokenState.Terminated)
+                throw new InvalidOperationException($"Token is terminal: {State}");
+        }
     }
 }

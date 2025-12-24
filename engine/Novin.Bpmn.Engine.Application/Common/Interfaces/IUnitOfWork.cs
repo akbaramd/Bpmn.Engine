@@ -10,6 +10,7 @@ public interface IUnitOfWork : IDisposable
     ITokenRepository Tokens { get; }
     ITaskRepository Tasks { get; }
     
+    Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, CancellationToken ct);
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     Task BeginTransactionAsync(CancellationToken cancellationToken = default);
     Task CommitTransactionAsync(CancellationToken cancellationToken = default);

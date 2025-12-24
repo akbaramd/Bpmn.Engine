@@ -74,9 +74,8 @@ public sealed class Process : BaseAggregateRoot
     {
         EnsureState(ProcessState.Running);
 
-        if (_tokenIds.Count > 0)
-            throw new InvalidOperationException(
-                "Cannot complete process while active tokens exist.");
+        // Note: Guard removed - ProcessCompletionEvaluator ensures no live tokens exist
+        // This allows completion evaluation to be done asynchronously via events
 
         State = ProcessState.Completed;
         CompletedAt = DateTime.UtcNow;

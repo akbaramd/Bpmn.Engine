@@ -47,7 +47,15 @@ public sealed record TokenWaitingEvent(
     bool IsExecutable,
     Guid? ScopeId
 ) : IDomainEvent;
-
+public record TokenArrivedViaFlowEvent(
+    Guid TokenId, 
+    Guid ProcessId, 
+    string ElementId, 
+    string ArrivedViaFlowId, 
+    DateTime OccurredAtUtc, 
+    bool IsExecutable, 
+    Guid? ScopeId
+) : IDomainEvent;
 public sealed record TokenResumedEvent(
     Guid TokenId,
     Guid ProcessId,

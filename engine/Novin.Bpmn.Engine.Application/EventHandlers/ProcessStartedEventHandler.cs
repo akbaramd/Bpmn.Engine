@@ -4,107 +4,108 @@ using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.Events;
+using Novin.Bpmn.Engine.Domain.ValueObjects;
 using Novin.Bpmn.Models.Models;
-using Task = System.Threading.Tasks.Task;
 
 namespace Novin.Bpmn.Engine.Application.EventHandlers;
 
-/// <summary>
-/// Handles ProcessStartedEvent - finds start nodes, creates tokens if needed, and processes them
-/// </summary>
-public class ProcessStartedEventHandler : INotificationHandler<ProcessStartedEvent>
+public sealed class ProcessStartedEventHandler : INotificationHandler<ProcessStartedEvent>
 {
-    private readonly IMediator _mediator;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IUnitOfWork _uow;
     private readonly ILogger<ProcessStartedEventHandler> _logger;
 
     public ProcessStartedEventHandler(
-        IMediator mediator,
-        IUnitOfWork unitOfWork,
+        IUnitOfWork uow,
         ILogger<ProcessStartedEventHandler> logger)
     {
-        _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
-        _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
+        _uow = uow ?? throw new ArgumentNullException(nameof(uow));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task Handle(ProcessStartedEvent @event, CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("Handling ProcessStartedEvent for ProcessId: {ProcessId}", @event.ProcessId);
-
-        // 1. We start a transaction for the setup phase (Creating Tokens)
-        await _unitOfWork.BeginTransactionAsync(cancellationToken);
-
-        try
+    public Task Handle(ProcessStartedEvent @event, CancellationToken ct)
+        => _uow.ExecuteInTransactionAsync(async txCt =>
         {
-            var process = await _unitOfWork.Processes.GetByIdAsync(@event.ProcessId, cancellationToken);
-            if (process == null)
+            _logger.LogInformation("Handling ProcessStartedEvent. ProcessId={ProcessId}", @event.ProcessId);
+
+            var process = await _uow.Processes.GetByIdAsync(@event.ProcessId, txCt);
+            if (process is null)
             {
-                _logger.LogWarning("Process with ID {ProcessId} not found.", @event.ProcessId);
+                _logger.LogWarning("Process not found. ProcessId={ProcessId}", @event.ProcessId);
                 return;
             }
 
-            var deployment = await _unitOfWork.Deployments.GetLatestByDeploymentKeyAsync(
-                process.ProcessDefinitionId, cancellationToken);
 
-            if (deployment == null)
+            var deployment = await _uow.Deployments
+                .GetLatestByDeploymentKeyAsync(process.ProcessDefinitionId, txCt);
+
+            if (deployment is null)
             {
-                _logger.LogWarning("Deployment for ProcessDefinitionId {ProcessDefinitionId} not found.", process.ProcessDefinitionId);
+                _logger.LogWarning(
+                    "Deployment not found. ProcessDefinitionId={ProcessDefinitionId}",
+                    process.ProcessDefinitionId);
                 return;
             }
 
-            var bpmnDefinitions = deployment.GetDefinitions();
-            var definitionsService = new BpmnDefinitionsService(bpmnDefinitions);
-            var bpmnProcessId = definitionsService.GetFirstProcess().id ?? process.ProcessDefinitionId;
-            var startEvents = definitionsService.GetStartEvents(bpmnProcessId);
+            var defs = deployment.GetDefinitions();
+            var defsService = new BpmnDefinitionsService(defs);
 
-            var tokensToProcess = new List<(string NodeId, Guid TokenId)>();
+            var firstProc = defsService.GetFirstProcess();
+            var bpmnProcessId = firstProc?.id ?? process.ProcessDefinitionId;
 
-            foreach (var startEvent in startEvents)
+            var startEvents = defsService.GetStartEvents(bpmnProcessId)
+                .Where(se => !string.IsNullOrWhiteSpace(se.id))
+                .ToList();
+
+            if (startEvents.Count == 0)
             {
-                if (string.IsNullOrEmpty(startEvent.id))
+                _logger.LogWarning("No start events found. BpmnProcessId={BpmnProcessId}", bpmnProcessId);
+                return;
+            }
+
+            // یک بار کل توکن‌های این پروسس را بگیر
+            var allTokens = await _uow.Tokens.GetByProcessIdAsync(process.Id, txCt);
+
+            // توکن‌هایی که هنوز زنده‌اند (برای idempotency)
+            var alive = allTokens
+                .Where(t => t.State is not TokenState.Completed
+                         && t.State is not TokenState.Terminated
+                         && t.State is not TokenState.Failed)
+                .GroupBy(t => t.CurrentElementId)
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+            var created = 0;
+
+            foreach (var se in startEvents)
+            {
+                var startId = se.id!;
+
+                // اگر قبلاً توکن زنده روی همین start داریم، دوباره نساز
+                if (alive.TryGetValue(startId, out var existingAtStart) && existingAtStart.Count > 0)
+                {
+                    _logger.LogInformation(
+                        "Start token already exists. ProcessId={ProcessId}, StartId={StartId}, Count={Count}",
+                        process.Id, startId, existingAtStart.Count);
                     continue;
-
-                // Check existing tokens
-                var existingTokens = await _unitOfWork.Tokens.GetByProcessIdAsync(@event.ProcessId, cancellationToken);
-                var tokensAtNode = existingTokens.Where(t => t.CurrentElementId == startEvent.id).ToList();
-
-                if (tokensAtNode.Any())
-                {
-                    tokensToProcess.AddRange(tokensAtNode.Select(t => (startEvent.id, t.Id)));
                 }
-                else
-                {
-                    // Internal method now just prepares the entities in the DbContext
-                    var newToken = await PrepareTokenAtStartNode(process, startEvent, startEvent.id, cancellationToken);
-                    tokensToProcess.Add((startEvent.id, newToken.Id));
-                }
+
+                var token = new Token(process.Id, startId, parentTokenIds: Array.Empty<Guid>());
+
+                // Add to DbContext
+                await _uow.Tokens.AddAsync(token, txCt);
+
+                // keep relation in aggregate
+                process.AddToken(token.Id);
+
+                // فعال کن تا TokenProcessingRequestedEvent تولید شود
+                token.Activate();
+
+                created++;
             }
 
-            // 2. Commit the setup phase (Tokens are now in the DB)
-            await _unitOfWork.CommitTransactionAsync(cancellationToken);
+            _logger.LogInformation(
+                "ProcessStartedEvent setup done. ProcessId={ProcessId}, CreatedStartTokens={Created}",
+                process.Id, created);
 
-          
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error handling ProcessStartedEvent for ProcessId: {ProcessId}", @event.ProcessId);
-            await _unitOfWork.RollbackTransactionAsync(cancellationToken);
-            throw;
-        }
-    }
-
-    private async Task<Token> PrepareTokenAtStartNode(
-        Domain.Entities.Process process,
-        BpmnStartEvent startNode,
-        string elementId,
-        CancellationToken cancellationToken)
-    {
-        var token = new Token(process.Id, elementId, []);
-        await _unitOfWork.Tokens.AddAsync(token, cancellationToken);
-
-        token.Activate();
-        process.AddToken(token.Id);
-        return token;
-    }
+            // Commit توسط ExecuteInTransactionAsync انجام می‌شود
+        }, ct);
 }

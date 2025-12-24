@@ -92,11 +92,7 @@ namespace Novin.Bpmn.Models.Models
         [XmlElement("script", Namespace = ZeebeNs)]      // <zeebe:script …/>
         public ZeebeScript? ZeebeScript { get; set; }
 
-        /* -------------------------------------------------------------------
-         * BONYAN EXTENSIONS
-         * -----------------------------------------------------------------*/
-        [XmlElement("ioMapping", Namespace = BonyanNs)]
-        public BonyanIoMapping? BonyanIoMapping { get; set; }
+
 
         [XmlElement("script", Namespace = BonyanNs)]      // <bonyan:script>
         public BonyanScript? BonyanScript { get; set; }

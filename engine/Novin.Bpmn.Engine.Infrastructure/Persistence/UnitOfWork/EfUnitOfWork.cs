@@ -1,22 +1,20 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Domain.Common;
 using Novin.Bpmn.Engine.Infrastructure.EventBus;
-using Novin.Bpmn.Engine.Infrastructure.Persistence;
 
 namespace Novin.Bpmn.Engine.Infrastructure.Persistence.UnitOfWork;
 
-/// <summary>
-/// Entity Framework Core implementation of Unit of Work pattern
-/// Uses DbContext for transaction management and persistence
-/// </summary>
 public class EfUnitOfWork : IUnitOfWork
 {
     private readonly BpmnEngineDbContext _context;
     private readonly DomainEventDispatcher _domainEventDispatcher;
     private readonly ILogger<EfUnitOfWork> _logger;
-    private bool _disposed = false;
+
+    private IDbContextTransaction? _currentTransaction;
+    private bool _disposed;
 
     public IDeploymentRepository Deployments { get; }
     public IProcessRepository Processes { get; }
@@ -41,68 +39,148 @@ public class EfUnitOfWork : IUnitOfWork
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task BeginTransactionAsync(CancellationToken cancellationToken = default)
+    // ---------------- Transaction API ----------------
+
+    public async Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, CancellationToken ct = default)
     {
+        if (action is null) throw new ArgumentNullException(nameof(action));
+
+        // Nested / already in tx: فقط action
+        if (_currentTransaction != null)
+        {
+            await action(ct);
+            return;
+        }
+
+        await BeginTransactionAsync(ct);
+
+        try
+        {
+            await action(ct);
+            await CommitTransactionAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ExecuteInTransactionAsync failed. Rolling back.");
+            try
+            {
+                await RollbackTransactionAsync(ct);
+            }
+            catch (Exception rbEx)
+            {
+                _logger.LogError(rbEx, "Rollback failed.");
+            }
+
+            throw;
+        }
     }
 
-  public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-{
-    // 1. Get all domain events from tracked entities
-    var domainEntities = _context.ChangeTracker
-        .Entries<IAggregateRoot>() // Assuming your entities implement this
-        .Where(x => x.Entity.DomainEvents.Any())
-        .Select(x => x.Entity)
-        .ToList();
+    public async Task BeginTransactionAsync(CancellationToken cancellationToken = default)
+    {
+        if (_currentTransaction != null) return;
 
-    var domainEvents = domainEntities
-        .SelectMany(x => x.DomainEvents)
-        .ToList();
-
-    // 2. Clear events from entities to prevent double-dispatch
-    domainEntities.ForEach(entity => entity.ClearDomainEvents());
-
-    // 3. Save changes
-    var result = await _context.SaveChangesAsync(cancellationToken);
-
-    // 4. Dispatch events (which might trigger more DB changes)
-    await _domainEventDispatcher.DispatchEventsAsync(domainEvents, cancellationToken);
-
-    return result;
-}
+        _currentTransaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+    }
 
     public async Task CommitTransactionAsync(CancellationToken cancellationToken = default)
     {
-           
+        // اگر transaction explicit نداریم، فقط save کن
+        if (_currentTransaction == null)
+        {
+            await SaveChangesAsync(cancellationToken);
+            return;
+        }
 
-            // 3. Save changes
-            var result = await SaveChangesAsync(cancellationToken);
-
-       
-            
+        try
+        {
+            await SaveChangesAsync(cancellationToken);
+            await _currentTransaction.CommitAsync(cancellationToken);
+        }
+        finally
+        {
+            await _currentTransaction.DisposeAsync();
+            _currentTransaction = null;
+        }
     }
 
     public async Task RollbackTransactionAsync(CancellationToken cancellationToken = default)
     {
+        if (_currentTransaction == null) return;
+
+        try
+        {
+            await _currentTransaction.RollbackAsync(cancellationToken);
+        }
+        finally
+        {
+            await _currentTransaction.DisposeAsync();
+            _currentTransaction = null;
+
+            // برای جلوگیری از state ناسازگار بعد از rollback
+            _context.ChangeTracker.Clear();
+        }
     }
 
+    // ---------------- SaveChanges + Domain Events ----------------
 
-    /// <summary>
-    /// Track an aggregate for change tracking and event dispatching
-    /// </summary>
+    public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        // این الگوریتم:
+        // - رویدادها را جمع می‌کند
+        // - clear می‌کند
+        // - SaveChanges می‌کند
+        // - Dispatch می‌کند
+        // تا وقتی که نه رویداد داریم نه تغییرات pending
+        var total = 0;
+
+        while (true)
+        {
+            var domainEntities = _context.ChangeTracker
+                .Entries<IAggregateRoot>()
+                .Where(x => x.Entity.DomainEvents.Any())
+                .Select(x => x.Entity)
+                .ToList();
+
+            var domainEvents = domainEntities
+                .SelectMany(x => x.DomainEvents)
+                .ToList();
+
+            domainEntities.ForEach(e => e.ClearDomainEvents());
+
+            var hasChanges = _context.ChangeTracker.HasChanges();
+            if (!hasChanges && domainEvents.Count == 0)
+                break;
+
+            // 1) Persist
+            total += await _context.SaveChangesAsync(cancellationToken);
+
+            // 2) Dispatch (ممکن است تغییرات/رویدادهای جدید بسازد)
+            if (domainEvents.Count > 0)
+                await _domainEventDispatcher.DispatchEventsAsync(domainEvents, cancellationToken);
+        }
+
+        return total;
+    }
+
+    // ---------------- Tracking ----------------
+
     public void TrackAggregate(IAggregateRoot aggregate)
     {
-        if (aggregate == null)
-            throw new ArgumentNullException(nameof(aggregate));
+        if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
 
+        var entry = _context.Entry(aggregate);
+        if (entry.State == EntityState.Detached)
+            _context.Attach(aggregate);
     }
+
+    // ---------------- Dispose ----------------
 
     public void Dispose()
     {
-        if (!_disposed)
-        {
+        if (_disposed) return;
+        _disposed = true;
 
-            _disposed = true;
-        }
+        _currentTransaction?.Dispose();
+        _context.Dispose();
     }
 }
-

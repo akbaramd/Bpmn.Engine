@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
+using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Infrastructure.EventBus;
 using Novin.Bpmn.Engine.Infrastructure.Persistence;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.Repositories;
@@ -18,8 +19,15 @@ public static class DependencyInjection
             options.UseSqlite("Filename=./Bpmn.db");
             options.EnableSensitiveDataLogging(); // For development only
         });
+        services.AddSingleton(new MultiLanguageScriptTaskExecutorOptions
+        {
+            TreatNullFormatAsCSharp = true,
+            CSharpTimeout = TimeSpan.FromSeconds(2),
+            JavaScriptTimeout = TimeSpan.FromSeconds(2),
+            JavaScriptMaxStatements = 10_000,
+            JavaScriptMaxMemoryBytes = 4_000_000
+        });
 
-        
         // Domain Event Dispatcher
         services.AddScoped<DomainEventDispatcher>();
         
