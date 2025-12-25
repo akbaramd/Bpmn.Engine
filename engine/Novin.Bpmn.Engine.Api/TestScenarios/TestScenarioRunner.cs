@@ -1,5 +1,6 @@
 using MediatR;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
+using Novin.Bpmn.Engine.Domain.ValueObjects;
 
 namespace Novin.Bpmn.Engine.Api.TestScenarios;
 
@@ -56,14 +57,38 @@ public sealed class TestScenarioRunner
                     ct);
 
                 await Task.Delay(testCase.WaitMilliseconds, ct);
-                
-                // Display execution path if available
+
+                // Check process completion status
                 var process = await _uow.Processes.GetByIdAsync(processId, ct);
-                if (process != null && process.Variables.TryGetValue("executionPath", out var executionPath))
+                if (process == null)
                 {
-                    _logger.LogInformation("   📍 Execution Path: {ExecutionPath}", executionPath);
+                    _logger.LogError("   ❌ Process not found. ProcessId: {ProcessId}", processId);
                 }
-                
+                else
+                {
+                    var isCompleted = process.State == ProcessState.Completed;
+                    var isFailed = process.State == ProcessState.Failed;
+
+                    // Display execution path if available
+                    if (process.Variables.TryGetValue("executionPath", out var executionPath))
+                    {
+                        _logger.LogInformation("   📍 Execution Path: {ExecutionPath}", executionPath);
+                    }
+
+                    if (isCompleted)
+                    {
+                        _logger.LogInformation("   ✅ Process completed successfully");
+                    }
+                    else if (isFailed)
+                    {
+                        _logger.LogError("   ❌ Process failed");
+                    }
+                    else
+                    {
+                        _logger.LogWarning("   ⚠️ Process still running or in unexpected state: {State}", process.State);
+                    }
+                }
+
                 _logger.LogInformation("");
             }
 
