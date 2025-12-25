@@ -12,9 +12,9 @@ public sealed class ErrorBoundaryScenario : TestScenario
     public override string BpmnFileName => "error-boundary-test.bpmn";
     public override string ProcessKey => "error-boundary-test";
 
-    public override async Task<IReadOnlyList<TestCase>> GetTestCasesAsync()
+    public override Task<IReadOnlyList<TestCase>> GetTestCasesAsync()
     {
-        return new List<TestCase>
+        return Task.FromResult<IReadOnlyList<TestCase>>(new List<TestCase>
         {
             new(
                 "Error Thrown Test",
@@ -35,6 +35,6 @@ public sealed class ErrorBoundaryScenario : TestScenario
                     { "executionPath", "start" } // Initialize execution path
                 },
                 2000)
-        };
+        });
     }
 }

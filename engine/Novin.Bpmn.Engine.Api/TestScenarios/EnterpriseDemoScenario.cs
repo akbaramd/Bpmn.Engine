@@ -12,9 +12,9 @@ public sealed class EnterpriseDemoScenario : TestScenario
     public override string BpmnFileName => "enterprise-demo.bpmn";
     public override string ProcessKey => "demo-process-key";
 
-    public override async Task<IReadOnlyList<TestCase>> GetTestCasesAsync()
+    public override Task<IReadOnlyList<TestCase>> GetTestCasesAsync()
     {
-        return new List<TestCase>
+        return Task.FromResult<IReadOnlyList<TestCase>>(new List<TestCase>
         {
             new(
                 "Technical Failure Test",
@@ -31,6 +31,6 @@ public sealed class EnterpriseDemoScenario : TestScenario
                 "Tests normal flow execution (amount = 500)",
                 new Dictionary<string, object> { { "amount", 500 } },
                 3000)
-        };
+        });
     }
 }

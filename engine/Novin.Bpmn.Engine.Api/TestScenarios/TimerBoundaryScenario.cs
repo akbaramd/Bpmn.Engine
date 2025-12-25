@@ -12,9 +12,9 @@ public sealed class TimerBoundaryScenario : TestScenario
     public override string BpmnFileName => "timer-boundary-test.bpmn";
     public override string ProcessKey => "timer-boundary-test";
 
-    public override async Task<IReadOnlyList<TestCase>> GetTestCasesAsync()
+    public override Task<IReadOnlyList<TestCase>> GetTestCasesAsync()
     {
-        return new List<TestCase>
+        return Task.FromResult<IReadOnlyList<TestCase>>(new List<TestCase>
         {
             new(
                 "Interrupting Timer Test",
@@ -40,6 +40,6 @@ public sealed class TimerBoundaryScenario : TestScenario
                     { "duration", 500 } // 0.5 seconds - completes before 1s timer fires
                 },
                 2000)
-        };
+        });
     }
 }

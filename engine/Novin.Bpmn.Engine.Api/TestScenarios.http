@@ -35,6 +35,14 @@ Content-Type: application/json
 GET http://localhost:5000/api/test-scenarios/ErrorBoundaryScenario/status
 Accept: application/json
 
+### Get Enterprise Demo Scenario Status
+GET http://localhost:5000/api/test-scenarios/EnterpriseDemoScenario/status
+Accept: application/json
+
+### Get Timer Boundary Scenario Status
+GET http://localhost:5000/api/test-scenarios/TimerBoundaryScenario/status
+Accept: application/json
+
 ###
 
 ### Example: Run Error Boundary Scenario
@@ -150,6 +158,18 @@ Accept: application/json
 ###   headers: { 'Content-Type': 'application/json' }
 ### }).then(r => r.json());
 ###
+### // Run Enterprise Demo scenario
+### const enterpriseResult = await fetch('http://localhost:5000/api/test-scenarios/EnterpriseDemoScenario/run', {
+###   method: 'POST',
+###   headers: { 'Content-Type': 'application/json' }
+### }).then(r => r.json());
+###
+### // Run Timer Boundary scenario
+### const timerResult = await fetch('http://localhost:5000/api/test-scenarios/TimerBoundaryScenario/run', {
+###   method: 'POST',
+###   headers: { 'Content-Type': 'application/json' }
+### }).then(r => r.json());
+###
 ### // Run all scenarios
 ### const allResults = await fetch('http://localhost:5000/api/test-scenarios/run-all', {
 ###   method: 'POST',
@@ -179,12 +199,15 @@ Accept: application/json
 
 ###
 
-### Available Test Scenarios (based on typical BPMN patterns):
-### - ErrorBoundaryScenario: Error handling with boundary events
+### Available Test Scenarios (currently implemented):
+### - ErrorBoundaryScenario: Error handling with boundary events (interrupting)
+### - EnterpriseDemoScenario: Exception handling (Technical Failure and BPMN Error)
+### - TimerBoundaryScenario: Timer-based boundary events (interrupting and non-interrupting)
+###
+### Future scenarios to implement:
 ### - UserTaskScenario: User task completion workflows
 ### - ParallelGatewayScenario: Parallel execution flows
 ### - ExclusiveGatewayScenario: Conditional branching
-### - TimerBoundaryScenario: Timer-based boundary events
 ### - SubProcessScenario: Sub-process execution
 ### - MessageBoundaryScenario: Message-based boundary events
 ### - EscalationScenario: Escalation handling
