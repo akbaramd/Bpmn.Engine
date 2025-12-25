@@ -8,6 +8,11 @@ namespace Novin.Bpmn.Engine.Application.Common.Interfaces;
 public interface IProcessExecutionNodeRepository : IRepository<ProcessExecutionNode>
 {
     /// <summary>
+    /// Update an existing execution node
+    /// </summary>
+    Task UpdateAsync(ProcessExecutionNode entity, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get all execution nodes for a specific process
     /// </summary>
     Task<IEnumerable<ProcessExecutionNode>> GetByProcessIdAsync(
@@ -26,6 +31,22 @@ public interface IProcessExecutionNodeRepository : IRepository<ProcessExecutionN
     /// </summary>
     Task<ProcessExecutionNode?> GetLastExecutedNodeAsync(
         Guid processId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Check if a specific node has already been executed for a process
+    /// </summary>
+    Task<bool> NodeExistsAsync(
+        Guid processId,
+        string nodeId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get a specific execution node for a process
+    /// </summary>
+    Task<ProcessExecutionNode?> GetNodeAsync(
+        Guid processId,
+        string nodeId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

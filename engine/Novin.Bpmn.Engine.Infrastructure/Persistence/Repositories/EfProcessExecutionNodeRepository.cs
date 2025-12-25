@@ -78,6 +78,24 @@ public class EfProcessExecutionNodeRepository : IProcessExecutionNodeRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<bool> NodeExistsAsync(
+        Guid processId,
+        string nodeId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.ProcessExecutionNodes
+            .AnyAsync(n => n.ProcessId == processId && n.NodeId == nodeId, cancellationToken);
+    }
+
+    public async Task<ProcessExecutionNode?> GetNodeAsync(
+        Guid processId,
+        string nodeId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.ProcessExecutionNodes
+            .FirstOrDefaultAsync(n => n.ProcessId == processId && n.NodeId == nodeId, cancellationToken);
+    }
+
     public async Task<ProcessExecutionStats> GetExecutionStatsAsync(
         Guid processId,
         CancellationToken cancellationToken = default)

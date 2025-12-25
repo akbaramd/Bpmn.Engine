@@ -75,28 +75,28 @@ public class ProcessExecutionRecorder : IProcessExecutionRecorder
             return;
         }
 
-        // Check if this node was already executed for this process
-        var existingNodes = await _executionNodeRepository.GetByProcessIdAsync(process.Id, ct);
-        var existingNode = existingNodes.FirstOrDefault(n => n.NodeId == nodeId);
+        // Check if this node was already executed for this process (efficient query)
+        var nodeExists = await _executionNodeRepository.NodeExistsAsync(process.Id, nodeId, ct);
 
-        if (existingNode != null)
+        if (nodeExists)
         {
-            // Node already executed, just update if needed
-            if (!string.IsNullOrEmpty(arrivedViaFlowId) && existingNode.ArrivedViaFlowId == null)
+            // Node already executed, update flow information if needed
+            var existingNode = await _executionNodeRepository.GetNodeAsync(process.Id, nodeId, ct);
+            if (existingNode != null && !string.IsNullOrEmpty(arrivedViaFlowId) && existingNode.ArrivedViaFlowId == null)
             {
                 existingNode.SetArrivedViaFlow(arrivedViaFlowId);
-                await _executionNodeRepository.UpdateAsync(existingNode, ct);
+                await ((IProcessExecutionNodeRepository)_executionNodeRepository).UpdateAsync(existingNode, ct);
+                await _unitOfWork.SaveChangesAsync(ct);
             }
             return;
         }
 
-        // Get the next sequence order
+        // Get the next sequence order and previous node information
         var lastNode = await _executionNodeRepository.GetLastExecutedNodeAsync(process.Id, ct);
         var sequenceOrder = lastNode?.SequenceOrder + 1 ?? 1;
-
-        // Find previous node in the path (for path reconstruction)
         var previousNodeId = lastNode?.NodeId;
 
+        // Create and save the new execution node
         var executionNode = new ProcessExecutionNode(
             processId: process.Id,
             nodeId: nodeId,
@@ -118,13 +118,12 @@ public class ProcessExecutionRecorder : IProcessExecutionRecorder
         string nodeId,
         CancellationToken ct = default)
     {
-        var nodes = await _executionNodeRepository.GetByProcessIdAsync(processId, ct);
-        var node = nodes.FirstOrDefault(n => n.NodeId == nodeId);
+        var node = await _executionNodeRepository.GetNodeAsync(processId, nodeId, ct);
 
         if (node != null && !node.IsCompleted)
         {
             node.MarkCompleted();
-            await _executionNodeRepository.UpdateAsync(node, ct);
+            await ((IProcessExecutionNodeRepository)_executionNodeRepository).UpdateAsync(node, ct);
             await _unitOfWork.SaveChangesAsync(ct);
         }
     }
