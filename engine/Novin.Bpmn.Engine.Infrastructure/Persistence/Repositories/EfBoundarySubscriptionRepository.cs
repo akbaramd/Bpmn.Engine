@@ -96,6 +96,21 @@ public sealed class EfBoundarySubscriptionRepository : IBoundarySubscriptionRepo
             .ToListAsync(ct);
     }
 
+    public async Task<IEnumerable<BoundarySubscription>> GetActiveErrorSubscriptionsByErrorCodeAndElementAsync(
+        Guid processId,
+        string errorCode,
+        string attachedToElementId,
+        CancellationToken ct = default)
+    {
+        return await _context.BoundarySubscriptions
+            .Where(s => s.ProcessId == processId
+                        && s.Kind == BoundaryKind.Error
+                        && s.State == SubscriptionState.Active
+                        && s.AttachedToElementId == attachedToElementId
+                        && (s.ErrorCode == errorCode || s.ErrorCode == null)) // null = catches all errors ("Any")
+            .ToListAsync(ct);
+    }
+
     public async Task AddAsync(BoundarySubscription subscription, CancellationToken ct = default)
     {
         await _context.BoundarySubscriptions.AddAsync(subscription, ct);

@@ -153,17 +153,32 @@ public sealed class BoundarySubscriptionManager :
             }
 
             // ✅ Step 1: Lookup error subscriptions by ErrorCode (matching specific code or "Any" = null)
+            // Note: For now, we look up all error subscriptions for the process.
+            // In BPMN, boundary events can catch errors from child elements, so we search broadly.
             var errorSubscriptions = await _uow.BoundarySubscriptions.GetActiveErrorSubscriptionsByErrorCodeAsync(
                 notification.ProcessId,
                 notification.ErrorCode,
                 txCt);
 
             var subscriptionsList = errorSubscriptions.ToList();
-            _logger.LogDebug(
-                "[ERROR-HANDLER] Found {Count} error subscriptions for ErrorCode={ErrorCode}. ProcessId={ProcessId}",
+            _logger.LogInformation(
+                "[ERROR-HANDLER] Found {Count} error subscriptions for ErrorCode={ErrorCode}. ProcessId={ProcessId} ElementId={ElementId}",
                 subscriptionsList.Count,
                 notification.ErrorCode,
-                notification.ProcessId);
+                notification.ProcessId,
+                notification.ElementId);
+
+            // Debug: Log all found subscriptions
+            foreach (var sub in subscriptionsList)
+            {
+                _logger.LogDebug(
+                    "[ERROR-HANDLER] Found subscription: Id={Id} TokenId={TokenId} ElementId={ElementId} ErrorCode={ErrorCode} State={State}",
+                    sub.Id,
+                    sub.TokenId,
+                    sub.AttachedToElementId,
+                    sub.ErrorCode,
+                    sub.State);
+            }
 
             if (subscriptionsList.Count == 0)
             {
@@ -470,6 +485,13 @@ public sealed class BoundarySubscriptionManager :
 
             await _uow.BoundarySubscriptions.AddAsync(subscription, ct);
 
+            // Ensure subscription is saved immediately (defensive programming)
+            await _uow.SaveChangesAsync(ct);
+            _logger.LogDebug(
+                "[BOUNDARY-SUBSCRIPTION] Subscription saved. SubscriptionId={SubscriptionId} Kind={Kind}",
+                subscription.Id,
+                kind);
+
             // ⚠️ IMPORTANT: Timer scheduling باید بعد از commit انجام شود (Outbox pattern)
             // فعلاً داخل transaction انجام می‌شود - در production باید به domain event تبدیل شود
             // TODO: Create BoundaryTimerSubscriptionCreatedEvent و handler که بعد از commit schedule می‌کند
@@ -480,6 +502,7 @@ public sealed class BoundarySubscriptionManager :
                     var jobKey = await _timerScheduler.ScheduleAsync(subscription.Id, dueAt.Value, ct);
                     subscription.SetExternalJobKey(jobKey);
                     await _uow.BoundarySubscriptions.UpdateAsync(subscription, ct);
+                    await _uow.SaveChangesAsync(ct); // Save timer scheduling
                 }
                 catch (Exception ex)
                 {
@@ -493,13 +516,14 @@ public sealed class BoundarySubscriptionManager :
             }
 
             _logger.LogInformation(
-                "[BOUNDARY-SUBSCRIPTION] Subscription created. SubscriptionId={SubscriptionId} TokenId={TokenId} BoundaryEventId={BoundaryEventId} Kind={Kind} IsInterrupting={IsInterrupting} DueAt={DueAt}",
+                "[BOUNDARY-SUBSCRIPTION] Subscription created. SubscriptionId={SubscriptionId} TokenId={TokenId} AttachedToElementId={ElementId} BoundaryEventId={BoundaryEventId} Kind={Kind} ErrorCode={ErrorCode} IsInterrupting={IsInterrupting}",
                 subscription.Id,
                 token.Id,
+                elementId,
                 boundaryEvent.id,
                 kind,
-                isInterrupting,
-                dueAt);
+                errorCode,
+                isInterrupting);
         }
     }
 

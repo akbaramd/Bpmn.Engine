@@ -32,6 +32,16 @@ public interface IBoundarySubscriptionRepository
         Guid processId,
         string errorCode,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Get active error subscriptions by ErrorCode and ElementId for a process.
+    /// Used for error boundary lookup when error occurs on specific element.
+    /// </summary>
+    Task<IEnumerable<BoundarySubscription>> GetActiveErrorSubscriptionsByErrorCodeAndElementAsync(
+        Guid processId,
+        string errorCode,
+        string attachedToElementId,
+        CancellationToken ct = default);
     Task AddAsync(BoundarySubscription subscription, CancellationToken ct = default);
     Task UpdateAsync(BoundarySubscription subscription, CancellationToken ct = default);
 }
