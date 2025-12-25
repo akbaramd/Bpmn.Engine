@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bonyan="http://bonyan.org/schema/bpmn/1.0" id="Definitions_error_boundary_test" targetNamespace="http://novin-bpmn/test">
+  <bpmn:error id="TestError" name="TestError" errorCode="TEST_ERROR" />
+  <bpmn:process id="error-boundary-test" name="Error Boundary Test" isExecutable="true">
+    <bpmn:startEvent id="start" name="Start">
+      <bpmn:outgoing>f_start_to_task</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:scriptTask id="errorTask" name="Error Task (C#)" scriptFormat="C#">
+      <bpmn:extensionElements>
+        <bonyan:ioMapping onMissingSource="null" onMissingOutput="skip" overwrite="true">
+          <bonyan:input source="shouldThrowError" target="shouldThrowError" />
+          <bonyan:input source="errorCode" target="errorCode" />
+          <bonyan:input source="executionPath" target="executionPath" />
+          <bonyan:output source="result" target="result" />
+          <bonyan:output source="executionPath" target="executionPath" />
+        </bonyan:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_to_task</bpmn:incoming>
+      <bpmn:outgoing>f_task_to_end</bpmn:outgoing>
+      <bpmn:script><![CDATA[
+        // ===== [errorTask] Script Execution Started =====
+        Console.WriteLine("[errorTask] ========================================");
+        Console.WriteLine("[errorTask] Script execution started");
+        
+        // ===== EXECUTION PATH TRACKING =====
+        // Get existing execution path from process variables (mapped via ioMapping)
+        var existingPath = context.Variables.Contains("executionPath") 
+            ? context.Variables["executionPath"].ToString() 
+            : "";
+        Console.WriteLine("[errorTask] Incoming Execution Path: '{0}'", existingPath ?? "empty");
+        
+        // Update execution path: append current task name
+        var currentTaskName = "errorTask";
+        var newPath = string.IsNullOrEmpty(existingPath) 
+            ? currentTaskName 
+            : string.Format("{0} -> {1}", existingPath, currentTaskName);
+        
+        // Store updated path (will be output via ioMapping)
+        context.Variables["executionPath"] = newPath;
+        Console.WriteLine("[errorTask] Updated Execution Path: '{0}'", newPath);
+        // ===== END EXECUTION PATH TRACKING =====
+        
+        var varCount = context.Variables.Count;
+        Console.WriteLine("[errorTask] Token Variables Count: {0}", varCount);
+        
+        // Build variables string using LINQ (now available)
+        var varsList = context.Variables.Keys.Select(key => 
+            string.Format("{0}={1}", key, context.Variables[key] ?? "null")).ToList();
+        var varsString = string.Join(", ", varsList);
+        Console.WriteLine("[errorTask] Token Variables: {0}", varsString);
+        
+        // Read input variables (mapped from process via ioMapping)
+        var hasShouldThrow = context.Variables.Contains("shouldThrowError");
+        var hasErrorCode = context.Variables.Contains("errorCode");
+        
+        Console.WriteLine("[errorTask] Input mapping check:");
+        Console.WriteLine("[errorTask]   - shouldThrowError exists: {0}", hasShouldThrow);
+        Console.WriteLine("[errorTask]   - errorCode exists: {0}", hasErrorCode);
+        
+        if (hasShouldThrow)
+        {
+            var shouldThrowVal = context.Variables["shouldThrowError"];
+            Console.WriteLine("[errorTask]   - shouldThrowError value: {0}", shouldThrowVal);
+        }
+        if (hasErrorCode)
+        {
+            var errorCodeVal = context.Variables["errorCode"];
+            Console.WriteLine("[errorTask]   - errorCode value: {0}", errorCodeVal);
+        }
+        
+        // Determine if we should throw error
+        var shouldThrow = hasShouldThrow && Convert.ToBoolean(context.Variables["shouldThrowError"]);
+        Console.WriteLine("[errorTask] Should throw error: {0}", shouldThrow);
+        
+        if (shouldThrow)
+        {
+            var errorCode = hasErrorCode 
+                ? context.Variables["errorCode"].ToString() 
+                : "TEST_ERROR";
+            
+            Console.WriteLine("[errorTask] ⚠️ THROWING BPMN ERROR!");
+            Console.WriteLine("[errorTask]   Error Code: {0}", errorCode);
+            Console.WriteLine("[errorTask] Execution Path before error (will be passed to boundary): '{0}'", newPath);
+            Console.WriteLine("[errorTask] ========================================");
+            
+            throw new BpmnErrorException(errorCode, string.Format("Test error thrown from errorTask"));
+        }
+
+        // Normal execution path
+        Console.WriteLine("[errorTask] Normal execution path - no error");
+        context.Variables["result"] = "Success";
+        Console.WriteLine("[errorTask] Set result variable: Success");
+        Console.WriteLine("[errorTask] ✅ Task completed successfully");
+        Console.WriteLine("[errorTask] Final Execution Path (will be output): '{0}'", newPath);
+        Console.WriteLine("[errorTask] ========================================");
+      ]]></bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:boundaryEvent id="errorBoundary" name="Error Handler" attachedToRef="errorTask">
+      <bpmn:outgoing>f_error_to_handler</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="TestError" />
+    </bpmn:boundaryEvent>
+    <bpmn:scriptTask id="errorHandler" name="Error Handler Task (C#)" scriptFormat="C#">
+      <bpmn:extensionElements>
+        <bonyan:ioMapping onMissingSource="null" onMissingOutput="skip" overwrite="true">
+          <bonyan:input source="executionPath" target="executionPath" />
+          <bonyan:output source="handled" target="handled" />
+          <bonyan:output source="handlerMessage" target="handlerMessage" />
+          <bonyan:output source="executionPath" target="executionPath" />
+        </bonyan:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_error_to_handler</bpmn:incoming>
+      <bpmn:outgoing>f_handler_to_end</bpmn:outgoing>
+      <bpmn:script><![CDATA[
+        // ===== [errorHandler] Script Execution Started =====
+        Console.WriteLine("[errorHandler] ========================================");
+        Console.WriteLine("[errorHandler] Error Handler Script execution started");
+        
+        // ===== EXECUTION PATH TRACKING =====
+        // Get existing execution path from process variables (mapped via ioMapping)
+        var existingPath = context.Variables.Contains("executionPath") 
+            ? context.Variables["executionPath"].ToString() 
+            : "";
+        Console.WriteLine("[errorHandler] Incoming Execution Path: '{0}'", existingPath ?? "empty");
+        
+        // Update execution path: append current task name
+        var currentTaskName = "errorHandler";
+        var newPath = string.IsNullOrEmpty(existingPath) 
+            ? currentTaskName 
+            : string.Format("{0} -> {1}", existingPath, currentTaskName);
+        
+        // Store updated path (will be output via ioMapping)
+        context.Variables["executionPath"] = newPath;
+        Console.WriteLine("[errorHandler] Updated Execution Path: '{0}'", newPath);
+        // ===== END EXECUTION PATH TRACKING =====
+        
+        var varCount = context.Variables.Count;
+        Console.WriteLine("[errorHandler] Token Variables Count: {0}", varCount);
+        
+        // Build variables string using LINQ (now available)
+        var varsList = context.Variables.Keys.Select(key => 
+            string.Format("{0}={1}", key, context.Variables[key] ?? "null")).ToList();
+        var varsString = string.Join(", ", varsList);
+        Console.WriteLine("[errorHandler] Token Variables: {0}", varsString);
+        
+        // Set output variables (will be mapped to process via ioMapping)
+        context.Variables["handled"] = true;
+        context.Variables["handlerMessage"] = "Error was caught and handled by boundary event";
+        
+        Console.WriteLine("[errorHandler] Set handled variable: true");
+        var handlerMsg = context.Variables["handlerMessage"];
+        Console.WriteLine("[errorHandler] Set handlerMessage variable: {0}", handlerMsg);
+        Console.WriteLine("[errorHandler] ✅ Error Handler completed successfully");
+        Console.WriteLine("[errorHandler] Final Execution Path (will be output): '{0}'", newPath);
+        Console.WriteLine("[errorHandler] ========================================");
+      ]]></bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="endSuccess" name="End Success">
+      <bpmn:incoming>f_task_to_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="endError" name="End Error">
+      <bpmn:incoming>f_handler_to_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f_start_to_task" sourceRef="start" targetRef="errorTask" />
+    <bpmn:sequenceFlow id="f_task_to_end" sourceRef="errorTask" targetRef="endSuccess" />
+    <bpmn:sequenceFlow id="f_error_to_handler" sourceRef="errorBoundary" targetRef="errorHandler" />
+    <bpmn:sequenceFlow id="f_handler_to_end" sourceRef="errorHandler" targetRef="endError" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_error_boundary_test">
+    <bpmndi:BPMNPlane id="BPMNPlane_error_boundary_test" bpmnElement="error-boundary-test">
+      <bpmndi:BPMNShape id="BPMNShape_start" bpmnElement="start">
+        <dc:Bounds x="100" y="200" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_errorTask" bpmnElement="errorTask">
+        <dc:Bounds x="200" y="150" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_endSuccess" bpmnElement="endSuccess">
+        <dc:Bounds x="352" y="272" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="337" y="368" width="65" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_endError" bpmnElement="endError">
+        <dc:Bounds x="622" y="200" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="616" y="236" width="48" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_errorHandler" bpmnElement="errorHandler">
+        <dc:Bounds x="550" y="20" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_errorBoundary" bpmnElement="errorBoundary">
+        <dc:Bounds x="272" y="132" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="256" y="108" width="67" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_f_start_to_task" bpmnElement="f_start_to_task">
+        <di:waypoint x="134" y="226" />
+        <di:waypoint x="168" y="226" />
+        <di:waypoint x="168" y="190" />
+        <di:waypoint x="200" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_f_task_to_end" bpmnElement="f_task_to_end">
+        <di:waypoint x="300" y="210" />
+        <di:waypoint x="370" y="210" />
+        <di:waypoint x="370" y="272" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_f_error_to_handler" bpmnElement="f_error_to_handler">
+        <di:waypoint x="308" y="150" />
+        <di:waypoint x="600" y="150" />
+        <di:waypoint x="600" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_f_handler_to_end" bpmnElement="f_handler_to_end">
+        <di:waypoint x="600" y="100" />
+        <di:waypoint x="600" y="170" />
+        <di:waypoint x="640" y="170" />
+        <di:waypoint x="640" y="200" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

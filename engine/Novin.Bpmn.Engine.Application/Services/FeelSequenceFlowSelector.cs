@@ -37,6 +37,16 @@ public sealed class FeelSequenceFlowSelector : ISequenceFlowSelector
         if (process is null) throw new ArgumentNullException(nameof(process));
         if (token is null) throw new ArgumentNullException(nameof(token));
 
+        // ✅ Token-Centric Model: Trace tokens never participate in gateway decisions
+        // Return first flow as fallback (trace tokens will be created for all flows in split)
+        if (!token.IsExecutable)
+        {
+            _logger.LogWarning(
+                "[SEL:ONE] Trace token => skipping condition evaluation. Returning first flow. TokenId={TokenId}",
+                token.Id);
+            return outgoing.First();
+        }
+
         var vars = BuildEvalVars(process, token);
 
         using (_logger.BeginScope(new Dictionary<string, object?>
@@ -122,6 +132,16 @@ public sealed class FeelSequenceFlowSelector : ISequenceFlowSelector
         if (gateway is null) throw new ArgumentNullException(nameof(gateway));
         if (process is null) throw new ArgumentNullException(nameof(process));
         if (token is null) throw new ArgumentNullException(nameof(token));
+
+        // ✅ Token-Centric Model: Trace tokens never participate in gateway decisions
+        // Return empty list (trace tokens will be created for all flows in split)
+        if (!token.IsExecutable)
+        {
+            _logger.LogWarning(
+                "[SEL:MANY] Trace token => skipping condition evaluation. Returning empty list. TokenId={TokenId}",
+                token.Id);
+            return Array.Empty<BpmnSequenceFlow>();
+        }
 
         var vars = BuildEvalVars(process, token);
         var selected = new List<BpmnSequenceFlow>();
@@ -238,7 +258,7 @@ public sealed class FeelSequenceFlowSelector : ISequenceFlowSelector
     {
         // حالت پیشنهادی شما: فقط Token vars (چون IO Mapping قبلش انجام شده)
         if (!_includeProcessVars)
-            return new Dictionary<string, object?>(t.Variables, StringComparer.Ordinal);
+            return new Dictionary<string, object?>(t.Variables.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value)), StringComparer.Ordinal);
 
         // حالت سازگار با گذشته: token overrides process
         var dict = new Dictionary<string, object?>(StringComparer.Ordinal);

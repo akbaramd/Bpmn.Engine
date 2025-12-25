@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bonyan="http://bonyan.org/schema/bpmn/1.0"
+  id="Definitions_timer_boundary_test"
+  targetNamespace="http://novin-bpmn/test">
+
+  <bpmn:process id="timer-boundary-test" name="Timer Boundary Test" isExecutable="true">
+
+    <bpmn:startEvent id="start" name="Start">
+      <bpmn:outgoing>f_start_to_longTask</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <!-- Long Running Task -->
+    <bpmn:scriptTask id="longTask" name="Long Running Task (C#)" scriptFormat="C#">
+      <bonyan:ioMapping onMissingSource="null" onMissingOutput="skip" overwrite="true">
+        <bonyan:input source="duration" target="duration"/>
+        <bonyan:output source="completed" target="completed"/>
+        <bonyan:output source="taskMessage" target="taskMessage"/>
+      </bonyan:ioMapping>
+
+      <bpmn:incoming>f_start_to_longTask</bpmn:incoming>
+      <bpmn:outgoing>f_task_to_end</bpmn:outgoing>
+
+      <!-- Interrupting Timer Boundary (fires after 2 seconds) -->
+      <bpmn:boundaryEvent id="interruptingTimer" name="Interrupting Timer (2s)" attachedToRef="longTask" cancelActivity="true">
+        <bpmn:timerEventDefinition>
+          <bpmn:timeDuration>PT2S</bpmn:timeDuration>
+        </bpmn:timerEventDefinition>
+        <bpmn:outgoing>f_interrupt_to_handler</bpmn:outgoing>
+      </bpmn:boundaryEvent>
+
+      <!-- Non-Interrupting Timer Boundary (fires after 1 second) -->
+      <bpmn:boundaryEvent id="nonInterruptingTimer" name="Non-Interrupting Timer (1s)" attachedToRef="longTask" cancelActivity="false">
+        <bpmn:timerEventDefinition>
+          <bpmn:timeDuration>PT1S</bpmn:timeDuration>
+        </bpmn:timerEventDefinition>
+        <bpmn:outgoing>f_noninterrupt_to_handler</bpmn:outgoing>
+      </bpmn:boundaryEvent>
+
+      <bpmn:script><![CDATA[
+        var duration = context.Variables.Contains("duration") 
+            ? Convert.ToInt32(context.Variables["duration"]) 
+            : 5000; // Default 5 seconds
+        
+        Console.WriteLine($"[longTask] Starting long task - will run for {duration}ms");
+        
+        // Simulate long running task
+        System.Threading.Thread.Sleep(duration);
+        
+        context.Variables["completed"] = true;
+        context.Variables["taskMessage"] = $"Task completed after {duration}ms";
+        Console.WriteLine("[longTask] Long task completed successfully");
+      ]]></bpmn:script>
+    </bpmn:scriptTask>
+
+    <!-- Interrupting Timer Handler -->
+    <bpmn:scriptTask id="interruptHandler" name="Interrupt Handler (C#)" scriptFormat="C#">
+      <bonyan:ioMapping onMissingSource="null" onMissingOutput="skip" overwrite="true">
+        <bonyan:output source="interrupted" target="interrupted"/>
+        <bonyan:output source="interruptMessage" target="interruptMessage"/>
+      </bonyan:ioMapping>
+
+      <bpmn:incoming>f_interrupt_to_handler</bpmn:incoming>
+      <bpmn:outgoing>f_interrupt_to_end</bpmn:outgoing>
+
+      <bpmn:script><![CDATA[
+        context.Variables["interrupted"] = true;
+        context.Variables["interruptMessage"] = "Task was interrupted by timer boundary event (interrupting)";
+        Console.WriteLine("[interruptHandler] Interrupting timer boundary triggered - task was canceled");
+      ]]></bpmn:script>
+    </bpmn:scriptTask>
+
+    <!-- Non-Interrupting Timer Handler -->
+    <bpmn:scriptTask id="nonInterruptHandler" name="Non-Interrupt Handler (C#)" scriptFormat="C#">
+      <bonyan:ioMapping onMissingSource="null" onMissingOutput="skip" overwrite="true">
+        <bonyan:output source="parallelTriggered" target="parallelTriggered"/>
+        <bonyan:output source="parallelMessage" target="parallelMessage"/>
+      </bonyan:ioMapping>
+
+      <bpmn:incoming>f_noninterrupt_to_handler</bpmn:incoming>
+      <bpmn:outgoing>f_noninterrupt_to_end</bpmn:outgoing>
+
+      <bpmn:script><![CDATA[
+        context.Variables["parallelTriggered"] = true;
+        context.Variables["parallelMessage"] = "Non-interrupting timer boundary triggered - running in parallel";
+        Console.WriteLine("[nonInterruptHandler] Non-interrupting timer boundary triggered - running parallel to main task");
+      ]]></bpmn:script>
+    </bpmn:scriptTask>
+
+    <bpmn:endEvent id="endSuccess" name="End Success">
+      <bpmn:incoming>f_task_to_end</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="endInterrupted" name="End Interrupted">
+      <bpmn:incoming>f_interrupt_to_end</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="endParallel" name="End Parallel">
+      <bpmn:incoming>f_noninterrupt_to_end</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- Sequence Flows -->
+    <bpmn:sequenceFlow id="f_start_to_longTask" sourceRef="start" targetRef="longTask"/>
+    <bpmn:sequenceFlow id="f_task_to_end" sourceRef="longTask" targetRef="endSuccess"/>
+    <bpmn:sequenceFlow id="f_interrupt_to_handler" sourceRef="interruptingTimer" targetRef="interruptHandler"/>
+    <bpmn:sequenceFlow id="f_interrupt_to_end" sourceRef="interruptHandler" targetRef="endInterrupted"/>
+    <bpmn:sequenceFlow id="f_noninterrupt_to_handler" sourceRef="nonInterruptingTimer" targetRef="nonInterruptHandler"/>
+    <bpmn:sequenceFlow id="f_noninterrupt_to_end" sourceRef="nonInterruptHandler" targetRef="endParallel"/>
+
+  </bpmn:process>
+</bpmn:definitions>

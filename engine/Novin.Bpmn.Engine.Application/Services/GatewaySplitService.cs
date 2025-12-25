@@ -38,27 +38,36 @@ public sealed class GatewaySplitService : IGatewaySplitService
         if (outgoingAll.Count <= 1)
             return false; // not a split
 
-        // 🔒 اگر توکن bypass/non-exec است: fork نکن (برای جلوگیری از انفجار)
+        // 🔒 Trace token (non-executable): create trace tokens for ALL outgoing flows
         if (!token.IsExecutable)
         {
-            var passFlow = ChooseDefaultOrFirst(outgoingAll, gateway);
-            if (passFlow == null || string.IsNullOrWhiteSpace(passFlow.targetRef))
-            {
-                token.Fail($"NonExecutable token cannot pass split gateway '{gateway.id}': no valid outgoing.");
-                return true;
-            }
+            _logger.LogInformation("[SPLIT] Trace token => creating trace tokens for ALL outgoing flows. OutgoingCount={Count}",
+                outgoingAll.Count);
 
-            _logger.LogWarning("[SPLIT] NonExecutable token => NO-FORK. Passing via {FlowKey} to {Target}",
-                FlowKey(passFlow), passFlow.targetRef);
+            // Scope for this fork group
+            var traceScopeId = Guid.NewGuid();
+            var traceExpectedCount = outgoingAll
+                .Select(FlowKey)
+                .Distinct()
+                .Count();
 
-            // اگر توکن Active نیست، دوباره MoveTo باعث exception می‌شود
-            if (token.State != TokenState.Active)
-            {
-                _logger.LogWarning("[SPLIT] NonExecutable token state is {State}, expected Active. Skipping MoveTo.", token.State);
-                return true;
-            }
+            RegisterExpectedCount(process, traceScopeId, traceExpectedCount);
 
-            token.MoveTo(passFlow.targetRef!, FlowKey(passFlow));
+            // Terminate parent trace token
+            token.Terminate($"Trace token split gateway '{gateway.id}' forked to {traceExpectedCount} trace branch(es).");
+            process.RemoveToken(token.Id);
+
+            // Create trace tokens for ALL outgoing flows
+            await _fork.ForkChildrenAsync(
+                process,
+                parent: token,
+                outgoing: outgoingAll,
+                scopeId: traceScopeId,
+                isExecutableForFlow: _ => false, // All are trace tokens
+                ctx: ctx,
+                ct: ct);
+
+            _logger.LogInformation("[SPLIT] Trace token fork completed. Created {Count} trace tokens.", traceExpectedCount);
             return true;
         }
 
@@ -150,7 +159,9 @@ public sealed class GatewaySplitService : IGatewaySplitService
 
         // scope for this fork group
         var scopeId = Guid.NewGuid();
-        var expectedCount = selectedFlows
+        // ✅ Token-Centric Model: Expected count is ALL outgoing flows (not just selected)
+        // Join waits for unique arrivals from ALL incoming flows
+        var expectedCount = outgoingAll
             .Select(FlowKey)
             .Distinct()
             .Count();
@@ -158,24 +169,34 @@ public sealed class GatewaySplitService : IGatewaySplitService
         // ثبت expected برای join های بعدی
         RegisterExpectedCount(process, scopeId, expectedCount);
 
-        _logger.LogInformation("[SPLIT] ForkScopeId={ScopeId} ExpectedArrivals={Expected} Selected={Selected}",
-            scopeId, expectedCount, string.Join(", ", selectedFlows.Select(f => $"{FlowKey(f)}=>{f.targetRef}")));
+        var selectedFlowKeysStr = string.Join(", ", selectedFlows.Select(f => $"{FlowKey(f)}=>{f.targetRef}"));
+        var allFlowKeys = string.Join(", ", outgoingAll.Select(f => $"{FlowKey(f)}=>{f.targetRef}"));
+        _logger.LogInformation(
+            "[SPLIT] ForkScopeId={ScopeId} ExpectedArrivals={Expected} Selected={Selected} AllFlows={All}",
+            scopeId, expectedCount, selectedFlowKeysStr, allFlowKeys);
 
         // ✅ parent token is replaced by children (terminate/remove parent)
         token.Terminate($"Split gateway '{gateway.id}' forked to {expectedCount} branch(es).");
         process.RemoveToken(token.Id);
 
-        // fork only selected flows, children inherit executable=true (parent is executable)
+        // ✅ Token-Centric Model: Create tokens for ALL outgoing flows
+        // Selected flows get executable tokens, non-selected get trace tokens
+        var selectedFlowKeys = selectedFlows.Select(FlowKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        
         await _fork.ForkChildrenAsync(
             process,
             parent: token,
-            outgoing: selectedFlows,
+            outgoing: outgoingAll, // ALL outgoing flows, not just selected
             scopeId: scopeId,
-            isExecutableForFlow: _ => true,
+            isExecutableForFlow: flow => selectedFlowKeys.Contains(FlowKey(flow)), // Only selected are executable
             ctx: ctx,
             ct: ct);
 
-        _logger.LogInformation("[SPLIT] ForkChildrenAsync done. ParentTerminated={ParentState}", token.State);
+        var executableCount = selectedFlows.Count;
+        var traceCount = outgoingAll.Count - executableCount;
+        _logger.LogInformation(
+            "[SPLIT] Fork completed. ExecutableTokens={Exec} TraceTokens={Trace} Total={Total}",
+            executableCount, traceCount, outgoingAll.Count);
         return true;
     }
 

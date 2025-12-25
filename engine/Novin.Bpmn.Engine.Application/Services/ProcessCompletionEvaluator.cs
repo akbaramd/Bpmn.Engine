@@ -85,43 +85,60 @@ public sealed class ProcessCompletionEvaluator : IProcessCompletionEvaluator
             "[COMPLETION] Tokens loaded. ProcessId={ProcessId} TotalTokens={Total}",
             processId,
             tokensList.Count);      
-        // شمارش توکن‌های زنده (Live tokens)
-        var liveTokens = tokensList
-            .Where(t => IsLiveToken(t))
+        // ✅ Token-Centric Model: Separate executable and trace token analysis
+        var liveExecutableTokens = tokensList
+            .Where(t => IsLiveExecutableToken(t))
+            .ToList();
+
+        var liveTraceTokens = tokensList
+            .Where(t => IsLiveTraceToken(t))
             .ToList();
 
         var terminalTokens = tokensList
-            .Where(t => !IsLiveToken(t))
+            .Where(t => !IsLiveExecutableToken(t) && !IsLiveTraceToken(t))
             .ToList();
 
         _logger.LogInformation(
-            "[COMPLETION] Token analysis. ProcessId={ProcessId} TotalTokens={Total} LiveTokens={Live} TerminalTokens={Terminal}",
+            "[COMPLETION] Token analysis. ProcessId={ProcessId} TotalTokens={Total} LiveExecutable={Exec} LiveTrace={Trace} Terminal={Terminal}",
             processId,
             tokensList.Count,
-            liveTokens.Count,
+            liveExecutableTokens.Count,
+            liveTraceTokens.Count,
             terminalTokens.Count);
 
         // لاگ جزئیات هر توکن
         foreach (var token in tokensList)
         {
+            var isLiveExec = IsLiveExecutableToken(token);
+            var isLiveTrace = IsLiveTraceToken(token);
             _logger.LogDebug(
-                "[COMPLETION] Token details. ProcessId={ProcessId} TokenId={TokenId} State={State} IsExecutable={Executable} ElementId={ElementId} IsLive={IsLive}",
+                "[COMPLETION] Token details. ProcessId={ProcessId} TokenId={TokenId} State={State} IsExecutable={Executable} ElementId={ElementId} IsLiveExec={LiveExec} IsLiveTrace={LiveTrace}",
                 processId,
                 token.Id,
                 token.State,
                 token.IsExecutable,
                 token.CurrentElementId,
-                IsLiveToken(token));
+                isLiveExec,
+                isLiveTrace);
         }
 
         // لاگ جزئیات توکن‌های زنده
-        if (liveTokens.Count > 0)
+        if (liveExecutableTokens.Count > 0)
         {
-            var liveTokenDetails = string.Join(", ", liveTokens.Select(t => $"{t.Id}({t.State})").ToList());
+            var liveExecDetails = string.Join(", ", liveExecutableTokens.Select(t => $"{t.Id}({t.State})").ToList());
             _logger.LogDebug(
-                "[COMPLETION] Live tokens details. ProcessId={ProcessId} LiveTokenIds={TokenIds}",
+                "[COMPLETION] Live executable tokens details. ProcessId={ProcessId} LiveExecutableTokenIds={TokenIds}",
                 processId,
-                liveTokenDetails);
+                liveExecDetails);
+        }
+
+        if (liveTraceTokens.Count > 0)
+        {
+            var liveTraceDetails = string.Join(", ", liveTraceTokens.Select(t => $"{t.Id}({t.State})").ToList());
+            _logger.LogDebug(
+                "[COMPLETION] Live trace tokens details. ProcessId={ProcessId} LiveTraceTokenIds={TokenIds}",
+                processId,
+                liveTraceDetails);
         }
 
         // بررسی Open Incidents
@@ -148,15 +165,18 @@ public sealed class ProcessCompletionEvaluator : IProcessCompletionEvaluator
                 incident.Retries);
         }
 
-        // قانون Completion:
-        // پروسس فقط وقتی Completed می‌شود که:
-        // 1. هیچ توکن Live نباشد (Active/Waiting/Failed)
-        // 2. هیچ Incident باز نباشد
-        // 3. ProcessState هم Running باشد
-        if (liveTokens.Count == 0 && openIncidentsList.Count == 0)
+        // ✅ Token-Centric Model: Process completion rules
+        // Executable completion: when executable tokens reach zero
+        // Trace completion: when all tokens (executable and trace) reach End or are consumed in Join
+        // Process completes when:
+        // 1. No live executable tokens (executable completion)
+        // 2. No live trace tokens (trace completion)
+        // 3. No open incidents
+        // 4. ProcessState is Running
+        if (liveExecutableTokens.Count == 0 && liveTraceTokens.Count == 0 && openIncidentsList.Count == 0)
         {
             _logger.LogInformation(
-                "[COMPLETION] ✅ No live tokens and no open incidents. Completing process. ProcessId={ProcessId} TotalTokens={Total}",
+                "[COMPLETION] ✅ No live executable tokens, no live trace tokens, and no open incidents. Completing process. ProcessId={ProcessId} TotalTokens={Total}",
                 processId,
                 tokensList.Count);
 
@@ -169,12 +189,20 @@ public sealed class ProcessCompletionEvaluator : IProcessCompletionEvaluator
         }
         else
         {
-            if (liveTokens.Count > 0)
+            if (liveExecutableTokens.Count > 0)
             {
                 _logger.LogDebug(
-                    "[COMPLETION] ⏳ Process still has live tokens. Waiting for completion. ProcessId={ProcessId} LiveCount={Live}",
+                    "[COMPLETION] ⏳ Process still has live executable tokens. Waiting for completion. ProcessId={ProcessId} LiveExecutableCount={LiveExec}",
                     processId,
-                    liveTokens.Count);
+                    liveExecutableTokens.Count);
+            }
+
+            if (liveTraceTokens.Count > 0)
+            {
+                _logger.LogDebug(
+                    "[COMPLETION] ⏳ Process still has live trace tokens. Waiting for trace completion. ProcessId={ProcessId} LiveTraceCount={LiveTrace}",
+                    processId,
+                    liveTraceTokens.Count);
             }
 
             if (openIncidentsList.Count > 0)
@@ -188,7 +216,7 @@ public sealed class ProcessCompletionEvaluator : IProcessCompletionEvaluator
     }
 
     /// <summary>
-    /// Determines if a token is "live" (should be counted for completion evaluation).
+    /// Determines if an executable token is "live" (should be counted for executable completion evaluation).
     /// 
     /// قانون: Failed token = پروسس تمام نشده
     /// یک Failed token هنوز "زنده" است چون:
@@ -196,11 +224,11 @@ public sealed class ProcessCompletionEvaluator : IProcessCompletionEvaluator
     /// - ممکن است manual resolve شود
     /// - پروسس نباید complete شود تا زمانی که Failed token resolve شود
     /// 
-    /// Live tokens are executable tokens in Created/Active/Waiting/Failed states.
+    /// Live executable tokens are tokens with IsExecutable=true in Created/Active/Waiting/Failed states.
     /// </summary>
-    private static bool IsLiveToken(Token token)
+    private static bool IsLiveExecutableToken(Token token)
     {
-        // فقط توکن‌های executable را حساب می‌کنیم (bypass tokens را نادیده می‌گیریم)
+        // فقط توکن‌های executable را حساب می‌کنیم
         if (!token.IsExecutable)
             return false;
 
@@ -210,6 +238,25 @@ public sealed class ProcessCompletionEvaluator : IProcessCompletionEvaluator
             or TokenState.Active
             or TokenState.Waiting
             or TokenState.Failed; // ✅ Failed token هنوز زنده است
+    }
+
+    /// <summary>
+    /// Determines if a trace token is "live" (should be counted for trace completion evaluation).
+    /// 
+    /// Trace tokens are non-executable tokens that complete the trace by reaching End or being consumed in Join.
+    /// Live trace tokens are tokens with IsExecutable=false in Created/Active/Waiting states.
+    /// Trace tokens never fail (they just move through the process).
+    /// </summary>
+    private static bool IsLiveTraceToken(Token token)
+    {
+        // فقط توکن‌های trace (non-executable) را حساب می‌کنیم
+        if (token.IsExecutable)
+            return false;
+
+        // Trace tokens در حالت‌های زنده (Failed نمی‌شوند)
+        return token.State is TokenState.Created
+            or TokenState.Active
+            or TokenState.Waiting;
     }
 }
 

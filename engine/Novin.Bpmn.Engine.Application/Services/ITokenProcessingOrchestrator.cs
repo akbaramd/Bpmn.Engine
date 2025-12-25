@@ -1,9 +1,25 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using MediatR;
+using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Domain.Entities;
+using Novin.Bpmn.Engine.Domain.Events;
 using Novin.Bpmn.Engine.Domain.Exceptions;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
+
+/// <summary>
+/// Determines if a token is "active" (should be converted to trace token).
+/// Active tokens are in Created/Active/Waiting states.
+/// </summary>
+internal static class TokenExtensions
+{
+    internal static bool IsActiveToken(Token token)
+    {
+        return token.State is TokenState.Created
+            or TokenState.Active
+            or TokenState.Waiting;
+    }
+}
 
 public interface ITokenProcessingOrchestrator
 {
@@ -18,6 +34,8 @@ public sealed class TokenProcessingOrchestrator : ITokenProcessingOrchestrator
     private readonly IIncidentService _incidentService;
     private readonly IBpmnErrorBoundaryFinder _errorBoundaryFinder;
     private readonly IBoundaryEventExecutor _boundaryEventExecutor;
+    private readonly IBoundaryTimerScheduler _timerScheduler;
+    private readonly IMediator _mediator;
     private readonly ILogger<TokenProcessingOrchestrator> _logger;
 
     public TokenProcessingOrchestrator(
@@ -27,6 +45,8 @@ public sealed class TokenProcessingOrchestrator : ITokenProcessingOrchestrator
         IIncidentService incidentService,
         IBpmnErrorBoundaryFinder errorBoundaryFinder,
         IBoundaryEventExecutor boundaryEventExecutor,
+        IBoundaryTimerScheduler timerScheduler,
+        IMediator mediator,
         ILogger<TokenProcessingOrchestrator> logger)
     {
         _uow = uow ?? throw new ArgumentNullException(nameof(uow));
@@ -35,6 +55,8 @@ public sealed class TokenProcessingOrchestrator : ITokenProcessingOrchestrator
         _incidentService = incidentService ?? throw new ArgumentNullException(nameof(incidentService));
         _errorBoundaryFinder = errorBoundaryFinder ?? throw new ArgumentNullException(nameof(errorBoundaryFinder));
         _boundaryEventExecutor = boundaryEventExecutor ?? throw new ArgumentNullException(nameof(boundaryEventExecutor));
+        _timerScheduler = timerScheduler ?? throw new ArgumentNullException(nameof(timerScheduler));
+        _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -162,138 +184,122 @@ public sealed class TokenProcessingOrchestrator : ITokenProcessingOrchestrator
                 return;
             }
 
-            // Create BPMN runtime context to search for error boundaries
-            _logger.LogDebug(
-                "[ORCHESTRATOR] Creating BPMN runtime context for error boundary search. ProcessId={ProcessId} TokenId={TokenId} ElementId={ElementId}",
-                processId,
-                tokenId,
-                token.CurrentElementId);
-
-            var ctx = await _ctxFactory.CreateAsync(process, trxCt);
-
-            // Step 1: Try to find Error Boundary attached to current element
-            _logger.LogDebug(
-                "[ORCHESTRATOR] Step 1: Searching for error boundary attached to element. ProcessId={ProcessId} TokenId={TokenId} ElementId={ElementId} ErrorCode={ErrorCode}",
+            // ✅ Error Boundary Handling Flow via Subscription Manager
+            // Publish ErrorRaisedEvent - Subscription Manager will handle lookup and execution
+            _logger.LogInformation(
+                "[ORCHESTRATOR] Publishing ErrorRaisedEvent for subscription-based error handling. ProcessId={ProcessId} TokenId={TokenId} ElementId={ElementId} ErrorCode={ErrorCode} ScopeId={ScopeId}",
                 processId,
                 tokenId,
                 token.CurrentElementId,
-                bex.Code);
+                bex.Code,
+                token.ScopeId);
 
-            var errorBoundaryId = _errorBoundaryFinder.FindErrorBoundary(ctx, token.CurrentElementId, bex.Code);
+            var errorRaisedEvent = new ErrorRaisedEvent(
+                ProcessId: processId,
+                TokenId: tokenId,
+                ElementId: token.CurrentElementId,
+                ErrorCode: bex.Code,
+                ErrorMessage: bex.Message,
+                ScopeId: token.ScopeId,
+                OccurredAtUtc: DateTime.UtcNow);
 
-            // Step 2: If no boundary found, try to find Error EventSubprocess
-            if (errorBoundaryId == null)
+            // ✅ Error Boundary Handling Flow via Subscription Manager
+            // Publish ErrorRaisedEvent - BoundarySubscriptionManager will handle subscription lookup and execution
+            await _mediator.Publish(errorRaisedEvent, trxCt);
+            
+            // Save changes (BoundarySubscriptionManager may have updated subscriptions)
+            await _uow.SaveChangesAsync(trxCt);
+            
+            // Reload token to check current state after error handling
+            token = await _uow.Tokens.GetByIdAsync(tokenId, trxCt);
+            if (token == null)
             {
-                _logger.LogDebug(
-                    "[ORCHESTRATOR] Step 2: No error boundary found, searching for error event subprocess. ProcessId={ProcessId} TokenId={TokenId} ErrorCode={ErrorCode}",
-                    processId,
-                    tokenId,
-                    bex.Code);
-
-                errorBoundaryId = _errorBoundaryFinder.FindErrorEventSubprocess(ctx, bex.Code);
+                _logger.LogWarning("[ORCHESTRATOR] Token not found after error handling. TokenId={TokenId}", tokenId);
+                return;
             }
 
-            if (errorBoundaryId != null)
+            // Check if error was handled by BoundarySubscriptionManager
+            // If handled, token would have been moved/terminated by boundary executor
+            // If not handled, token is still at the same element - handle as unhandled
+            var wasHandled = token.CurrentElementId != errorRaisedEvent.ElementId 
+                          || token.State == TokenState.Terminated 
+                          || token.State == TokenState.Completed;
+
+            if (!wasHandled)
             {
-                // Error handler found: use boundary event executor for consistent semantics
-                _logger.LogInformation(
-                    "[ORCHESTRATOR] Error boundary found. Using boundary event executor. ProcessId={ProcessId} TokenId={TokenId} ErrorBoundaryId={ErrorBoundaryId} ErrorCode={ErrorCode}",
-                    processId,
-                    tokenId,
-                    errorBoundaryId,
-                    bex.Code);
-
-                // Find or create subscription for error boundary
-                // Note: Error boundary is synchronous, so we create a temporary subscription and execute immediately
-                _logger.LogDebug(
-                    "[ORCHESTRATOR] Looking for existing error boundary subscription. ProcessId={ProcessId} TokenId={TokenId} ElementId={ElementId} ErrorBoundaryId={ErrorBoundaryId}",
-                    processId,
-                    tokenId,
-                    token.CurrentElementId,
-                    errorBoundaryId);
-
-                var subscriptions = await _uow.BoundarySubscriptions.GetActiveByAttachedElementAsync(
-                    processId,
-                    token.CurrentElementId,
-                    trxCt);
-
-                _logger.LogDebug(
-                    "[ORCHESTRATOR] Found {Count} active subscriptions for element. ProcessId={ProcessId} ElementId={ElementId}",
-                    subscriptions.Count(),
-                    processId,
-                    token.CurrentElementId);
-
-                var errorSubscription = subscriptions
-                    .FirstOrDefault(s => s.BoundaryEventId == errorBoundaryId && s.Kind == BoundaryKind.Error);
-
-                if (errorSubscription == null)
-                {
-                    _logger.LogDebug(
-                        "[ORCHESTRATOR] Creating temporary subscription for error boundary. ProcessId={ProcessId} TokenId={TokenId} ErrorBoundaryId={ErrorBoundaryId} ErrorCode={ErrorCode} ActivityInstanceId={ActivityInstanceId}",
-                        processId,
-                        tokenId,
-                        errorBoundaryId,
-                        bex.Code,
-                        token.ActivityInstanceId);
-
-                    // Create temporary subscription for error boundary
-                    errorSubscription = new BoundarySubscription(
-                        processId,
-                        tokenId,
-                        token.CurrentElementId,
-                        errorBoundaryId,
-                        BoundaryKind.Error,
-                        isInterrupting: true, // Error boundaries are always interrupting
-                        dueAt: null,
-                        correlationKey: null,
-                        errorCode: bex.Code,
-                        activityInstanceId: token.ActivityInstanceId); // Use ActivityInstanceId for proper cancellation
-
-                    await _uow.BoundarySubscriptions.AddAsync(errorSubscription, trxCt);
-                    
-                    _logger.LogDebug(
-                        "[ORCHESTRATOR] Temporary subscription created. SubscriptionId={SubscriptionId} ProcessId={ProcessId} TokenId={TokenId}",
-                        errorSubscription.Id,
-                        processId,
-                        tokenId);
-                }
-                else
-                {
-                    _logger.LogDebug(
-                        "[ORCHESTRATOR] Using existing error boundary subscription. SubscriptionId={SubscriptionId} ProcessId={ProcessId} TokenId={TokenId}",
-                        errorSubscription.Id,
-                        processId,
-                        tokenId);
-                }
-
-                // Execute boundary event using shared executor
-                _logger.LogDebug(
-                    "[ORCHESTRATOR] Executing error boundary via executor. SubscriptionId={SubscriptionId} ProcessId={ProcessId} TokenId={TokenId}",
-                    errorSubscription.Id,
-                    processId,
-                    tokenId);
-
-                await _boundaryEventExecutor.ExecuteAsync(errorSubscription.Id, trxCt);
-
-                _logger.LogInformation(
-                    "[ORCHESTRATOR] Error boundary executed via executor. ProcessId={ProcessId} TokenId={TokenId} SubscriptionId={SubscriptionId} ErrorBoundaryId={ErrorBoundaryId}",
-                    processId,
-                    tokenId,
-                    errorSubscription.Id,
-                    errorBoundaryId);
-            }
-            else
-            {
-                // No error handler found: unhandled BPMN error
-                // Create incident and fail token (process remains Running for operational handling)
+                // ✅ Trace-First Token Semantics: No error handler found - unhandled BPMN error
+                // Convert all executable tokens to trace tokens and fail the process
                 _logger.LogWarning(
-                    "[ORCHESTRATOR] No error boundary found for BPMN error. Creating incident and failing token. ProcessId={ProcessId} TokenId={TokenId} ErrorCode={ErrorCode} ElementId={ElementId}",
+                    "[ORCHESTRATOR] No error boundary found for BPMN error. Converting all tokens to trace tokens and failing process. ProcessId={ProcessId} TokenId={TokenId} ErrorCode={ErrorCode} ElementId={ElementId}",
                     processId,
                     tokenId,
                     bex.Code,
                     token.CurrentElementId);
 
-                // Create BPMN Error incident
+                // ✅ Step 1: Convert all active executable tokens to trace tokens
+                var allTokens = await _uow.Tokens.GetByProcessIdAsync(processId, trxCt);
+                var executableTokens = allTokens
+                    .Where(t => t.IsExecutable && TokenExtensions.IsActiveToken(t))
+                    .ToList();
+
+                _logger.LogInformation(
+                    "[ORCHESTRATOR] Converting {Count} executable tokens to trace tokens for unhandled error. ProcessId={ProcessId}",
+                    executableTokens.Count,
+                    processId);
+
+                foreach (var t in executableTokens)
+                {
+                    _logger.LogDebug(
+                        "[ORCHESTRATOR] Converting token to trace token. TokenId={TokenId} ElementId={ElementId} State={State}",
+                        t.Id,
+                        t.CurrentElementId,
+                        t.State);
+
+                    // Convert to trace token: mark as non-executable
+                    t.MarkNonExecutable($"Unhandled BPMN error: {bex.Code} - converted to trace token");
+
+                    // If token is waiting (e.g., at a join), resume it so it can continue as trace token
+                    if (t.State == TokenState.Waiting)
+                    {
+                        t.ResumeWithoutProcessing();
+                    }
+                }
+
+                // ✅ Step 2: Cancel all subscriptions (no error handler means no compensation path)
+                var allSubscriptions = await _uow.BoundarySubscriptions.GetByProcessIdAsync(processId, trxCt);
+                var activeSubscriptions = allSubscriptions
+                    .Where(s => s.State == SubscriptionState.Active)
+                    .ToList();
+
+                _logger.LogInformation(
+                    "[ORCHESTRATOR] Canceling {Count} active subscriptions for unhandled error. ProcessId={ProcessId}",
+                    activeSubscriptions.Count,
+                    processId);
+
+                foreach (var sub in activeSubscriptions)
+                {
+                    sub.Cancel();
+                    await _uow.BoundarySubscriptions.UpdateAsync(sub, trxCt);
+
+                    // Cancel external job if exists
+                    if (!string.IsNullOrWhiteSpace(sub.ExternalJobKey))
+                    {
+                        try
+                        {
+                            await _timerScheduler.CancelAsync(sub.ExternalJobKey, trxCt);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(
+                                ex,
+                                "[ORCHESTRATOR] Failed to cancel external job. SubscriptionId={SubscriptionId} JobKey={JobKey}",
+                                sub.Id,
+                                sub.ExternalJobKey);
+                        }
+                    }
+                }
+
+                // ✅ Step 3: Create incident and fail token/process
                 var incident = await _incidentService.CreateBpmnErrorAsync(
                     processId,
                     tokenId,
@@ -302,24 +308,25 @@ public sealed class TokenProcessingOrchestrator : ITokenProcessingOrchestrator
                     bex.Message,
                     trxCt);
 
-                // Fail token with incident (process remains Running - token stays in process)
+                // Fail token with incident
                 token.Fail(
                     $"Unhandled BPMN Error: {bex.Code} - {bex.Message}",
                     ErrorType.BpmnError,
                     errorCode: bex.Code,
                     incident.Id);
 
-                // Note: We do NOT call process.RemoveToken() - process stays Running
-                // This allows the process to be retried/resolved after incident handling
+                // Fail the process (unhandled error means process cannot continue)
+                process.Fail($"Unhandled BPMN Error: {bex.Code} - {bex.Message}");
 
                 await _uow.SaveChangesAsync(trxCt);
 
                 _logger.LogInformation(
-                    "[ORCHESTRATOR] Unhandled BPMN error handled. ProcessId={ProcessId} TokenId={TokenId} ErrorCode={ErrorCode} IncidentId={IncidentId}",
+                    "[ORCHESTRATOR] ✅ Unhandled BPMN error handled with Trace-First semantics. ProcessId={ProcessId} TokenId={TokenId} ErrorCode={ErrorCode} IncidentId={IncidentId} ConvertedToTrace={TraceCount}",
                     processId,
                     tokenId,
                     bex.Code,
-                    incident.Id);
+                    incident.Id,
+                    executableTokens.Count);
             }
         }, ct);
 
