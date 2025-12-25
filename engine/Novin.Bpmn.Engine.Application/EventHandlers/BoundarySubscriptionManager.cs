@@ -278,12 +278,20 @@ public sealed class BoundarySubscriptionManager :
                 return;
             }
 
-            // ✅ Step 3: Consume matched subscription and cancel other subscriptions in the same scope
+            // ✅ Step 3: Execute boundary event (dispatch handler flow) while subscription is still Active
+            _logger.LogInformation(
+                "[ERROR-HANDLER] Executing boundary event. SubscriptionId={SubscriptionId} BoundaryEventId={BoundaryEventId}",
+                matchedSubscription.Id,
+                matchedSubscription.BoundaryEventId);
+
+            await _boundaryEventExecutor.ExecuteAsync(matchedSubscription.Id, txCt);
+
+            // ✅ Step 4: Mark subscription as triggered and cancel other subscriptions in the same scope
             matchedSubscription.MarkTriggered();
             await _uow.BoundarySubscriptions.UpdateAsync(matchedSubscription, txCt);
 
             _logger.LogInformation(
-                "[ERROR-HANDLER] ✅ Matched subscription consumed. SubscriptionId={SubscriptionId} ScopeId={ScopeId}",
+                "[ERROR-HANDLER] ✅ Matched subscription marked as triggered. SubscriptionId={SubscriptionId} ScopeId={ScopeId}",
                 matchedSubscription.Id,
                 matchedScopeId);
 
@@ -296,7 +304,7 @@ public sealed class BoundarySubscriptionManager :
                     .ToList();
 
                 var otherSubscriptions = subscriptionsList
-                    .Where(s => s.Id != matchedSubscription.Id 
+                    .Where(s => s.Id != matchedSubscription.Id
                              && scopeTokenIds.Contains(s.TokenId)
                              && s.State == SubscriptionState.Active)
                     .ToList();
@@ -328,9 +336,6 @@ public sealed class BoundarySubscriptionManager :
                     otherSubscriptions.Count,
                     matchedScopeId);
             }
-
-            // ✅ Step 4: Execute boundary event (dispatch handler flow)
-            await _boundaryEventExecutor.ExecuteAsync(matchedSubscription.Id, txCt);
 
             _logger.LogInformation(
                 "[ERROR-HANDLER] ✅ Error boundary executed. SubscriptionId={SubscriptionId} ProcessId={ProcessId} TokenId={TokenId}",
