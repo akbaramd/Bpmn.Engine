@@ -3,28 +3,36 @@
 
 ### Get All Available Test Scenarios
 ### Lists all scenarios with their test cases and descriptions
-GET {{baseUrl}}/api/test-scenarios
+GET http://localhost:5000/api/test-scenarios
 Accept: application/json
 
 ###
 
 ### Run a Specific Test Scenario
 ### Executes a single scenario by name (e.g., "ErrorBoundaryScenario")
-POST {{baseUrl}}/api/test-scenarios/{{scenarioName}}/run
+POST http://localhost:5000/api/test-scenarios/ErrorBoundaryScenario/run
+Content-Type: application/json
+
+### Run Enterprise Demo Scenario
+POST http://localhost:5000/api/test-scenarios/EnterpriseDemoScenario/run
+Content-Type: application/json
+
+### Run Timer Boundary Scenario
+POST http://localhost:5000/api/test-scenarios/TimerBoundaryScenario/run
 Content-Type: application/json
 
 ###
 
 ### Run All Test Scenarios
 ### Executes all available test scenarios
-POST {{baseUrl}}/api/test-scenarios/run-all
+POST http://localhost:5000/api/test-scenarios/run-all
 Content-Type: application/json
 
 ###
 
 ### Get Scenario Status
 ### Gets the current status of a specific scenario (for future use)
-GET {{baseUrl}}/api/test-scenarios/{{scenarioName}}/status
+GET http://localhost:5000/api/test-scenarios/ErrorBoundaryScenario/status
 Accept: application/json
 
 ###
@@ -59,13 +67,6 @@ Accept: application/json
 
 ###
 
-### Variables for easy testing
-@{
-    "baseUrl": "http://localhost:5000",
-    "scenarioName": "ErrorBoundaryScenario"
-}
-
-###
 
 ### Expected Response Structure for GET /api/test-scenarios:
 ###
@@ -140,23 +141,23 @@ Accept: application/json
 ### Client JavaScript Examples
 ###
 ### // Get all scenarios
-### const scenarios = await fetch('/api/test-scenarios')
+### const scenarios = await fetch('http://localhost:5000/api/test-scenarios')
 ###   .then(r => r.json());
 ###
 ### // Run a specific scenario
-### const result = await fetch(`/api/test-scenarios/${scenarioName}/run`, {
+### const result = await fetch('http://localhost:5000/api/test-scenarios/ErrorBoundaryScenario/run', {
 ###   method: 'POST',
 ###   headers: { 'Content-Type': 'application/json' }
 ### }).then(r => r.json());
 ###
 ### // Run all scenarios
-### const allResults = await fetch('/api/test-scenarios/run-all', {
+### const allResults = await fetch('http://localhost:5000/api/test-scenarios/run-all', {
 ###   method: 'POST',
 ###   headers: { 'Content-Type': 'application/json' }
 ### }).then(r => r.json());
 ###
 ### // Check scenario status
-### const status = await fetch(`/api/test-scenarios/${scenarioName}/status`)
+### const status = await fetch('http://localhost:5000/api/test-scenarios/ErrorBoundaryScenario/status')
 ###   .then(r => r.json());
 
 ###
@@ -164,13 +165,13 @@ Accept: application/json
 ### Integration with Execution Flow Visualization
 ###
 ### // After running a scenario, get execution flow
-### const runResult = await fetch(`/api/test-scenarios/ErrorBoundaryScenario/run`, {
+### const runResult = await fetch('http://localhost:5000/api/test-scenarios/ErrorBoundaryScenario/run', {
 ###   method: 'POST'
 ### }).then(r => r.json());
 ###
 ### // Extract process ID from logs or use a known ID
-### const processId = "extracted-from-logs-or-known-id";
-### const executionFlow = await fetch(`/api/process-execution/${processId}/flow`)
+### const processId = "550e8400-e29b-41d4-a716-446655440000";
+### const executionFlow = await fetch(`http://localhost:5000/api/process-execution/${processId}/flow`)
 ###   .then(r => r.json());
 ###
 ### // Visualize the execution flow in BPMN.js

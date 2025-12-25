@@ -7,7 +7,7 @@ namespace Novin.Bpmn.Engine.Api.TestScenarios;
 /// </summary>
 public sealed class TimerBoundaryScenario : TestScenario
 {
-    public override string Name => "Timer Boundary Test";
+    public override string Name => "TimerBoundaryScenario";
     public override string Description => "Tests timer boundary events (interrupting and non-interrupting)";
     public override string BpmnFileName => "timer-boundary-test.bpmn";
     public override string ProcessKey => "timer-boundary-test";

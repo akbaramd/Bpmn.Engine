@@ -7,7 +7,7 @@ namespace Novin.Bpmn.Engine.Api.TestScenarios;
 /// </summary>
 public sealed class EnterpriseDemoScenario : TestScenario
 {
-    public override string Name => "Enterprise Demo";
+    public override string Name => "EnterpriseDemoScenario";
     public override string Description => "Tests exception handling (Technical Failure and BPMN Error)";
     public override string BpmnFileName => "enterprise-demo.bpmn";
     public override string ProcessKey => "demo-process-key";

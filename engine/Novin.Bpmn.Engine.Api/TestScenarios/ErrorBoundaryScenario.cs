@@ -7,7 +7,7 @@ namespace Novin.Bpmn.Engine.Api.TestScenarios;
 /// </summary>
 public sealed class ErrorBoundaryScenario : TestScenario
 {
-    public override string Name => "Error Boundary Test";
+    public override string Name => "ErrorBoundaryScenario";
     public override string Description => "Tests error boundary event (interrupting)";
     public override string BpmnFileName => "error-boundary-test.bpmn";
     public override string ProcessKey => "error-boundary-test";
