@@ -3,10 +3,18 @@ using Novin.Bpmn.Engine.Domain.ValueObjects;
 
 namespace Novin.Bpmn.Engine.Domain.Entities;
 
-/// <summary>
-/// Runtime subscription برای Boundary Event
-/// وقتی token وارد یک activity می‌شود، subscription‌های boundary event‌های attach شده فعال می‌شوند
-/// </summary>
+    /// <summary>
+    /// Runtime subscription برای Boundary Event
+    /// وقتی token وارد یک activity می‌شود، subscription‌های boundary event‌های attach شده فعال می‌شوند
+    ///
+    /// IMPORTANT: These subscriptions are preserved after process completion for:
+    /// - Audit trail and execution flow analysis
+    /// - Debugging failed processes and error patterns
+    /// - Understanding what error handlers were available during execution
+    /// - Operational monitoring of boundary event usage
+    ///
+    /// Use retention policies to clean up old subscription data based on business requirements.
+    /// </summary>
 public sealed class BoundarySubscription : BaseAggregateRoot
 {
     public Guid ProcessId { get; private set; }
@@ -63,6 +71,12 @@ public sealed class BoundarySubscription : BaseAggregateRoot
     /// این از token.ActivityInstanceId گرفته می‌شود
     /// </summary>
     public Guid? ActivityInstanceId { get; private set; }
+
+    /// <summary>
+    /// Token Scope ID - برای correlation در trace-first token semantics
+    /// این از token.ScopeId گرفته می‌شود و برای tracking execution cycles مهم است
+    /// </summary>
+    public Guid? TokenScopeId { get; private set; }
     
     /// <summary>
     /// Version برای optimistic concurrency control
@@ -88,7 +102,8 @@ public sealed class BoundarySubscription : BaseAggregateRoot
         DateTimeOffset? dueAt = null,
         string? correlationKey = null,
         string? errorCode = null,
-        Guid? activityInstanceId = null)
+        Guid? activityInstanceId = null,
+        Guid? tokenScopeId = null)
     {
         if (processId == Guid.Empty)
             throw new ArgumentException("ProcessId cannot be empty", nameof(processId));
@@ -111,6 +126,7 @@ public sealed class BoundarySubscription : BaseAggregateRoot
         CorrelationKey = correlationKey;
         ErrorCode = errorCode;
         ActivityInstanceId = activityInstanceId;
+        TokenScopeId = tokenScopeId;
         Version = 1;
         CreatedAt = DateTime.UtcNow;
     }

@@ -485,7 +485,8 @@ public sealed class BoundarySubscriptionManager :
                 dueAt,
                 correlationKey,
                 errorCode,
-                token.ActivityInstanceId);
+                token.ActivityInstanceId,
+                token.ScopeId);
 
             await _uow.BoundarySubscriptions.AddAsync(subscription, ct);
 

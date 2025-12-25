@@ -1,0 +1,199 @@
+### BPMN Process Execution Flow API Tests
+### These requests test the execution flow visualization endpoints
+
+### Get Complete Execution Flow for BPMN Visualization
+### This endpoint returns all executed elements, flows, boundary events, and execution cycles
+GET {{baseUrl}}/api/process-execution/{{processId}}/flow
+Accept: application/json
+
+###
+
+### Get Execution Statistics Summary
+### This endpoint returns execution stats without full flow details
+GET {{baseUrl}}/api/process-execution/{{processId}}/stats
+Accept: application/json
+
+###
+
+### Example: Get execution flow for a specific process ID
+### Replace {{processId}} with an actual process ID from your database
+# GET http://localhost:5000/api/process-execution/12345678-1234-1234-1234-123456789abc/flow
+# Accept: application/json
+
+###
+
+### Example: Get execution stats for a specific process ID
+### Replace {{processId}} with an actual process ID from your database
+# GET http://localhost:5000/api/process-execution/12345678-1234-1234-1234-123456789abc/stats
+# Accept: application/json
+
+###
+
+### Test with different process states
+### 1. Running process - should show partial execution
+# GET http://localhost:5000/api/process-execution/{{runningProcessId}}/flow
+
+### 2. Completed process - should show full execution path
+# GET http://localhost:5000/api/process-execution/{{completedProcessId}}/flow
+
+### 3. Failed process - should show execution up to failure point
+# GET http://localhost:5000/api/process-execution/{{failedProcessId}}/flow
+
+###
+
+### Test boundary event visualization
+### Process with error boundary events - should show triggered boundaries
+# GET http://localhost:5000/api/process-execution/{{errorBoundaryProcessId}}/flow
+
+###
+
+### Test execution cycle analysis
+### Complex process with parallel flows - should show multiple execution cycles
+# GET http://localhost:5000/api/process-execution/{{parallelProcessId}}/flow
+
+###
+
+### Variables for easy testing
+### Replace these with actual values from your database
+@{
+    "baseUrl": "http://localhost:5000",
+    "processId": "00000000-0000-0000-0000-000000000000",
+    "runningProcessId": "00000000-0000-0000-0000-000000000000",
+    "completedProcessId": "00000000-0000-0000-0000-000000000000",
+    "failedProcessId": "00000000-0000-0000-0000-000000000000",
+    "errorBoundaryProcessId": "00000000-0000-0000-0000-000000000000",
+    "parallelProcessId": "00000000-0000-0000-0000-000000000000"
+}
+
+###
+
+### Expected Response Structure for /flow endpoint:
+###
+### {
+###   "processId": "guid",
+###   "processName": "string",
+###   "processDefinitionId": "string",
+###   "state": "Created|Running|Completed|Failed",
+###   "createdAt": "2024-01-01T00:00:00Z",
+###   "completedAt": "2024-01-01T00:00:00Z",
+###   "executedElements": [
+###     {
+###       "elementId": "string",
+###       "elementType": "StartEvent|UserTask|EndEvent|...",
+###       "elementName": "string",
+###       "firstExecutedAt": "2024-01-01T00:00:00Z",
+###       "executionCount": 1,
+###       "tokenExecutions": [
+###         {
+###           "tokenId": "guid",
+###           "executedAt": "2024-01-01T00:00:00Z",
+###           "scopeId": "guid",
+###           "isExecutable": true
+###         }
+###       ]
+###     }
+###   ],
+###   "executedFlows": [
+###     {
+###       "flowId": "string",
+###       "sourceElementId": "string",
+###       "targetElementId": "string",
+###       "flowName": "string",
+###       "conditionExpression": "string",
+###       "firstExecutedAt": "2024-01-01T00:00:00Z",
+###       "executionCount": 1,
+###       "tokenExecutions": [...]
+###     }
+###   ],
+###   "boundaryEvents": [
+###     {
+###       "subscriptionId": "guid",
+###       "attachedToElementId": "string",
+###       "boundaryEventId": "string",
+###       "kind": "Error|Timer|Message",
+###       "isInterrupting": true,
+###       "state": "Active|Triggered|Canceled",
+###       "errorCode": "string",
+###       "tokenScopeId": "guid",
+###       "createdAt": "2024-01-01T00:00:00Z",
+###       "triggeredAt": "2024-01-01T00:00:00Z"
+###     }
+###   ],
+###   "executionCycles": [
+###     {
+###       "scopeId": "guid",
+###       "scopeName": "string",
+###       "parentScopeId": "guid",
+###       "createdAt": "2024-01-01T00:00:00Z",
+###       "completedAt": "2024-01-01T00:00:00Z",
+###       "tokensInScope": 5,
+###       "boundaryEventsInScope": 2
+###     }
+###   ],
+###   "stats": {
+###     "totalTokens": 10,
+###     "executedElements": 8,
+###     "executedFlows": 7,
+###     "boundaryEventsConfigured": 3,
+###     "boundaryEventsTriggered": 1,
+###     "executionCycles": 2,
+###     "totalExecutionTime": "00:05:23"
+###   }
+### }
+
+###
+
+### Expected Response Structure for /stats endpoint:
+###
+### {
+###   "totalTokens": 10,
+###   "executedElements": 8,
+###   "executedFlows": 7,
+###   "boundaryEventsConfigured": 3,
+###   "boundaryEventsTriggered": 1,
+###   "executionCycles": 2,
+###   "totalExecutionTime": "00:05:23"
+### }
+
+###
+
+### Client JavaScript Example for Visualization
+###
+### // Fetch execution data
+### const response = await fetch('/api/process-execution/{processId}/flow');
+### const data = await response.json();
+###
+### // Highlight executed elements in BPMN.js
+### data.executedElements.forEach(element => {
+###   const bpmnElement = viewer.get('elementRegistry').get(element.elementId);
+###   if (bpmnElement) {
+###     viewer.get('modeling').setColor(bpmnElement, {
+###       stroke: '#52b415',
+###       fill: '#e8f5e8'
+###     });
+###   }
+### });
+###
+### // Highlight executed flows
+### data.executedFlows.forEach(flow => {
+###   const bpmnFlow = viewer.get('elementRegistry').get(flow.flowId);
+###   if (bpmnFlow) {
+###     viewer.get('modeling').setColor(bpmnFlow, {
+###       stroke: '#52b415',
+###       strokeWidth: 3
+###     });
+###   }
+### });
+###
+### // Show boundary event status
+### data.boundaryEvents.forEach(boundary => {
+###   if (boundary.state === 'Triggered') {
+###     const element = viewer.get('elementRegistry').get(boundary.boundaryEventId);
+###     if (element) {
+###       viewer.get('modeling').setColor(element, {
+###         stroke: '#cc0000',
+###         fill: '#ffcccc'
+###       });
+###     }
+###   }
+### });
