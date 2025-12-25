@@ -78,6 +78,11 @@ public static class DependencyInjection
         services.AddScoped<IProcessStatusService, ProcessStatusService>();
 
         // -------------------------
+        // Process Execution Recorder (Minimal audit trail for executed nodes)
+        // -------------------------
+        services.AddScoped<IProcessExecutionRecorder, ProcessExecutionRecorder>();
+
+        // -------------------------
         // BPMN Error Boundary Finder
         // -------------------------
         services.AddScoped<IBpmnErrorBoundaryFinder, BpmnErrorBoundaryFinder>();

@@ -41,6 +41,7 @@ public static class DependencyInjection
         services.AddScoped<ITaskRepository, EfTaskRepository>();
         services.AddScoped<IIncidentRepository, EfIncidentRepository>();
         services.AddScoped<IBoundarySubscriptionRepository, EfBoundarySubscriptionRepository>();
+        services.AddScoped<IProcessExecutionNodeRepository, EfProcessExecutionNodeRepository>();
         
         // Services
         services.AddScoped<IIncidentService, IncidentService>();

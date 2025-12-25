@@ -217,6 +217,14 @@ public sealed class Process : BaseAggregateRoot
                 $"Process must be in {required} state but is {State}.");
     }
 
+    // -------------------- Navigation Properties --------------------
+
+    /// <summary>
+    /// Execution path nodes for this process (minimal audit trail)
+    /// </summary>
+    private readonly List<ProcessExecutionNode> _executionNodes = new();
+    public IReadOnlyCollection<ProcessExecutionNode> ExecutionNodes => _executionNodes.AsReadOnly();
+
     // -------------------- History --------------------
 
     private void AddToHistory(string entry)

@@ -3,67 +3,58 @@
 
 ### Get Complete Execution Flow for BPMN Visualization
 ### This endpoint returns all executed elements, flows, boundary events, and execution cycles
-GET {{baseUrl}}/api/process-execution/{{processId}}/flow
+GET http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440000/flow
 Accept: application/json
 
 ###
 
 ### Get Execution Statistics Summary
 ### This endpoint returns execution stats without full flow details
-GET {{baseUrl}}/api/process-execution/{{processId}}/stats
+GET http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440000/stats
 Accept: application/json
 
 ###
 
 ### Example: Get execution flow for a specific process ID
-### Replace {{processId}} with an actual process ID from your database
-# GET http://localhost:5000/api/process-execution/12345678-1234-1234-1234-123456789abc/flow
-# Accept: application/json
+### Use this sample process ID for testing
+GET http://localhost:5000/api/process-execution/12345678-1234-1234-1234-123456789abc/flow
+Accept: application/json
 
 ###
 
 ### Example: Get execution stats for a specific process ID
-### Replace {{processId}} with an actual process ID from your database
-# GET http://localhost:5000/api/process-execution/12345678-1234-1234-1234-123456789abc/stats
-# Accept: application/json
+### Use this sample process ID for testing
+GET http://localhost:5000/api/process-execution/12345678-1234-1234-1234-123456789abc/stats
+Accept: application/json
 
 ###
 
 ### Test with different process states
 ### 1. Running process - should show partial execution
-# GET http://localhost:5000/api/process-execution/{{runningProcessId}}/flow
+GET http://localhost:5000/api/process-execution/f47ac10b-58cc-4372-a567-0e02b2c3d479/flow
+Accept: application/json
 
 ### 2. Completed process - should show full execution path
-# GET http://localhost:5000/api/process-execution/{{completedProcessId}}/flow
+GET http://localhost:5000/api/process-execution/6ba7b810-9dad-11d1-80b4-00c04fd430c8/flow
+Accept: application/json
 
 ### 3. Failed process - should show execution up to failure point
-# GET http://localhost:5000/api/process-execution/{{failedProcessId}}/flow
+GET http://localhost:5000/api/process-execution/6ba7b811-9dad-11d1-80b4-00c04fd430c8/flow
+Accept: application/json
 
 ###
 
 ### Test boundary event visualization
 ### Process with error boundary events - should show triggered boundaries
-# GET http://localhost:5000/api/process-execution/{{errorBoundaryProcessId}}/flow
+GET http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440001/flow
+Accept: application/json
 
 ###
 
 ### Test execution cycle analysis
 ### Complex process with parallel flows - should show multiple execution cycles
-# GET http://localhost:5000/api/process-execution/{{parallelProcessId}}/flow
-
-###
-
-### Variables for easy testing
-### Replace these with actual values from your database
-@{
-    "baseUrl": "http://localhost:5000",
-    "processId": "00000000-0000-0000-0000-000000000000",
-    "runningProcessId": "00000000-0000-0000-0000-000000000000",
-    "completedProcessId": "00000000-0000-0000-0000-000000000000",
-    "failedProcessId": "00000000-0000-0000-0000-000000000000",
-    "errorBoundaryProcessId": "00000000-0000-0000-0000-000000000000",
-    "parallelProcessId": "00000000-0000-0000-0000-000000000000"
-}
+GET http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440002/flow
+Accept: application/json
 
 ###
 
@@ -157,11 +148,29 @@ Accept: application/json
 
 ###
 
+### Get Minimal Execution Path (Audit Trail)
+### This endpoint returns only executed nodes from start to end events
+GET http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440000/path
+Accept: application/json
+
+###
+
+### Get Audit Trail Statistics
+### Execution statistics from the minimal audit trail data
+GET http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440000/audit-stats
+Accept: application/json
+
+###
+
 ### Client JavaScript Example for Visualization
 ###
-### // Fetch execution data
-### const response = await fetch('/api/process-execution/{processId}/flow');
+### // Fetch complete execution flow data
+### const response = await fetch('http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440000/flow');
 ### const data = await response.json();
+###
+### // Fetch minimal execution path (audit trail)
+### const pathResponse = await fetch('http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440000/path');
+### const executionPath = await pathResponse.json();
 ###
 ### // Highlight executed elements in BPMN.js
 ### data.executedElements.forEach(element => {

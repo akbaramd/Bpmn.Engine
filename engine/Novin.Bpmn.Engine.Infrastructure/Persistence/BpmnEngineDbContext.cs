@@ -18,6 +18,7 @@ public class BpmnEngineDbContext : DbContext
 
     public DbSet<Incident> Incidents { get; set; }
     public DbSet<BoundarySubscription> BoundarySubscriptions { get; set; }
+    public DbSet<ProcessExecutionNode> ProcessExecutionNodes { get; set; }
     public BpmnEngineDbContext(DbContextOptions<BpmnEngineDbContext> options) : base(options)
     {
     }
@@ -205,6 +206,37 @@ public class BpmnEngineDbContext : DbContext
             entity.Property(e => e.CanceledAt);
 
             entity.Ignore(e => e.DomainEvents);
+        });
+
+        // Configure ProcessExecutionNode
+        modelBuilder.Entity<ProcessExecutionNode>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.ProcessId).IsRequired();
+            entity.Property(e => e.NodeId).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.NodeName).HasMaxLength(1000);
+            entity.Property(e => e.NodeType).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ExecutedAt).IsRequired();
+            entity.Property(e => e.SequenceOrder).IsRequired();
+            entity.Property(e => e.PreviousNodeId).HasMaxLength(500);
+            entity.Property(e => e.TokenId).IsRequired();
+            entity.Property(e => e.ScopeId);
+            entity.Property(e => e.IsCompleted).IsRequired();
+            entity.Property(e => e.ArrivedViaFlowId).HasMaxLength(500);
+            entity.Property(e => e.ActivityInstanceId);
+
+            // Relationships
+            entity.HasOne(e => e.Process)
+                .WithMany(p => p.ExecutionNodes)
+                .HasForeignKey(e => e.ProcessId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Indexes for performance
+            entity.HasIndex(e => e.ProcessId);
+            entity.HasIndex(e => new { e.ProcessId, e.SequenceOrder });
+            entity.HasIndex(e => new { e.ProcessId, e.NodeId });
+
         });
     }
 }
