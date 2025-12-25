@@ -286,12 +286,11 @@ public sealed class BoundarySubscriptionManager :
 
             await _boundaryEventExecutor.ExecuteAsync(matchedSubscription.Id, txCt);
 
-            // ✅ Step 4: Mark subscription as triggered and cancel other subscriptions in the same scope
-            matchedSubscription.MarkTriggered();
-            await _uow.BoundarySubscriptions.UpdateAsync(matchedSubscription, txCt);
+            // ✅ Step 4: Cancel other subscriptions in the same scope
+            // Note: Subscription is already marked as triggered by ExecuteAsync
 
             _logger.LogInformation(
-                "[ERROR-HANDLER] ✅ Matched subscription marked as triggered. SubscriptionId={SubscriptionId} ScopeId={ScopeId}",
+                "[ERROR-HANDLER] ✅ Boundary event executed. SubscriptionId={SubscriptionId} ScopeId={ScopeId}",
                 matchedSubscription.Id,
                 matchedScopeId);
 
