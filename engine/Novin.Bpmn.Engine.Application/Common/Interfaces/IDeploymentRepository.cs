@@ -12,5 +12,6 @@ public interface IDeploymentRepository : IRepository<Deployment>
     Task<IEnumerable<Deployment>> GetByDeploymentKeyAndVersionAsync(string deploymentKey, CancellationToken cancellationToken = default);
     Task<IEnumerable<Deployment>> GetActiveDeploymentsAsync(CancellationToken cancellationToken = default);
     Task<int> GetNextVersionAsync(string deploymentKey, CancellationToken cancellationToken = default);
+    Task UpdateAsync(Deployment deployment, CancellationToken cancellationToken = default);
 }
 

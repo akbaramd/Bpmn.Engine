@@ -1,0 +1,403 @@
+### BPMN Engine API - Complete Endpoint Reference
+### Comprehensive API for BPMN Process Management
+
+### ========================================================================
+### DEPLOYMENT MANAGEMENT
+### ========================================================================
+
+### Deploy a new BPMN process
+POST http://localhost:5000/api/deployments
+Content-Type: application/json
+
+{
+    "processKey": "my-process",
+    "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><bpmn:definitions...>",
+    "label": "My Process Definition"
+}
+
+###
+
+### Get all deployments
+GET http://localhost:5000/api/deployments
+
+### Get deployments by process key
+GET http://localhost:5000/api/deployments/by-key/my-process
+
+### Get specific deployment
+GET http://localhost:5000/api/deployments/550e8400-e29b-41d4-a716-446655440000
+
+### Get deployment BPMN XML
+GET http://localhost:5000/api/deployments/550e8400-e29b-41d4-a716-446655440000/xml
+
+### Activate deployment
+POST http://localhost:5000/api/deployments/550e8400-e29b-41d4-a716-446655440000/activate
+
+### Deactivate deployment
+POST http://localhost:5000/api/deployments/550e8400-e29b-41d4-a716-446655440000/deactivate
+
+### Delete deployment (soft delete)
+DELETE http://localhost:5000/api/deployments/550e8400-e29b-41d4-a716-446655440000
+
+###
+
+### ========================================================================
+### PROCESS MANAGEMENT
+### ========================================================================
+
+### Start a new process instance
+POST http://localhost:5000/api/processes/start
+Content-Type: application/json
+
+{
+    "processKey": "my-process",
+    "businessKey": "order-123",
+    "variables": {
+        "amount": 100.50,
+        "customerId": "cust-001"
+    }
+}
+
+###
+
+### Get all process instances
+GET http://localhost:5000/api/processes
+
+### Get processes by state
+GET http://localhost:5000/api/processes?state=Running
+
+### Get processes by definition
+GET http://localhost:5000/api/processes?processDefinitionId=my-process
+
+### Get paginated processes
+GET http://localhost:5000/api/processes?skip=0&take=10
+
+### Get specific process instance
+GET http://localhost:5000/api/processes/550e8400-e29b-41d4-a716-446655440000
+
+### Complete a process instance
+POST http://localhost:5000/api/processes/550e8400-e29b-41d4-a716-446655440000/complete
+
+### Suspend a running process
+POST http://localhost:5000/api/processes/550e8400-e29b-41d4-a716-446655440000/suspend
+
+### Resume a suspended process
+POST http://localhost:5000/api/processes/550e8400-e29b-41d4-a716-446655440000/resume
+
+### Delete a process instance
+DELETE http://localhost:5000/api/processes/550e8400-e29b-41d4-a716-446655440000
+
+### Send message to process
+POST http://localhost:5000/api/processes/550e8400-e29b-41d4-a716-446655440000/message?messageName=OrderApproved
+Content-Type: application/json
+
+{
+    "approvedBy": "manager",
+    "approvalDate": "2024-01-01"
+}
+
+### Send signal to all processes
+POST http://localhost:5000/api/processes/signal?signalName=EmergencyStop
+Content-Type: application/json
+
+{
+    "reason": "System maintenance",
+    "operator": "admin"
+}
+
+### Get process variables
+GET http://localhost:5000/api/processes/550e8400-e29b-41d4-a716-446655440000/variables
+
+### Set process variables
+PUT http://localhost:5000/api/processes/550e8400-e29b-41d4-a716-446655440000/variables
+Content-Type: application/json
+
+{
+    "status": "approved",
+    "approvedAmount": 150.00
+}
+
+### Get process statistics
+GET http://localhost:5000/api/processes/stats
+
+###
+
+### ========================================================================
+### EXECUTION FLOW & VISUALIZATION
+### ========================================================================
+
+### Get complete execution flow for visualization
+GET http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440000/flow
+
+### Get execution statistics
+GET http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440000/stats
+
+### Get minimal execution path (audit trail)
+GET http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440000/path
+
+### Get execution audit statistics
+GET http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440000/audit-stats
+
+###
+
+### ========================================================================
+### INCIDENT MANAGEMENT
+### ========================================================================
+
+### Get all incidents
+GET http://localhost:5000/api/incidents
+
+### Get incidents by process
+GET http://localhost:5000/api/incidents/process/550e8400-e29b-41d4-a716-446655440000
+
+### Get incidents by type
+GET http://localhost:5000/api/incidents?type=FailedJob
+
+### Get unresolved incidents
+GET http://localhost:5000/api/incidents?resolved=false
+
+### Get specific incident
+GET http://localhost:5000/api/incidents/550e8400-e29b-41d4-a716-446655440000
+
+### Resolve an incident
+POST http://localhost:5000/api/incidents/550e8400-e29b-41d4-a716-446655440000/resolve
+Content-Type: application/json
+
+{
+    "message": "Issue resolved by restarting service",
+    "resolutionDetails": "Restarted external payment service"
+}
+
+### Delete an incident
+DELETE http://localhost:5000/api/incidents/550e8400-e29b-41d4-a716-446655440000
+
+### Get incident statistics
+GET http://localhost:5000/api/incidents/stats
+
+###
+
+### ========================================================================
+### TEST SCENARIO MANAGEMENT
+### ========================================================================
+
+### Get all available test scenarios
+GET http://localhost:5000/api/test-scenarios
+
+### Run specific test scenario
+POST http://localhost:5000/api/test-scenarios/ErrorBoundaryScenario/run
+
+### Run all test scenarios
+POST http://localhost:5000/api/test-scenarios/run-all
+
+### Get scenario status
+GET http://localhost:5000/api/test-scenarios/ErrorBoundaryScenario/status
+
+###
+
+### ========================================================================
+### COMMON API PATTERNS
+### ========================================================================
+
+### Error Response Format
+# All endpoints return errors in this format:
+# {
+#   "error": "Human-readable error message"
+# }
+
+### Pagination Pattern
+# Use query parameters for pagination:
+# GET /api/processes?skip=0&take=50
+# GET /api/deployments?processKey=my-process
+
+### Filtering Patterns
+# By state: GET /api/processes?state=Running
+# By type: GET /api/incidents?type=FailedJob
+# By status: GET /api/incidents?resolved=false
+
+### Sorting Patterns
+# Most endpoints return results in logical order:
+# - Processes: by creation date (newest first)
+# - Deployments: by version (highest first)
+# - Incidents: by creation date (newest first)
+# - Execution nodes: by sequence order
+
+### ========================================================================
+### API RESPONSE CODES
+### ========================================================================
+
+# 200 OK - Successful GET/PUT operations
+# 201 Created - Resource created successfully
+# 204 No Content - Operation successful, no content returned
+# 400 Bad Request - Invalid request data
+# 404 Not Found - Resource not found
+# 500 Internal Server Error - Server error
+# 501 Not Implemented - Feature not yet implemented
+
+### ========================================================================
+### BPMN ELEMENT TYPES
+### ========================================================================
+
+# Supported BPMN element types in execution flow:
+# - StartEvent, EndEvent
+# - UserTask, ServiceTask, ScriptTask
+# - ExclusiveGateway, ParallelGateway, InclusiveGateway
+# - IntermediateCatchEvent, IntermediateThrowEvent
+# - BoundaryEvent (Error, Timer, Message)
+
+### ========================================================================
+### PROCESS STATES
+### ========================================================================
+
+# Process states in queries:
+# - Created: Process instance created but not started
+# - Running: Process is actively executing
+# - Completed: Process finished successfully
+# - Failed: Process ended with error
+
+### ========================================================================
+### INCIDENT TYPES
+### ========================================================================
+
+# Incident types:
+# - FailedJob: Job execution failed
+# - FailedExternalTask: External task failed
+# - Condition: Condition evaluation failed
+
+### ========================================================================
+### AUTHENTICATION & SECURITY
+### ========================================================================
+
+# Note: Current API has no authentication
+# For production use, consider:
+# - JWT Bearer tokens
+# - API key authentication
+# - OAuth2 integration
+# - Role-based access control
+
+### ========================================================================
+### MONITORING & LOGGING
+### ========================================================================
+
+# All endpoints include comprehensive logging:
+# - Request/response logging
+# - Error tracking
+# - Performance metrics
+# - Audit trails
+
+### ========================================================================
+### RATE LIMITING
+### ========================================================================
+
+# Consider implementing rate limiting for:
+# - Process start operations
+# - Bulk operations
+# - Query operations
+
+### ========================================================================
+### WEBHOOKS & CALLBACKS
+### ========================================================================
+
+# Future enhancements may include:
+# - Process completion webhooks
+# - Incident alert webhooks
+# - Task assignment notifications
+
+### ========================================================================
+### INTEGRATION EXAMPLES
+### ========================================================================
+
+### JavaScript Client Integration
+###
+// Deploy process
+const deployResponse = await fetch('/api/deployments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        processKey: 'order-process',
+        bpmnXml: bpmnContent,
+        label: 'Order Processing Workflow'
+    })
+});
+
+// Start process instance
+const startResponse = await fetch('/api/processes/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        processKey: 'order-process',
+        businessKey: 'order-123',
+        variables: { amount: 99.99, customer: 'john@example.com' }
+    })
+});
+const processData = await startResponse.json();
+
+// Monitor execution
+const executionFlow = await fetch(`/api/process-execution/${processData.processId}/flow`);
+const flowData = await executionFlow.json();
+
+// Handle incidents
+const incidents = await fetch(`/api/incidents/process/${processData.processId}`);
+const incidentData = await incidents.json();
+
+if (incidentData.length > 0) {
+    // Resolve incidents
+    for (const incident of incidentData) {
+        await fetch(`/api/incidents/${incident.id}/resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: 'Issue resolved automatically'
+            })
+        });
+    }
+}
+###
+
+### ========================================================================
+### COMPLETE API REFERENCE SUMMARY
+### ========================================================================
+
+# DEPLOYMENT ENDPOINTS (7 endpoints)
+# POST   /api/deployments                    - Deploy process
+# GET    /api/deployments                    - List deployments
+# GET    /api/deployments/{id}               - Get deployment
+# GET    /api/deployments/{id}/xml           - Get BPMN XML
+# GET    /api/deployments/by-key/{key}       - Get by process key
+# POST   /api/deployments/{id}/activate      - Activate deployment
+# POST   /api/deployments/{id}/deactivate    - Deactivate deployment
+# DELETE /api/deployments/{id}               - Delete deployment
+
+# PROCESS ENDPOINTS (12 endpoints)
+# POST   /api/processes/start                - Start process
+# GET    /api/processes                      - List processes
+# GET    /api/processes/{id}                 - Get process
+# POST   /api/processes/{id}/complete        - Complete process
+# DELETE /api/processes/{id}                 - Delete process
+# POST   /api/processes/{id}/suspend         - Suspend process
+# POST   /api/processes/{id}/resume          - Resume process
+# POST   /api/processes/{id}/message         - Send message
+# POST   /api/processes/signal               - Send signal
+# GET    /api/processes/{id}/variables       - Get variables
+# PUT    /api/processes/{id}/variables       - Set variables
+# GET    /api/processes/stats                - Get statistics
+
+# EXECUTION ENDPOINTS (4 endpoints)
+# GET    /api/process-execution/{id}/flow    - Get execution flow
+# GET    /api/process-execution/{id}/stats   - Get execution stats
+# GET    /api/process-execution/{id}/path    - Get execution path
+# GET    /api/process-execution/{id}/audit-stats - Get audit stats
+
+# INCIDENT ENDPOINTS (7 endpoints)
+# GET    /api/incidents                      - List incidents
+# GET    /api/incidents/process/{id}         - Get by process
+# GET    /api/incidents/{id}                 - Get incident
+# POST   /api/incidents/{id}/resolve         - Resolve incident
+# DELETE /api/incidents/{id}                 - Delete incident
+# GET    /api/incidents/stats                - Get statistics
+
+# TEST SCENARIO ENDPOINTS (4 endpoints)
+# GET    /api/test-scenarios                 - List scenarios
+# POST   /api/test-scenarios/{name}/run      - Run scenario
+# POST   /api/test-scenarios/run-all         - Run all scenarios
+# GET    /api/test-scenarios/{name}/status   - Get status
+
+# TOTAL: 34 comprehensive API endpoints for complete BPMN process management!

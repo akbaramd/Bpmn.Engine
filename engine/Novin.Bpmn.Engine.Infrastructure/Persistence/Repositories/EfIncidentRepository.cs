@@ -49,10 +49,22 @@ public class EfIncidentRepository : IIncidentRepository
         _logger.LogDebug("Incident added: {IncidentId}", incident.Id);
     }
 
+    public async Task<IEnumerable<Incident>> GetAllAsync(CancellationToken ct = default)
+    {
+        return await _context.Incidents.ToListAsync(ct);
+    }
+
     public Task UpdateAsync(Incident incident, CancellationToken ct = default)
     {
         _context.Incidents.Update(incident);
         _logger.LogDebug("Incident updated: {IncidentId}", incident.Id);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAsync(Incident incident, CancellationToken ct = default)
+    {
+        _context.Incidents.Remove(incident);
+        _logger.LogDebug("Incident deleted: {IncidentId}", incident.Id);
         return Task.CompletedTask;
     }
 }
