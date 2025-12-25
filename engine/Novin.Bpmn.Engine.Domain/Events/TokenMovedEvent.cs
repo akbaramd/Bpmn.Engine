@@ -1,5 +1,6 @@
-
 using Novin.Bpmn.Engine.Domain.Common;
+
+namespace Novin.Bpmn.Engine.Domain.Events;
 
 public sealed record TokenCreatedEvent(
     Guid TokenId,
@@ -81,7 +82,10 @@ public sealed record TokenFailedEvent(
     string Error,
     DateTime OccurredAtUtc,
     bool IsExecutable,
-    Guid? ScopeId
+    Guid? ScopeId,
+    Guid? IncidentId = null,
+    string? ErrorType = null,
+    string? ErrorCode = null
 ) : IDomainEvent;
 
 public sealed record TokenTerminatedEvent(
@@ -89,6 +93,15 @@ public sealed record TokenTerminatedEvent(
     Guid ProcessId,
     string ElementId,
     string? Reason,
+    DateTime OccurredAtUtc,
+    bool IsExecutable,
+    Guid? ScopeId
+) : IDomainEvent;
+
+public sealed record TokenRetriedEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string ElementId,
     DateTime OccurredAtUtc,
     bool IsExecutable,
     Guid? ScopeId

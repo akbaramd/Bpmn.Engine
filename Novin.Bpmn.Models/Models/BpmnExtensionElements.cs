@@ -25,4 +25,17 @@ public class BpmnExtensionElements
         get { return anyField; }
         set { anyField = value; }
     }
+
+    /// <summary>
+    /// Bonyan IO Mapping extension - for input/output variable mapping
+    /// This should be inside extensionElements according to BPMN 2.0 specification
+    /// </summary>
+    [XmlElement("ioMapping", Namespace = BpmnXmlNamespaces.Bonyan)]
+    public BonyanIoMapping? BonyanIoMapping { get; set; }
+
+    /// <summary>
+    /// Bonyan IO extension - alternative IO mapping format
+    /// </summary>
+    [XmlElement("io", Namespace = BpmnXmlNamespaces.Bonyan)]
+    public BonyanIo? BonyanIo { get; set; }
 }

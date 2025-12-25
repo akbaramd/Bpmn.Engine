@@ -47,13 +47,33 @@ public sealed class ProcessCompletionEvaluator : IProcessCompletionEvaluator
             process.State,
             process.TokenIds.Count);
 
+        // اگر پروسس Completed شده اما هنوز توکن دارد، آن را دوباره به Running برگردان
+        // این race condition را handle می‌کند: completion evaluation زودتر از موعد اجرا شده
+        if (process.State == ProcessState.Completed && process.TokenIds.Count > 0)
+        {
+            _logger.LogWarning(
+                "[COMPLETION] ⚠️ Process is Completed but still has tokens. Resuming process. ProcessId={ProcessId} TokenIdsCount={TokenCount} CompletedAt={CompletedAt}",
+                processId,
+                process.TokenIds.Count,
+                process.CompletedAt);
+            
+            // Resume the process (change state back to Running)
+            process.ResumeFromCompleted();
+            
+            _logger.LogInformation(
+                "[COMPLETION] ✅ Process resumed from Completed to Running. ProcessId={ProcessId}",
+                processId);
+        }
+        
         // فقط پروسس‌های Running را بررسی می‌کنیم
         if (process.State is not ProcessState.Running)
         {
-            _logger.LogDebug(
-                "[COMPLETION] Process not in Running state. Skipping evaluation. ProcessId={ProcessId} State={State}",
+            _logger.LogInformation(
+                "[COMPLETION] ⚠️ Process not in Running state. Skipping evaluation. ProcessId={ProcessId} State={State} TokenIdsCount={TokenCount}",
                 processId,
-                process.State);
+                process.State,
+                process.TokenIds.Count);
+            
             return;
         }
 
@@ -104,11 +124,39 @@ public sealed class ProcessCompletionEvaluator : IProcessCompletionEvaluator
                 liveTokenDetails);
         }
 
-        // اگر هیچ توکن زنده‌ای باقی نمانده، پروسس را complete کن
-        if (liveTokens.Count == 0)
+        // بررسی Open Incidents
+        var openIncidents = await _uow.Incidents.GetByProcessIdAsync(processId, ct);
+        var openIncidentsList = openIncidents
+            .Where(i => i.Status == Domain.ValueObjects.IncidentStatus.Open)
+            .ToList();
+
+        _logger.LogDebug(
+            "[COMPLETION] Incident analysis. ProcessId={ProcessId} OpenIncidents={OpenIncidents}",
+            processId,
+            openIncidentsList.Count);
+
+        // لاگ جزئیات Open Incidents
+        foreach (var incident in openIncidentsList)
         {
-            _logger.LogWarning(
-                "[COMPLETION] ✅ No live tokens remaining. Completing process. ProcessId={ProcessId} TotalTokens={Total}",
+            _logger.LogDebug(
+                "[COMPLETION] Open incident details. ProcessId={ProcessId} IncidentId={IncidentId} Type={Type} TokenId={TokenId} ElementId={ElementId} Retries={Retries}",
+                processId,
+                incident.Id,
+                incident.Type,
+                incident.TokenId,
+                incident.ElementId,
+                incident.Retries);
+        }
+
+        // قانون Completion:
+        // پروسس فقط وقتی Completed می‌شود که:
+        // 1. هیچ توکن Live نباشد (Active/Waiting/Failed)
+        // 2. هیچ Incident باز نباشد
+        // 3. ProcessState هم Running باشد
+        if (liveTokens.Count == 0 && openIncidentsList.Count == 0)
+        {
+            _logger.LogInformation(
+                "[COMPLETION] ✅ No live tokens and no open incidents. Completing process. ProcessId={ProcessId} TotalTokens={Total}",
                 processId,
                 tokensList.Count);
 
@@ -121,16 +169,34 @@ public sealed class ProcessCompletionEvaluator : IProcessCompletionEvaluator
         }
         else
         {
-            _logger.LogDebug(
-                "[COMPLETION] ⏳ Process still has live tokens. Waiting for completion. ProcessId={ProcessId} LiveCount={Live}",
-                processId,
-                liveTokens.Count);
+            if (liveTokens.Count > 0)
+            {
+                _logger.LogDebug(
+                    "[COMPLETION] ⏳ Process still has live tokens. Waiting for completion. ProcessId={ProcessId} LiveCount={Live}",
+                    processId,
+                    liveTokens.Count);
+            }
+
+            if (openIncidentsList.Count > 0)
+            {
+                _logger.LogWarning(
+                    "[COMPLETION] ⚠️ Process has open incidents. Cannot complete. ProcessId={ProcessId} OpenIncidents={OpenIncidents}",
+                    processId,
+                    openIncidentsList.Count);
+            }
         }
     }
 
     /// <summary>
     /// Determines if a token is "live" (should be counted for completion evaluation).
-    /// Live tokens are executable tokens in Created/Active/Waiting states.
+    /// 
+    /// قانون: Failed token = پروسس تمام نشده
+    /// یک Failed token هنوز "زنده" است چون:
+    /// - ممکن است retry شود
+    /// - ممکن است manual resolve شود
+    /// - پروسس نباید complete شود تا زمانی که Failed token resolve شود
+    /// 
+    /// Live tokens are executable tokens in Created/Active/Waiting/Failed states.
     /// </summary>
     private static bool IsLiveToken(Token token)
     {
@@ -138,10 +204,12 @@ public sealed class ProcessCompletionEvaluator : IProcessCompletionEvaluator
         if (!token.IsExecutable)
             return false;
 
-        // توکن‌های در حالت‌های زنده
+        // توکن‌های در حالت‌های زنده (شامل Failed)
+        // قانون: Failed token = پروسس تمام نشده
         return token.State is TokenState.Created
             or TokenState.Active
-            or TokenState.Waiting;
+            or TokenState.Waiting
+            or TokenState.Failed; // ✅ Failed token هنوز زنده است
     }
 }
 

@@ -67,12 +67,4 @@ public abstract class BpmnFlowNode : BpmnFlowElement
         get { return outgoingField; }
         set { outgoingField = value; }
     }
-
-    
-    /// <summary>
-    /// پشتیبانی از ioMapping سفارشی Bonyan
-    /// برای نگاشت ورودی/خروجی نود به متغیرهای فرآیند
-    /// </summary>
-    [XmlElement("ioMapping", Namespace = BpmnXmlNamespaces.Bonyan)]
-    public BonyanIoMapping? BonyanIoMapping { get; set; }
 }

@@ -20,6 +20,13 @@ public class EfUnitOfWork : IUnitOfWork
     public IProcessRepository Processes { get; }
     public ITokenRepository Tokens { get; }
     public ITaskRepository Tasks { get; }
+    public IIncidentRepository Incidents { get; }
+    public IBoundarySubscriptionRepository BoundarySubscriptions { get; }
+
+    /// <summary>
+    /// Checks if a transaction is currently active
+    /// </summary>
+    public bool IsInTransaction => _currentTransaction != null;
 
     public EfUnitOfWork(
         BpmnEngineDbContext context,
@@ -27,6 +34,8 @@ public class EfUnitOfWork : IUnitOfWork
         IProcessRepository processRepository,
         ITokenRepository tokenRepository,
         ITaskRepository taskRepository,
+        IIncidentRepository incidentRepository,
+        IBoundarySubscriptionRepository boundarySubscriptionRepository,
         DomainEventDispatcher domainEventDispatcher,
         ILogger<EfUnitOfWork> logger)
     {
@@ -35,6 +44,8 @@ public class EfUnitOfWork : IUnitOfWork
         Processes = processRepository ?? throw new ArgumentNullException(nameof(processRepository));
         Tokens = tokenRepository ?? throw new ArgumentNullException(nameof(tokenRepository));
         Tasks = taskRepository ?? throw new ArgumentNullException(nameof(taskRepository));
+        Incidents = incidentRepository ?? throw new ArgumentNullException(nameof(incidentRepository));
+        BoundarySubscriptions = boundarySubscriptionRepository ?? throw new ArgumentNullException(nameof(boundarySubscriptionRepository));
         _domainEventDispatcher = domainEventDispatcher ?? throw new ArgumentNullException(nameof(domainEventDispatcher));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Domain.Entities;
+using Novin.Bpmn.Engine.Domain.Exceptions;
 using Novin.Bpmn.Models.Models;
 
 public interface ITokenExecutionDispatcher
@@ -55,8 +56,13 @@ public sealed class TokenExecutionDispatcher : ITokenExecutionDispatcher
                 process.Id,
                 token.Id);
 
-            token.Fail(error);
-            return Task.CompletedTask;
+            // Throw TokenExecutionException instead of calling token.Fail() directly
+            // This allows the orchestrator to handle it properly (create incident, fail token in separate transaction)
+            throw new TokenExecutionException(
+                process.Id,
+                token.Id,
+                elementId,
+                error);
         }
 
         if (matches.Count > 1)

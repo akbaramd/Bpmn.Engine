@@ -9,6 +9,8 @@ public interface IUnitOfWork : IDisposable
     IProcessRepository Processes { get; }
     ITokenRepository Tokens { get; }
     ITaskRepository Tasks { get; }
+    IIncidentRepository Incidents { get; }
+    IBoundarySubscriptionRepository BoundarySubscriptions { get; }
     
     Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, CancellationToken ct);
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
@@ -19,6 +21,7 @@ public interface IUnitOfWork : IDisposable
     /// <summary>
     /// Checks if a transaction is currently active
     /// </summary>
+    bool IsInTransaction { get; }
     
     /// <summary>
     /// Track an aggregate for change tracking and event dispatching on commit

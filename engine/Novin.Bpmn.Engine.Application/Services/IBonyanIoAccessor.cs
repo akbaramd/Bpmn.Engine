@@ -16,6 +16,16 @@ public sealed class BonyanIoAccessor : IBonyanIoAccessor
     public bool TryGetIoMapping(BpmnFlowElement element, out BonyanIoMapping? mapping)
     {
         mapping = null;
+        
+        // First, try to get extensionElements directly
+        var ext = GetExtensionElements(element);
+        if (ext?.BonyanIoMapping != null)
+        {
+            mapping = ext.BonyanIoMapping;
+            return true;
+        }
+        
+        // Fallback: parse from Any array (for backward compatibility or when deserialized as XmlElement)
         foreach (var obj in GetExtensionItems(element))
         {
             if (obj is BonyanIoMapping m) { mapping = m; return true; }
@@ -35,6 +45,16 @@ public sealed class BonyanIoAccessor : IBonyanIoAccessor
     public bool TryGetIo(BpmnFlowElement element, out BonyanIo? io)
     {
         io = null;
+        
+        // First, try to get extensionElements directly
+        var ext = GetExtensionElements(element);
+        if (ext?.BonyanIo != null)
+        {
+            io = ext.BonyanIo;
+            return true;
+        }
+        
+        // Fallback: parse from Any array (for backward compatibility or when deserialized as XmlElement)
         foreach (var obj in GetExtensionItems(element))
         {
             if (obj is BonyanIo i) { io = i; return true; }
@@ -51,13 +71,18 @@ public sealed class BonyanIoAccessor : IBonyanIoAccessor
         return false;
     }
 
-    private static IEnumerable<object> GetExtensionItems(BpmnFlowElement element)
+    private static BpmnExtensionElements? GetExtensionElements(BpmnFlowElement element)
     {
-        // Robust reflection: extensionElements / ExtensionElements + Any
         var t = element.GetType();
         var ext = t.GetProperty("extensionElements")?.GetValue(element)
                ?? t.GetProperty("ExtensionElements")?.GetValue(element);
+        return ext as BpmnExtensionElements;
+    }
 
+    private static IEnumerable<object> GetExtensionItems(BpmnFlowElement element)
+    {
+        // Robust reflection: extensionElements / ExtensionElements + Any
+        var ext = GetExtensionElements(element);
         if (ext == null) yield break;
 
         var extType = ext.GetType();

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Models.Models;
 
 namespace Novin.Bpmn.Engine.Application.Services;
@@ -8,10 +9,12 @@ namespace Novin.Bpmn.Engine.Application.Services;
 public class BpmnDefinitionsService
 {
     private readonly BpmnDefinitions _definitions;
+    private readonly ILogger<BpmnDefinitionsService>? _logger;
 
-    public BpmnDefinitionsService(BpmnDefinitions definitions)
+    public BpmnDefinitionsService(BpmnDefinitions definitions, ILogger<BpmnDefinitionsService>? logger = null)
     {
         _definitions = definitions ?? throw new ArgumentNullException(nameof(definitions));
+        _logger = logger;
     }
 
     /// <summary>
@@ -233,9 +236,62 @@ public class BpmnDefinitionsService
     public List<BpmnBoundaryEvent> GetBoundaryEvents(string processId, string attachedToRef)
     {
         var process = GetProcess(processId);
-        return process.Items?.OfType<BpmnBoundaryEvent>()
+        
+        // Debug: Log all items in process to see what types exist
+        var allItems = process.Items ?? Array.Empty<BpmnFlowElement>();
+        _logger?.LogDebug(
+            "[BPMN-DEFS] GetBoundaryEvents: ProcessId={ProcessId} AttachedToRef={AttachedToRef} TotalItems={TotalItems}",
+            processId,
+            attachedToRef,
+            allItems.Length);
+        
+        // Log item types for debugging
+        if (allItems.Length > 0)
+        {
+            var itemTypes = allItems
+                .Where(i => i != null)
+                .GroupBy(i => i!.GetType().Name)
+                .Select(g => $"{g.Key}({g.Count()})");
+            _logger?.LogDebug(
+                "[BPMN-DEFS] Process items breakdown: {ItemTypes}",
+                string.Join(", ", itemTypes));
+        }
+        
+        // Get all boundary events from process.Items
+        var allBoundaryEvents = allItems
+            .Where(i => i != null)
+            .OfType<BpmnBoundaryEvent>()
+            .ToList();
+        
+        _logger?.LogDebug(
+            "[BPMN-DEFS] GetBoundaryEvents: ProcessId={ProcessId} AttachedToRef={AttachedToRef} TotalBoundaryEvents={TotalCount}",
+            processId,
+            attachedToRef,
+            allBoundaryEvents.Count);
+        
+        // Debug: Log all boundary events found
+        foreach (var be in allBoundaryEvents)
+        {
+            _logger?.LogDebug(
+                "[BPMN-DEFS] BoundaryEvent found: Id={BoundaryEventId} AttachedToRef={AttachedToRef} LookingFor={LookingFor} Match={Match}",
+                be.id,
+                be.attachedToRef?.Name ?? "NULL",
+                attachedToRef,
+                be.attachedToRef?.Name == attachedToRef);
+        }
+        
+        // Filter by attachedToRef
+        var matchingBoundaryEvents = allBoundaryEvents
             .Where(be => be.attachedToRef != null && be.attachedToRef.Name == attachedToRef)
             .ToList();
+        
+        _logger?.LogDebug(
+            "[BPMN-DEFS] GetBoundaryEvents result: ProcessId={ProcessId} AttachedToRef={AttachedToRef} MatchingCount={MatchingCount}",
+            processId,
+            attachedToRef,
+            matchingBoundaryEvents.Count);
+        
+        return matchingBoundaryEvents;
     }
 
     /// <summary>
@@ -272,6 +328,20 @@ public class BpmnDefinitionsService
     {
         var process = GetProcess(processId);
         return process.Items?.OfType<BpmnFlowElement>().ToList() ?? new List<BpmnFlowElement>();
+    }
+
+    /// <summary>
+    /// Gets an error element from BPMN definitions by its ID.
+    /// Error elements are stored in the root Items array of BpmnDefinitions.
+    /// </summary>
+    public BpmnError? GetErrorElement(string errorElementId)
+    {
+        if (string.IsNullOrWhiteSpace(errorElementId))
+            return null;
+
+        return _definitions.Items?
+            .OfType<BpmnError>()
+            .FirstOrDefault(e => e.id == errorElementId);
     }
 }
 

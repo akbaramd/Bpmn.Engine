@@ -38,7 +38,7 @@ public class BonyanIoMapping
     /// Input mappings: Process Variable → Node Variable
     /// Applied when the node is activated.
     /// </summary>
-    [XmlElement("input", Namespace = BpmnXmlNamespaces.Bonyan)]
+    [XmlElement("input", Namespace = BpmnXmlNamespaces.Bonyan, Type = typeof(BonyanIoMappingInput))]
     public List<BonyanIoMappingInput> Input
     {
         get { return inputField; }
@@ -49,7 +49,7 @@ public class BonyanIoMapping
     /// Output mappings: Node Variable → Process Variable
     /// Applied when the node is completed.
     /// </summary>
-    [XmlElement("output", Namespace = BpmnXmlNamespaces.Bonyan)]
+    [XmlElement("output", Namespace = BpmnXmlNamespaces.Bonyan, Type = typeof(BonyanIoMappingOutput))]
     public List<BonyanIoMappingOutput> Output
     {
         get { return outputField; }
@@ -102,7 +102,7 @@ public class BonyanIoMapping
 [Serializable]
 [DebuggerStepThrough]
 [DesignerCategory("code")]
-[XmlType("input", Namespace = BpmnXmlNamespaces.Bonyan)]
+[XmlType("ioMappingInput", Namespace = BpmnXmlNamespaces.Bonyan)]
 public class BonyanIoMappingInput
 {
     private string? sourceField;
@@ -140,7 +140,7 @@ public class BonyanIoMappingInput
 [Serializable]
 [DebuggerStepThrough]
 [DesignerCategory("code")]
-[XmlType("output", Namespace = BpmnXmlNamespaces.Bonyan)]
+[XmlType("ioMappingOutput", Namespace = BpmnXmlNamespaces.Bonyan)]
 public class BonyanIoMappingOutput
 {
     private string? sourceField;

@@ -30,10 +30,22 @@ public class DomainEventDispatcher
 
 
 
+        _logger.LogDebug(
+            "[EVENT-DISPATCH] Dispatching {Count} domain events. EventTypes={Types}",
+            domainEvents.Count,
+            string.Join(", ", domainEvents.Select(e => e.GetType().Name)));
+
         foreach (var domainEvent in domainEvents)
         {
+            _logger.LogTrace(
+                "[EVENT-DISPATCH] Publishing event. EventType={Type} EventId={EventId}",
+                domainEvent.GetType().Name,
+                domainEvent.GetType().GetProperty("ProcessId")?.GetValue(domainEvent) ?? "N/A");
+            
             // Publish to MediatR (which will trigger INotificationHandler implementations)
             await _mediator.Publish(domainEvent, cancellationToken);
         }
+        
+        _logger.LogDebug("[EVENT-DISPATCH] All events dispatched successfully.");
     }
 }

@@ -30,12 +30,20 @@ public static class DependencyInjection
 
         // Domain Event Dispatcher
         services.AddScoped<DomainEventDispatcher>();
+        // Save Changes Service (handles domain events and causality)
+        // Transaction Service (handles transactions directly without UoW abstraction)
+        services.AddScoped<ITransactionService, TransactionService>();
         
         // EF Core Repositories (Scoped - one per request/operation, tied to DbContext)
         services.AddScoped<IDeploymentRepository, EfDeploymentRepository>();
         services.AddScoped<IProcessRepository, EfProcessRepository>();
         services.AddScoped<ITokenRepository, EfTokenRepository>();
         services.AddScoped<ITaskRepository, EfTaskRepository>();
+        services.AddScoped<IIncidentRepository, EfIncidentRepository>();
+        services.AddScoped<IBoundarySubscriptionRepository, EfBoundarySubscriptionRepository>();
+        
+        // Services
+        services.AddScoped<IIncidentService, IncidentService>();
         
         // Unit of Work (Scoped - one per request/operation)
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();

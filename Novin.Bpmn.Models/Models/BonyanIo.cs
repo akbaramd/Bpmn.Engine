@@ -30,7 +30,7 @@ public class BonyanIo
     /// <summary>
     /// Input mappings for the activity.
     /// </summary>
-    [XmlElement("input", Namespace = BpmnXmlNamespaces.Bonyan)]
+    [XmlElement("input", Namespace = BpmnXmlNamespaces.Bonyan, Type = typeof(BonyanInput))]
     public List<BonyanInput> Input
     {
         get { return inputField; }
@@ -40,7 +40,7 @@ public class BonyanIo
     /// <summary>
     /// Output mappings for the activity.
     /// </summary>
-    [XmlElement("output", Namespace = BpmnXmlNamespaces.Bonyan)]
+    [XmlElement("output", Namespace = BpmnXmlNamespaces.Bonyan, Type = typeof(BonyanOutput))]
     public List<BonyanOutput> Output
     {
         get { return outputField; }
@@ -55,7 +55,7 @@ public class BonyanIo
 [Serializable]
 [DebuggerStepThrough]
 [DesignerCategory("code")]
-[XmlType("input", Namespace = BpmnXmlNamespaces.Bonyan)]
+[XmlType("ioInput", Namespace = BpmnXmlNamespaces.Bonyan)]
 public class BonyanInput
 {
     private BonyanFeel feelField;
@@ -89,7 +89,7 @@ public class BonyanInput
 [Serializable]
 [DebuggerStepThrough]
 [DesignerCategory("code")]
-[XmlType("output", Namespace = BpmnXmlNamespaces.Bonyan)]
+[XmlType("ioOutput", Namespace = BpmnXmlNamespaces.Bonyan)]
 public class BonyanOutput
 {
     private BonyanFeel feelField;

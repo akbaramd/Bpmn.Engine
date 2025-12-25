@@ -99,6 +99,21 @@ public sealed class Process : BaseAggregateRoot
         AddDomainEvent(new ProcessResumedEvent(Id, DateTime.UtcNow));
     }
 
+    /// <summary>
+    /// Resumes a process from Completed state back to Running.
+    /// This handles race conditions where completion evaluation runs while tokens are still processing.
+    /// </summary>
+    public void ResumeFromCompleted()
+    {
+        if (State != ProcessState.Completed)
+            throw new InvalidOperationException(
+                $"Cannot resume from Completed state when process is in {State} state.");
+
+        State = ProcessState.Running;
+        CompletedAt = null;
+        AddDomainEvent(new ProcessResumedEvent(Id, DateTime.UtcNow));
+    }
+
     public void Terminate(string? reason = null)
     {
         if (State is ProcessState.Completed or ProcessState.Terminated)
@@ -122,7 +137,25 @@ public sealed class Process : BaseAggregateRoot
 
     public void AddToken(Guid tokenId)
     {
-        EnsureState(ProcessState.Running);
+        // ⚠️ Allow adding tokens if:
+        // 1. Process is Running (normal case)
+        // 2. Process is Completed but still has tokens (race condition: completion happened too early)
+        //    This can happen when a token is being processed while completion evaluation runs
+        //    In this case, we resume the process from Completed to Running
+        if (State is not ProcessState.Running)
+        {
+            // If process is Completed but still has tokens, resume it and allow adding new tokens
+            // This handles race conditions where completion evaluation runs while tokens are still processing
+            if (State == ProcessState.Completed && _tokenIds.Count > 0)
+            {
+                // Resume the process - this will change state back to Running
+                ResumeFromCompleted();
+            }
+            else
+            {
+                EnsureState(ProcessState.Running);
+            }
+        }
 
         if (tokenId == Guid.Empty)
             throw new ArgumentException("Token id cannot be empty", nameof(tokenId));

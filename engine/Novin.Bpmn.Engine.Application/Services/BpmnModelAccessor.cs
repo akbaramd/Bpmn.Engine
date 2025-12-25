@@ -18,6 +18,15 @@ public sealed class BpmnModelAccessor : IBpmnModelAccessor
     public List<BpmnSequenceFlow> GetOutgoingSequenceFlows(string pid, string elementId)
         => _defs.GetOutgoingSequenceFlows(pid, elementId);
 
+    public List<BpmnBoundaryEvent> GetBoundaryEvents(string pid, string attachedToRef)
+    {
+        var result = _defs.GetBoundaryEvents(pid, attachedToRef);
+        return result;
+    }
+
     public BpmnProcess GetFirstProcess()
         => _defs.GetFirstProcess();
+
+    public BpmnError? GetErrorElement(string errorElementId)
+        => _defs.GetErrorElement(errorElementId);
 }

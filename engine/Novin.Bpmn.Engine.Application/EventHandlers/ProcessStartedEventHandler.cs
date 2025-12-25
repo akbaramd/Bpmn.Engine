@@ -25,7 +25,10 @@ public sealed class ProcessStartedEventHandler : INotificationHandler<ProcessSta
     public Task Handle(ProcessStartedEvent @event, CancellationToken ct)
         => _uow.ExecuteInTransactionAsync(async txCt =>
         {
-            _logger.LogInformation("Handling ProcessStartedEvent. ProcessId={ProcessId}", @event.ProcessId);
+            _logger.LogInformation(
+                "[PROCESS-STARTED] Handling ProcessStartedEvent. ProcessId={ProcessId} EventStartedAt={StartedAt}",
+                @event.ProcessId,
+                @event.StartedAt);
 
             var process = await _uow.Processes.GetByIdAsync(@event.ProcessId, txCt);
             if (process is null)
@@ -33,6 +36,23 @@ public sealed class ProcessStartedEventHandler : INotificationHandler<ProcessSta
                 _logger.LogWarning("Process not found. ProcessId={ProcessId}", @event.ProcessId);
                 return;
             }
+
+            // ⚠️ Guard: اگر پروسس قبلاً Completed/Terminated/Failed شده، توکن start ایجاد نکن
+            if (process.State is not ProcessState.Running and not ProcessState.Created)
+            {
+                _logger.LogWarning(
+                    "[PROCESS-STARTED] ⚠️ Process not in Running/Created state. Skipping token creation. ProcessId={ProcessId} State={State} StartedAt={StartedAt} CompletedAt={CompletedAt}",
+                    @event.ProcessId,
+                    process.State,
+                    process.StartedAt,
+                    process.CompletedAt);
+                return;
+            }
+
+            _logger.LogDebug(
+                "[PROCESS-STARTED] Process is in valid state. ProcessId={ProcessId} State={State}",
+                @event.ProcessId,
+                process.State);
 
 
             var deployment = await _uow.Deployments

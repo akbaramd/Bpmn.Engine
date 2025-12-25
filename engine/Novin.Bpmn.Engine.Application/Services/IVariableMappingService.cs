@@ -1,5 +1,4 @@
-﻿using System.Reflection;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Services.Feel;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
@@ -14,11 +13,16 @@ public interface IVariableMappingService
 public sealed class BonyanVariableMappingService : IVariableMappingService
 {
     private readonly IFeelExpressionEvaluator _feel;
+    private readonly IBonyanIoAccessor _ioAccessor;
     private readonly ILogger<BonyanVariableMappingService> _logger;
 
-    public BonyanVariableMappingService(IFeelExpressionEvaluator feel, ILogger<BonyanVariableMappingService> logger)
+    public BonyanVariableMappingService(
+        IFeelExpressionEvaluator feel,
+        IBonyanIoAccessor ioAccessor,
+        ILogger<BonyanVariableMappingService> logger)
     {
         _feel = feel ?? throw new ArgumentNullException(nameof(feel));
+        _ioAccessor = ioAccessor ?? throw new ArgumentNullException(nameof(ioAccessor));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -26,23 +30,56 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
     {
         if (token.State is TokenState.Completed or TokenState.Terminated) return;
 
+        _logger.LogDebug(
+            "[MAP:IN] Starting input mapping. ElementId={ElementId} ProcessId={ProcessId} TokenId={TokenId}",
+            element.id,
+            process.Id,
+            token.Id);
+
+        // Log process variables before mapping
+        var processVarsBefore = process.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
+        _logger.LogDebug(
+            "[MAP:IN] Process variables BEFORE mapping. ElementId={ElementId} Count={Count} Variables={Variables}",
+            element.id,
+            processVarsBefore.Count,
+            string.Join(", ", processVarsBefore.Select(kv => $"{kv.Key}={kv.Value}")));
+
+        // Log token variables before mapping
+        var tokenVarsBefore = token.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
+        _logger.LogDebug(
+            "[MAP:IN] Token variables BEFORE mapping. ElementId={ElementId} Count={Count} Variables={Variables}",
+            element.id,
+            tokenVarsBefore.Count,
+            string.Join(", ", tokenVarsBefore.Select(kv => $"{kv.Key}={kv.Value}")));
+
         var map = GetIoMapping(element);
         if (map == null || map.Input.Count == 0)
         {
-            _logger.LogDebug("[MAP:IN] none. Element={ElementId}", element.id);
+            _logger.LogDebug("[MAP:IN] No input mapping found. Element={ElementId}", element.id);
             return;
         }
 
+        _logger.LogDebug(
+            "[MAP:IN] Found input mapping. ElementId={ElementId} InputCount={InputCount} OnMissingSource={OnMissingSource}",
+            element.id,
+            map.Input.Count,
+            map.OnMissingSource);
+
+        var mappedCount = 0;
         foreach (var input in map.Input)
         {
             var src = input.Source?.Trim();
             var tgt = input.Target?.Trim();
 
             if (string.IsNullOrWhiteSpace(tgt))
+            {
+                _logger.LogDebug("[MAP:IN] Skipping mapping - empty target. ElementId={ElementId}", element.id);
                 continue;
+            }
 
             if (string.IsNullOrWhiteSpace(src))
             {
+                _logger.LogDebug("[MAP:IN] Empty source for target {Target}. ElementId={ElementId}", tgt, element.id);
                 HandleMissingInput(map.OnMissingSource, token, tgt, "empty source");
                 continue;
             }
@@ -55,6 +92,11 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
                 // plain process var
                 if (!process.Variables.TryGetValue(src, out value))
                 {
+                    _logger.LogDebug(
+                        "[MAP:IN] Process variable not found. ElementId={ElementId} Source={Source} Target={Target}",
+                        element.id,
+                        src,
+                        tgt);
                     HandleMissingInput(map.OnMissingSource, token, tgt, $"missing process var '{src}'");
                     continue;
                 }
@@ -66,6 +108,11 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
                 try
                 {
                     value = _feel.Evaluate(expr, process.Variables); // این Evaluate باید object? بده
+                    _logger.LogDebug(
+                        "[MAP:IN] FEEL expression evaluated. ElementId={ElementId} Expr={Expr} Result={Result}",
+                        element.id,
+                        expr,
+                        value);
                 }
                 catch (Exception ex)
                 {
@@ -76,31 +123,82 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
             }
 
             token.SetVariable(tgt, value);
-            _logger.LogDebug("[MAP:IN] {Src} -> {Tgt} = {Val}", src, tgt, value);
+            mappedCount++;
+            _logger.LogDebug("[MAP:IN] ✅ Mapped. ElementId={ElementId} {Src} -> {Tgt} = {Val}", element.id, src, tgt, value);
         }
+
+        // Log token variables after mapping
+        var tokenVarsAfter = token.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
+        _logger.LogInformation(
+            "[MAP:IN] ✅ Input mapping completed. ElementId={ElementId} MappedCount={MappedCount} TokenVarsCount={TokenVarsCount}",
+            element.id,
+            mappedCount,
+            tokenVarsAfter.Count);
+        _logger.LogDebug(
+            "[MAP:IN] Token variables AFTER mapping. ElementId={ElementId} Variables={Variables}",
+            element.id,
+            string.Join(", ", tokenVarsAfter.Select(kv => $"{kv.Key}={kv.Value}")));
     }
 
     public void ApplyOutputs(Process process, Token token, BpmnFlowElement element, BpmnRuntimeContext ctx)
     {
         if (token.State is TokenState.Completed or TokenState.Terminated) return;
 
+        _logger.LogDebug(
+            "[MAP:OUT] Starting output mapping. ElementId={ElementId} ProcessId={ProcessId} TokenId={TokenId}",
+            element.id,
+            process.Id,
+            token.Id);
+
+        // Log token variables before mapping
+        var tokenVarsBefore = token.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
+        _logger.LogDebug(
+            "[MAP:OUT] Token variables BEFORE mapping. ElementId={ElementId} Count={Count} Variables={Variables}",
+            element.id,
+            tokenVarsBefore.Count,
+            string.Join(", ", tokenVarsBefore.Select(kv => $"{kv.Key}={kv.Value}")));
+
+        // Log process variables before mapping
+        var processVarsBefore = process.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
+        _logger.LogDebug(
+            "[MAP:OUT] Process variables BEFORE mapping. ElementId={ElementId} Count={Count} Variables={Variables}",
+            element.id,
+            processVarsBefore.Count,
+            string.Join(", ", processVarsBefore.Select(kv => $"{kv.Key}={kv.Value}")));
+
         var map = GetIoMapping(element);
         if (map == null || map.Output.Count == 0)
         {
-            _logger.LogDebug("[MAP:OUT] none. Element={ElementId}", element.id);
+            _logger.LogDebug("[MAP:OUT] No output mapping found. Element={ElementId}", element.id);
             return;
         }
 
+        _logger.LogDebug(
+            "[MAP:OUT] Found output mapping. ElementId={ElementId} OutputCount={OutputCount} OnMissingOutput={OnMissingOutput} Overwrite={Overwrite}",
+            element.id,
+            map.Output.Count,
+            map.OnMissingOutput,
+            map.Overwrite);
+
+        var mappedCount = 0;
         foreach (var output in map.Output)
         {
             var src = output.Source?.Trim();
             var tgt = output.Target?.Trim();
 
             if (string.IsNullOrWhiteSpace(src) || string.IsNullOrWhiteSpace(tgt))
+            {
+                _logger.LogDebug("[MAP:OUT] Skipping mapping - empty source or target. ElementId={ElementId}", element.id);
                 continue;
+            }
 
             if (!token.TryGetVariable(src, out var val))
             {
+                _logger.LogDebug(
+                    "[MAP:OUT] Token variable not found. ElementId={ElementId} Source={Source} Target={Target}",
+                    element.id,
+                    src,
+                    tgt);
                 HandleMissingOutput(map.OnMissingOutput, process, token, tgt, $"missing token var '{src}'");
                 continue;
             }
@@ -108,30 +206,36 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
             // overwrite policy
             if (!map.Overwrite && process.Variables.ContainsKey(tgt))
             {
-                _logger.LogDebug("[MAP:OUT] skip overwrite. Target={Tgt}", tgt);
+                _logger.LogDebug("[MAP:OUT] Skipping overwrite. ElementId={ElementId} Target={Tgt}", element.id, tgt);
                 continue;
             }
 
             // ✅ درست: تغییر از طریق متد دامنه
             process.SetVariable(tgt, val);
-            _logger.LogDebug("[MAP:OUT] {Src} -> {Tgt} = {Val}", src, tgt, val);
+            mappedCount++;
+            _logger.LogDebug("[MAP:OUT] ✅ Mapped. ElementId={ElementId} {Src} -> {Tgt} = {Val}", element.id, src, tgt, val);
         }
+
+        // Log process variables after mapping
+        var processVarsAfter = process.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
+        _logger.LogInformation(
+            "[MAP:OUT] ✅ Output mapping completed. ElementId={ElementId} MappedCount={MappedCount} ProcessVarsCount={ProcessVarsCount}",
+            element.id,
+            mappedCount,
+            processVarsAfter.Count);
+        _logger.LogDebug(
+            "[MAP:OUT] Process variables AFTER mapping. ElementId={ElementId} Variables={Variables}",
+            element.id,
+            string.Join(", ", processVarsAfter.Select(kv => $"{kv.Key}={kv.Value}")));
     }
 
-    private static BonyanIoMapping? GetIoMapping(BpmnFlowElement element)
+    private BonyanIoMapping? GetIoMapping(BpmnFlowElement element)
     {
-        // اگر نود از نوع BpmnFlowNode است (اکثراً همین است)
-        if (element is BpmnFlowNode node && node.BonyanIoMapping is not null)
-            return node.BonyanIoMapping;
+        // Use IBonyanIoAccessor which now correctly checks extensionElements.BonyanIoMapping first
+        // and falls back to parsing from Any array if needed
+        if (_ioAccessor.TryGetIoMapping(element, out var mapping))
+            return mapping;
 
-        // در صورتی که از کلاس‌های مشتق‌شده باشد (مثل BpmnScriptTask, Gateway, ...)
-        var prop = element.GetType().GetProperty(nameof(BpmnFlowNode.BonyanIoMapping),
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase);
-
-        if (prop?.GetValue(element) is BonyanIoMapping io)
-            return io;
-
-        // اگر هیچ موردی پیدا نشد
         return null;
     }
 

@@ -18,6 +18,13 @@ namespace Novin.Bpmn.Engine.Domain.Entities
 
         public Guid? ScopeId { get; private set; }
         public string? ArrivedViaFlowId { get; private set; }
+        
+        /// <summary>
+        /// Activity Instance ID - برای cancel کردن activity instance در interrupting boundary events
+        /// این با ScopeId متفاوت است: ScopeId برای fork/join correlation است،
+        /// ActivityInstanceId برای شناسایی تمام tokenهای داخل یک activity instance (مثل subprocess)
+        /// </summary>
+        public Guid? ActivityInstanceId { get; private set; }
 
         private readonly List<Guid> _parentTokenIds = new();
         public IReadOnlyCollection<Guid> ParentTokenIds => _parentTokenIds.AsReadOnly();
@@ -125,6 +132,27 @@ namespace Novin.Bpmn.Engine.Domain.Entities
             RequestProcessing();
         }
 
+        /// <summary>
+        /// Retry a failed token: convert from Failed to Active and request processing
+        /// </summary>
+        public void Retry()
+        {
+            if (State != TokenState.Failed)
+                throw new InvalidOperationException($"Cannot retry token in {State} state. Token must be Failed.");
+
+            State = TokenState.Active;
+
+            AddDomainEvent(new TokenRetriedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable,
+                ScopeId: ScopeId));
+
+            RequestProcessing();
+        }
+
         public void Complete()
         {
             EnsureState(TokenState.Active);
@@ -141,7 +169,22 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ScopeId: ScopeId));
         }
 
+        /// <summary>
+        /// Fail token with a technical failure (default)
+        /// </summary>
         public void Fail(string error)
+        {
+            Fail(error, ErrorType.TechnicalFailure, errorCode: null, incidentId: null);
+        }
+
+        /// <summary>
+        /// Fail token with specific error type and optional incident
+        /// </summary>
+        public void Fail(
+            string error,
+            ErrorType errorType,
+            string? errorCode = null,
+            Guid? incidentId = null)
         {
             if (string.IsNullOrWhiteSpace(error))
                 throw new ArgumentException("Error cannot be empty", nameof(error));
@@ -158,7 +201,10 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 Error: error,
                 OccurredAtUtc: DateTime.UtcNow,
                 IsExecutable: IsExecutable,
-                ScopeId: ScopeId));
+                ScopeId: ScopeId,
+                IncidentId: incidentId,
+                ErrorType: errorType.ToString(),
+                ErrorCode: errorCode));
         }
 
         public void Terminate(string? reason = null)
@@ -266,6 +312,23 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         public void ClearScope() => ScopeId = null;
 
         public void ClearArrivedVia() => ArrivedViaFlowId = null;
+        
+        /// <summary>
+        /// Set Activity Instance ID - وقتی token وارد یک activity می‌شود که scope جدید ایجاد می‌کند
+        /// (مثل UserTask, SubProcess, ...)
+        /// </summary>
+        public void SetActivityInstance(Guid activityInstanceId)
+        {
+            if (activityInstanceId == Guid.Empty)
+                throw new ArgumentException("ActivityInstanceId cannot be empty", nameof(activityInstanceId));
+
+            ActivityInstanceId = activityInstanceId;
+        }
+        
+        /// <summary>
+        /// Clear Activity Instance ID - وقتی token از activity خارج می‌شود
+        /// </summary>
+        public void ClearActivityInstance() => ActivityInstanceId = null;
 
         // -------------------- Variables --------------------
         public void SetVariable(string name, object value)

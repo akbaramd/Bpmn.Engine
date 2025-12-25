@@ -187,7 +187,7 @@ public sealed class GatewaySplitService : IGatewaySplitService
         process.SetVariable(ScopeExpectedKey(scopeId), expectedCount);
     }
 
-    internal static bool TryReadExpectedCount(Process process, Guid scopeId, out int expected)
+    public static bool TryReadExpectedCount(Process process, Guid scopeId, out int expected)
     {
         expected = 0;
 

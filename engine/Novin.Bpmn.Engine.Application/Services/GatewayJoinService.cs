@@ -59,6 +59,7 @@ public sealed class GatewayJoinService : IGatewayJoinService
 
         var allTokens = await _uow.Tokens.GetByProcessIdAsync(process.Id, ct);
 
+        // توکن‌های Waiting در این join (که واقعاً به join رسیده‌اند)
         var waiting = allTokens
             .Where(t =>
                 t.CurrentElementId == arrivingToken.CurrentElementId &&
@@ -66,19 +67,35 @@ public sealed class GatewayJoinService : IGatewayJoinService
                 t.ScopeId == scopeId)
             .ToList();
 
+        // ArrivedViaFlowId: کلیدهای ورودی که tokens از طریق آن‌ها به join رسیده‌اند
+        // این دقیقاً همان چیزی است که BPMN semantics می‌خواهد: Join منتظر tokens است که از incoming flows می‌آیند
         var arrivedKeys = waiting
             .Select(t => t.ArrivedViaFlowId)
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct()
             .ToList();
 
-        _logger.LogWarning("[JOIN] Gateway={Gw} ScopeId={ScopeId} Incoming={InCnt} Expected={Expected} Waiting={WaitingCnt} ArrivedDistinct={ArrivedCnt}",
-            arrivingToken.CurrentElementId, scopeId, incoming.Count, expectedCount, waiting.Count, arrivedKeys.Count);
+        _logger.LogInformation(
+            "[JOIN] Gateway={Gw} ScopeId={ScopeId} Incoming={InCnt} Expected={Expected} Waiting={WaitingCnt} ArrivedDistinct={ArrivedCnt}",
+            arrivingToken.CurrentElementId,
+            scopeId,
+            incoming.Count,
+            expectedCount,
+            waiting.Count,
+            arrivedKeys.Count);
 
+        // قانون BPMN: Join فقط بر اساس arrivals تصمیم‌گیری می‌کند
+        // Join منتظر tokens است که از incoming flows می‌آیند (ArrivedViaFlowId)
+        // Incident فقط برای UX/Operations است، نه برای تصمیم‌گیری Join
         if (arrivedKeys.Count < expectedCount)
         {
-            // هنوز همه‌ی شاخه‌های “واقعاً فعال” نرسیدند
-            return true;
+            // هنوز همه‌ی شاخه‌های مورد انتظار به join نرسیده‌اند
+            _logger.LogDebug(
+                "[JOIN] Not all expected branches arrived. Waiting. ScopeId={ScopeId} Arrived={Arrived} Expected={Expected}",
+                scopeId,
+                arrivedKeys.Count,
+                expectedCount);
+            return true; // Still waiting
         }
 
         // Merge: اگر حداقل یکی executable باشد، survivor executable انتخاب می‌شود

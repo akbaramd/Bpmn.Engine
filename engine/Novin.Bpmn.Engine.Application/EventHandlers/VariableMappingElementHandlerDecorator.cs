@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Domain.Entities;
+using Novin.Bpmn.Engine.Domain.Exceptions;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 using Novin.Bpmn.Models.Models;
 
@@ -120,6 +121,12 @@ public sealed class VariableMappingElementHandlerDecorator : IBpmnElementHandler
                     process.Variables.Count,
                     string.Join(",", process.Variables.Keys.Take(10)));
             }
+            catch (BpmnErrorException)
+            {
+                // BPMN Error را بدون تغییر propagate می‌کنیم
+                // این باید توسط Error Boundary / Error EventSubprocess handle شود
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(
@@ -128,13 +135,13 @@ public sealed class VariableMappingElementHandlerDecorator : IBpmnElementHandler
                     elementId,
                     handlerType);
 
-                // اگر token هنوز fail نشده، fail می‌کنیم
-                if (token.State is not TokenState.Failed and not TokenState.Terminated)
-                {
-                    token.Fail($"Mapping decorator error: {ex.Message}");
-                }
-
-                throw; // re-throw برای error handling بالاتر
+                // Decorator نباید token.Fail() را صدا بزند چون transaction rollback می‌شود
+                // به جای آن، exception را wrap می‌کنیم تا در لایه بالاتر (Orchestrator) تصمیم‌گیری شود
+                throw new TokenExecutionException(
+                    process.Id,
+                    token.Id,
+                    elementId,
+                    ex);
             }
         }
     }

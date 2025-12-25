@@ -16,11 +16,18 @@
     </PackageReference>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="MediatR" Version="12.4.1" />
+    <PackageReference Include="Quartz.Extensions.Hosting" Version="3.13.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Novin.Bpmn.Engine.Application\Novin.Bpmn.Engine.Application.csproj" />
     <ProjectReference Include="..\Novin.Bpmn.Engine.Infrastructure\Novin.Bpmn.Engine.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Bpmn\*.bpmn">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

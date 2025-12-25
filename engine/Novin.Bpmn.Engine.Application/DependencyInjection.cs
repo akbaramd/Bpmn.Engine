@@ -73,6 +73,37 @@ public static class DependencyInjection
         services.AddScoped<IProcessCompletionEvaluator, ProcessCompletionEvaluator>();
 
         // -------------------------
+        // Process Status Service (Derived Status)
+        // -------------------------
+        services.AddScoped<IProcessStatusService, ProcessStatusService>();
+
+        // -------------------------
+        // BPMN Error Boundary Finder
+        // -------------------------
+        services.AddScoped<IBpmnErrorBoundaryFinder, BpmnErrorBoundaryFinder>();
+
+        // -------------------------
+        // Token Management (Retry, Move, Terminate)
+        // -------------------------
+        services.AddScoped<ITokenManagementService, TokenManagementService>();
+
+        // -------------------------
+        // Incident Service
+        // -------------------------
+        services.AddScoped<IIncidentService, IncidentService>();
+
+        // -------------------------
+        // Boundary Events
+        // -------------------------
+        services.AddScoped<IBoundaryEventExecutor, BoundaryEventExecutor>();
+        services.AddScoped<IClock, SystemClock>();
+        
+        // Boundary Timer Scheduler: Use Quartz in production, Null for testing
+        // To use Quartz: services.AddQuartz() in Program.cs and register QuartzBoundaryTimerScheduler
+        // For now, using NullBoundaryTimerScheduler (can be swapped in Program.cs)
+        services.AddScoped<IBoundaryTimerScheduler, NullBoundaryTimerScheduler>();
+
+        // -------------------------
         // ScriptTask / ServiceTask
         // -------------------------
 
