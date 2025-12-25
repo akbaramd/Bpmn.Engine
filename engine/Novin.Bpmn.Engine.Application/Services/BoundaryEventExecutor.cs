@@ -312,10 +312,10 @@ public sealed class BoundaryEventExecutor : IBoundaryEventExecutor
 
     /// <summary>
     /// Execute error boundary event with Trace-First Token Semantics:
-    /// 1. Convert all active executable tokens in the same ScopeId to trace tokens
+    /// 1. Terminate all active tokens in the same ScopeId and create new trace tokens
     /// 2. Cancel all subscriptions related to that ScopeId
     /// 3. Create new executable token on boundary event's outgoing flow
-    /// 4. Ensure no tokens fail - only trace conversion and continuation
+    /// 4. Ensure no tokens fail - only termination and trace continuation
     /// </summary>
     private async Task ExecuteErrorBoundaryWithTraceFirstAsync(
         Process process,
@@ -347,38 +347,69 @@ public sealed class BoundaryEventExecutor : IBoundaryEventExecutor
 
         var scopeId = token.ScopeId!.Value;
 
-        // ✅ Step 1: Convert all active executable tokens in the same ScopeId to trace tokens
+        // ✅ Step 1: Terminate ALL active tokens in the same ScopeId and create new trace tokens
         var allTokens = await _uow.Tokens.GetByProcessIdAsync(process.Id, ct);
         var scopeTokens = allTokens
             .Where(t => t.ScopeId == scopeId && t.Id != token.Id)
             .ToList();
 
-        var executableTokensInScope = scopeTokens
-            .Where(t => t.IsExecutable && IsActiveToken(t))
+        var activeTokensInScope = scopeTokens
+            .Where(t => IsActiveToken(t))
             .ToList();
 
         _logger.LogInformation(
-            "[BOUNDARY-EXECUTOR] Found {Count} executable tokens in scope to convert to trace tokens. ScopeId={ScopeId}",
-            executableTokensInScope.Count,
+            "[BOUNDARY-EXECUTOR] Found {Count} active tokens in scope to terminate and replace with trace tokens. ScopeId={ScopeId}",
+            activeTokensInScope.Count,
             scopeId);
 
-        foreach (var t in executableTokensInScope)
+        var traceTokensCreated = 0;
+        foreach (var t in activeTokensInScope)
         {
             _logger.LogDebug(
-                "[BOUNDARY-EXECUTOR] Converting token to trace token. TokenId={TokenId} ElementId={ElementId} State={State}",
+                "[BOUNDARY-EXECUTOR] Terminating token and creating trace replacement. TokenId={TokenId} ElementId={ElementId} State={State}",
                 t.Id,
                 t.CurrentElementId,
                 t.State);
 
-            // Convert to trace token: mark as non-executable
-            // Trace tokens will continue moving through the graph to End without executing semantics
-            t.MarkNonExecutable($"Converted to trace token by error boundary: {subscription.BoundaryEventId}");
+            // Terminate the original token
+            t.Terminate($"Interrupted by error boundary event: {subscription.BoundaryEventId}");
+            process.RemoveToken(t.Id);
 
-            // If token is waiting (e.g., at a join), resume it so it can continue as trace token
+            // Create new trace token to continue the trace
+            var traceToken = new Token(process.Id, t.CurrentElementId, new[] { t.Id });
+            traceToken.SetScope(scopeId); // Preserve scope
+            if (t.ActivityInstanceId.HasValue)
+            {
+                traceToken.SetActivityInstance(t.ActivityInstanceId.Value); // Preserve activity instance
+            }
+
+            // Copy variables from original token
+            foreach (var kv in t.Variables)
+            {
+                traceToken.SetVariable(kv.Key, kv.Value);
+            }
+
+            // Mark as trace token (non-executable)
+            traceToken.MarkNonExecutable($"Trace token created by error boundary: {subscription.BoundaryEventId}");
+
+            // Preserve arrived via flow
+            traceToken.SetArrivedVia(t.ArrivedViaFlowId);
+
+            await _uow.Tokens.AddAsync(traceToken, ct);
+            process.AddToken(traceToken.Id);
+
+            // If original token was waiting, resume the trace token
             if (t.State == TokenState.Waiting)
             {
-                t.ResumeWithoutProcessing();
+                traceToken.ResumeWithoutProcessing();
             }
+            else
+            {
+                // For active tokens, set to active state
+                traceToken.Activate();
+            }
+
+            traceTokensCreated++;
         }
 
         // ✅ Step 2: Cancel all subscriptions related to this ScopeId
@@ -461,16 +492,16 @@ public sealed class BoundaryEventExecutor : IBoundaryEventExecutor
         await _uow.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "[BOUNDARY-EXECUTOR] ✅ ERROR boundary event executed with Trace-First semantics. SubscriptionId={SubscriptionId} OldTokenId={OldTokenId} NewTokenId={NewTokenId} ConvertedToTrace={TraceCount}",
+            "[BOUNDARY-EXECUTOR] ✅ ERROR boundary event executed with Trace-First semantics. SubscriptionId={SubscriptionId} OldTokenId={OldTokenId} NewTokenId={NewTokenId} TraceTokensCreated={TraceCount}",
             subscription.Id,
             token.Id,
             boundaryToken.Id,
-            executableTokensInScope.Count);
+            traceTokensCreated);
     }
 
     /// <summary>
     /// Execute interrupting boundary event with Trace-First Token Semantics:
-    /// 1. Convert all active executable tokens in the same ScopeId to trace tokens
+    /// 1. Terminate all active tokens in the same ScopeId and create new trace tokens
     /// 2. Cancel all subscriptions related to that ScopeId
     /// 3. Create new executable token on boundary event's outgoing flow
     /// </summary>
@@ -504,38 +535,69 @@ public sealed class BoundaryEventExecutor : IBoundaryEventExecutor
 
         var scopeId = token.ScopeId!.Value;
 
-        // ✅ Step 1: Convert all active executable tokens in the same ScopeId to trace tokens
+        // ✅ Step 1: Terminate ALL active tokens in the same ScopeId and create new trace tokens
         var allTokens = await _uow.Tokens.GetByProcessIdAsync(process.Id, ct);
         var scopeTokens = allTokens
             .Where(t => t.ScopeId == scopeId && t.Id != token.Id)
             .ToList();
 
-        var executableTokensInScope = scopeTokens
-            .Where(t => t.IsExecutable && IsActiveToken(t))
+        var activeTokensInScope = scopeTokens
+            .Where(t => IsActiveToken(t))
             .ToList();
 
         _logger.LogInformation(
-            "[BOUNDARY-EXECUTOR] Found {Count} executable tokens in scope to convert to trace tokens. ScopeId={ScopeId}",
-            executableTokensInScope.Count,
+            "[BOUNDARY-EXECUTOR] Found {Count} active tokens in scope to terminate and replace with trace tokens. ScopeId={ScopeId}",
+            activeTokensInScope.Count,
             scopeId);
 
-        foreach (var t in executableTokensInScope)
+        var traceTokensCreated = 0;
+        foreach (var t in activeTokensInScope)
         {
             _logger.LogDebug(
-                "[BOUNDARY-EXECUTOR] Converting token to trace token. TokenId={TokenId} ElementId={ElementId} State={State}",
+                "[BOUNDARY-EXECUTOR] Terminating token and creating trace replacement. TokenId={TokenId} ElementId={ElementId} State={State}",
                 t.Id,
                 t.CurrentElementId,
                 t.State);
 
-            // Convert to trace token: mark as non-executable
-            // Trace tokens will continue moving through the graph to End without executing semantics
-            t.MarkNonExecutable($"Converted to trace token by error boundary: {subscription.BoundaryEventId}");
-            
-            // If token is waiting (e.g., at a join), resume it so it can continue as trace token
+            // Terminate the original token
+            t.Terminate($"Interrupted by boundary event: {subscription.BoundaryEventId}");
+            process.RemoveToken(t.Id);
+
+            // Create new trace token to continue the trace
+            var traceToken = new Token(process.Id, t.CurrentElementId, new[] { t.Id });
+            traceToken.SetScope(scopeId); // Preserve scope
+            if (t.ActivityInstanceId.HasValue)
+            {
+                traceToken.SetActivityInstance(t.ActivityInstanceId.Value); // Preserve activity instance
+            }
+
+            // Copy variables from original token
+            foreach (var kv in t.Variables)
+            {
+                traceToken.SetVariable(kv.Key, kv.Value);
+            }
+
+            // Mark as trace token (non-executable)
+            traceToken.MarkNonExecutable($"Trace token created by boundary event: {subscription.BoundaryEventId}");
+
+            // Preserve arrived via flow
+            traceToken.SetArrivedVia(t.ArrivedViaFlowId);
+
+            await _uow.Tokens.AddAsync(traceToken, ct);
+            process.AddToken(traceToken.Id);
+
+            // If original token was waiting, resume the trace token
             if (t.State == TokenState.Waiting)
             {
-                t.ResumeWithoutProcessing();
+                traceToken.ResumeWithoutProcessing();
             }
+            else
+            {
+                // For active tokens, set to active state
+                traceToken.Activate();
+            }
+
+            traceTokensCreated++;
         }
 
         // ✅ Step 2: Cancel all subscriptions related to this ScopeId
@@ -617,11 +679,11 @@ public sealed class BoundaryEventExecutor : IBoundaryEventExecutor
         await _uow.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "[BOUNDARY-EXECUTOR] ✅ Interrupting boundary event executed with Trace-First semantics. SubscriptionId={SubscriptionId} OldTokenId={OldTokenId} NewTokenId={NewTokenId} ConvertedToTrace={TraceCount}",
+            "[BOUNDARY-EXECUTOR] ✅ Interrupting boundary event executed with Trace-First semantics. SubscriptionId={SubscriptionId} OldTokenId={OldTokenId} NewTokenId={NewTokenId} TraceTokensCreated={TraceCount}",
             subscription.Id,
             token.Id,
             boundaryToken.Id,
-            executableTokensInScope.Count);
+            traceTokensCreated);
     }
 
     /// <summary>
