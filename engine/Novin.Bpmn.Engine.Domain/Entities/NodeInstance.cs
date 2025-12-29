@@ -1,0 +1,356 @@
+using System.Text.Json;
+using Novin.Bpmn.Engine.Domain.Common;
+
+namespace Novin.Bpmn.Engine.Domain.Entities;
+
+/// <summary>
+/// Lifecycle state of a node execution instance.
+/// </summary>
+public enum NodeState
+{
+    Created,
+    Processing,
+    Waiting,
+    Completed,
+    Failed,
+    Skipped
+}
+
+/// <summary>
+/// A single execution instance of a BPMN node (element) for a specific Token within a Process.
+/// Created ONLY when the token is executable (this rule should be enforced by application service).
+/// </summary>
+public sealed class NodeInstance : BaseAggregateRoot
+{
+    public Guid ProcessId { get; private set; }
+    public Guid TokenId { get; private set; }
+
+    /// <summary>BPMN element id (e.g., "UserTask_1")</summary>
+    public string ElementId { get; private set; } = default!;
+
+    public NodeState State { get; private set; }
+
+    public DateTime CreatedAtUtc { get; private set; }
+    public DateTime? StartedAtUtc { get; private set; }
+    public DateTime? CompletedAtUtc { get; private set; }
+
+    public Guid? ScopeId { get; private set; }
+    public Guid? ActivityInstanceId { get; private set; }
+    public string? ArrivedViaFlowId { get; private set; }
+
+    /// <summary>Worker correlation if this node waits for external/user completion</summary>
+    public Guid? WorkerId { get; private set; }
+
+    /// <summary>Failure detail (revealed to ops/UI if needed)</summary>
+    public string? ErrorMessage { get; private set; }
+
+    private readonly Dictionary<string, string> _variables = new(StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, string> Variables => _variables;
+
+    private NodeInstance() { } // EF
+
+    public NodeInstance(
+        Guid processId,
+        Guid tokenId,
+        string elementId,
+        Guid? scopeId,
+        Guid? activityInstanceId,
+        string? arrivedViaFlowId)
+    {
+        if (processId == Guid.Empty) throw new ArgumentException("ProcessId cannot be empty.", nameof(processId));
+        if (tokenId == Guid.Empty) throw new ArgumentException("TokenId cannot be empty.", nameof(tokenId));
+        if (string.IsNullOrWhiteSpace(elementId)) throw new ArgumentException("ElementId is required.", nameof(elementId));
+
+        ProcessId = processId;
+        TokenId = tokenId;
+        ElementId = elementId.Trim();
+
+        ScopeId = scopeId;
+        ActivityInstanceId = activityInstanceId;
+        ArrivedViaFlowId = string.IsNullOrWhiteSpace(arrivedViaFlowId) ? null : arrivedViaFlowId.Trim();
+
+        State = NodeState.Created;
+        CreatedAtUtc = DateTime.UtcNow;
+
+        AddDomainEvent(new NodeCreatedDomainEvent(
+            NodeId: Id,
+            ProcessId: ProcessId,
+            TokenId: TokenId,
+            ElementId: ElementId,
+            OccurredAtUtc: CreatedAtUtc,
+            ScopeId: ScopeId,
+            ActivityInstanceId: ActivityInstanceId,
+            ArrivedViaFlowId: ArrivedViaFlowId
+        ));
+    }
+
+    public void Start()
+    {
+        if (State != NodeState.Created) return;
+
+        State = NodeState.Processing;
+        StartedAtUtc = DateTime.UtcNow;
+
+        AddDomainEvent(new NodeStartedDomainEvent(
+            NodeId: Id,
+            ProcessId: ProcessId,
+            TokenId: TokenId,
+            ElementId: ElementId,
+            OccurredAtUtc: StartedAtUtc.Value
+        ));
+    }
+
+    /// <summary>
+    /// Put node in waiting state, correlated to a worker.
+    /// </summary>
+    public void Wait(Guid workerId, string? reason = null)
+    {
+        if (workerId == Guid.Empty) throw new ArgumentException("WorkerId cannot be empty.", nameof(workerId));
+        if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
+
+        // If still Created, auto-start before waiting (safe UX)
+        if (State == NodeState.Created)
+            Start();
+
+        WorkerId = workerId;
+        State = NodeState.Waiting;
+
+        AddDomainEvent(new NodeWaitingDomainEvent(
+            NodeId: Id,
+            ProcessId: ProcessId,
+            TokenId: TokenId,
+            ElementId: ElementId,
+            WorkerId: workerId,
+            Reason: string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
+            OccurredAtUtc: DateTime.UtcNow
+        ));
+    }
+
+    /// <summary>
+    /// Resume node from waiting back to processing.
+    /// </summary>
+    public void ResumeFromWait(string? reason = null)
+    {
+        if (State != NodeState.Waiting) return;
+
+        var oldWorkerId = WorkerId;
+        WorkerId = null;
+        State = NodeState.Processing;
+
+        AddDomainEvent(new NodeResumedDomainEvent(
+            NodeId: Id,
+            ProcessId: ProcessId,
+            TokenId: TokenId,
+            ElementId: ElementId,
+            PreviousWorkerId: oldWorkerId,
+            Reason: string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
+            OccurredAtUtc: DateTime.UtcNow
+        ));
+    }
+
+    public void Complete()
+    {
+        if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
+
+        // If Created (rare), treat as started then completed
+        if (State == NodeState.Created)
+            Start();
+
+        State = NodeState.Completed;
+        CompletedAtUtc = DateTime.UtcNow;
+
+        AddDomainEvent(new NodeCompletedDomainEvent(
+            NodeId: Id,
+            ProcessId: ProcessId,
+            TokenId: TokenId,
+            ElementId: ElementId,
+            OccurredAtUtc: CompletedAtUtc.Value
+        ));
+    }
+
+    public void Fail(string errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(errorMessage))
+            throw new ArgumentException("ErrorMessage is required.", nameof(errorMessage));
+
+        if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
+
+        ErrorMessage = errorMessage.Trim();
+        State = NodeState.Failed;
+        CompletedAtUtc = DateTime.UtcNow;
+
+        AddDomainEvent(new NodeFailedDomainEvent(
+            NodeId: Id,
+            ProcessId: ProcessId,
+            TokenId: TokenId,
+            ElementId: ElementId,
+            ErrorMessage: ErrorMessage,
+            OccurredAtUtc: CompletedAtUtc.Value
+        ));
+    }
+
+    public void Skip(string? reason = null)
+    {
+        if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
+
+        State = NodeState.Skipped;
+        CompletedAtUtc = DateTime.UtcNow;
+
+        AddDomainEvent(new NodeSkippedDomainEvent(
+            NodeId: Id,
+            ProcessId: ProcessId,
+            TokenId: TokenId,
+            ElementId: ElementId,
+            Reason: string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
+            OccurredAtUtc: CompletedAtUtc.Value
+        ));
+    }
+
+    /// <summary>
+    /// Set or remove a variable on this node instance.
+    /// - null => removes key
+    /// - non-null => stores as string (string stays as-is; others serialized as JSON)
+    /// </summary>
+    public void SetVariable(string key, object? value)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Key is required.", nameof(key));
+
+        key = key.Trim();
+
+        if (value is null)
+        {
+            if (_variables.Remove(key))
+                AddDomainEvent(new NodeVariableRemovedDomainEvent(
+                    NodeId: Id,
+                    ProcessId: ProcessId,
+                    TokenId: TokenId,
+                    ElementId: ElementId,
+                    Key: key,
+                    OccurredAtUtc: DateTime.UtcNow
+                ));
+
+            return;
+        }
+
+        var serialized = SerializeValue(value);
+        _variables[key] = serialized;
+
+        AddDomainEvent(new NodeVariableSetDomainEvent(
+            NodeId: Id,
+            ProcessId: ProcessId,
+            TokenId: TokenId,
+            ElementId: ElementId,
+            Key: key,
+            Value: serialized,
+            OccurredAtUtc: DateTime.UtcNow
+        ));
+    }
+
+    public bool TryGetVariable(string key, out string? value)
+    {
+        value = null;
+        if (string.IsNullOrWhiteSpace(key)) return false;
+        return _variables.TryGetValue(key.Trim(), out value);
+    }
+
+    private static string SerializeValue(object value)
+    {
+        if (value is string s) return s;
+
+        // numbers/bool/date => ToString with invariant? (keep simple: JSON is safest)
+        return JsonSerializer.Serialize(value, new JsonSerializerOptions
+        {
+            WriteIndented = false
+        });
+    }
+}
+
+
+// =======================
+// Domain Events (one-file)
+// =======================
+
+public sealed record NodeCreatedDomainEvent(
+    Guid NodeId,
+    Guid ProcessId,
+    Guid TokenId,
+    string ElementId,
+    DateTime OccurredAtUtc,
+    Guid? ScopeId,
+    Guid? ActivityInstanceId,
+    string? ArrivedViaFlowId
+) : IDomainEvent;
+
+public sealed record NodeStartedDomainEvent(
+    Guid NodeId,
+    Guid ProcessId,
+    Guid TokenId,
+    string ElementId,
+    DateTime OccurredAtUtc
+) : IDomainEvent;
+
+public sealed record NodeWaitingDomainEvent(
+    Guid NodeId,
+    Guid ProcessId,
+    Guid TokenId,
+    string ElementId,
+    Guid WorkerId,
+    string? Reason,
+    DateTime OccurredAtUtc
+) : IDomainEvent;
+
+public sealed record NodeResumedDomainEvent(
+    Guid NodeId,
+    Guid ProcessId,
+    Guid TokenId,
+    string ElementId,
+    Guid? PreviousWorkerId,
+    string? Reason,
+    DateTime OccurredAtUtc
+) : IDomainEvent;
+
+public sealed record NodeCompletedDomainEvent(
+    Guid NodeId,
+    Guid ProcessId,
+    Guid TokenId,
+    string ElementId,
+    DateTime OccurredAtUtc
+) : IDomainEvent;
+
+public sealed record NodeFailedDomainEvent(
+    Guid NodeId,
+    Guid ProcessId,
+    Guid TokenId,
+    string ElementId,
+    string ErrorMessage,
+    DateTime OccurredAtUtc
+) : IDomainEvent;
+
+public sealed record NodeSkippedDomainEvent(
+    Guid NodeId,
+    Guid ProcessId,
+    Guid TokenId,
+    string ElementId,
+    string? Reason,
+    DateTime OccurredAtUtc
+) : IDomainEvent;
+
+public sealed record NodeVariableSetDomainEvent(
+    Guid NodeId,
+    Guid ProcessId,
+    Guid TokenId,
+    string ElementId,
+    string Key,
+    string Value,
+    DateTime OccurredAtUtc
+) : IDomainEvent;
+
+public sealed record NodeVariableRemovedDomainEvent(
+    Guid NodeId,
+    Guid ProcessId,
+    Guid TokenId,
+    string ElementId,
+    string Key,
+    DateTime OccurredAtUtc
+) : IDomainEvent;
