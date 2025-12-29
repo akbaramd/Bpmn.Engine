@@ -1,0 +1,6 @@
+@Novin.Bpmn.Engine.ClientDemo_HostAddress = http://localhost:5251
+
+GET {{Novin.Bpmn.Engine.ClientDemo_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
