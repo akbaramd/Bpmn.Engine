@@ -1,4 +1,4 @@
-﻿using Novin.Bpmn.EventSourcing.Core.Topology;
+using Novin.Bpmn.EventSourcing.Core.Topology;
 using Novin.Bpmn.Models.Models;
 using System;
 using System.Collections.Generic;
@@ -110,7 +110,7 @@ public class FlowTopologyBuilder : IFlowTopologyBuilder
         if (scriptTask is not null)
         {
             // Parse extension elements to find Bonyan extensions
-            BonyanIoMapping? bonyanIoMapping = scriptTask.BonyanIoMapping;
+            BonyanIoMapping? bonyanIoMapping = element.extensionElements?.BonyanIoMapping;
             BonyanScript? bonyanScript = scriptTask.BonyanScript;
             
             // If not found in typed properties, try parsing from extensionElements

@@ -7,7 +7,7 @@ namespace Novin.Bpmn.Engine.Application.Common.Interfaces;
 /// </summary>
 public interface IProcessRepository : IRepository<Process>
 {
-    Task<Process?> GetByProcessDefinitionIdAsync(string processDefinitionId, CancellationToken cancellationToken = default);
+    Task<Process?> GetByDeploymentAndProcessBpmnIdAsync(Guid deploymentId, string processBpmnId, CancellationToken cancellationToken = default);
     Task<IEnumerable<Process>> GetByStateAsync(Domain.ValueObjects.ProcessState state, CancellationToken cancellationToken = default);
     Task UpdateAsync(Process process, CancellationToken cancellationToken = default);
 }

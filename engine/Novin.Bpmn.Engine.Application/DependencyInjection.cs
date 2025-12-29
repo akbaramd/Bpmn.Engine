@@ -4,15 +4,13 @@ using Microsoft.Extensions.DependencyInjection;
 
 // Orchestration
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
+using Novin.Bpmn.Engine.Application.ElementHandlers;
 using Novin.Bpmn.Engine.Application.EventHandlers;
 
 // Dispatcher + element handlers
-using Novin.Bpmn.Engine.Application.Execution;
-using Novin.Bpmn.Engine.Application.Execution.Strategies;
 
 // Core services
 using Novin.Bpmn.Engine.Application.Services;
-using Novin.Bpmn.Engine.Application.Services.Feel;
 
 namespace Novin.Bpmn.Engine.Application;
 
@@ -26,11 +24,10 @@ public static class DependencyInjection
             cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
             cfg.NotificationPublisher = new TaskWhenAllPublisher();
         });
-
+        services.AddMemoryCache();
         // -------------------------
         // Orchestration
         // -------------------------
-        services.AddScoped<ITokenProcessingOrchestrator, TokenProcessingOrchestrator>();
 
         // -------------------------
         // BPMN runtime context
@@ -56,7 +53,6 @@ public static class DependencyInjection
         // -------------------------
         // Core execution services (SRP)
         // -------------------------
-        services.AddScoped<ITokenNavigationService, TokenNavigationService>();
         services.AddScoped<ITokenForkService, TokenForkService>();
 
         services.AddScoped<IGatewayJoinService, GatewayJoinService>();
@@ -76,6 +72,8 @@ public static class DependencyInjection
         // Process Status Service (Derived Status)
         // -------------------------
         services.AddScoped<IProcessStatusService, ProcessStatusService>();
+        services.AddOptions<ProcessRuntimeOptions>();
+        services.AddSingleton<IProcessStartPolicy, AutoStartProcessStartPolicy>();
 
         // -------------------------
         // Process Execution Recorder (Minimal audit trail for executed nodes)
@@ -117,8 +115,8 @@ public static class DependencyInjection
         {
             // مقادیر پیشنهادی؛ مطابق کلاس خودت تنظیم کن
             TreatNullFormatAsCSharp = true,
-            CSharpTimeout = TimeSpan.FromSeconds(2),
-            JavaScriptTimeout = TimeSpan.FromSeconds(1),
+            CSharpTimeout = TimeSpan.FromSeconds(30),
+            JavaScriptTimeout = TimeSpan.FromSeconds(30),
             JavaScriptMaxStatements = 10_000,
             JavaScriptMaxMemoryBytes = 16 * 1024 * 1024
         });
@@ -128,6 +126,15 @@ public static class DependencyInjection
         services.AddScoped<IServiceTaskExecutor, NullServiceTaskExecutor>();
 
         services.AddScoped<IScriptTaskExecutor, MultiLanguageScriptTaskExecutor>();
+
+        // -------------------------
+        // Client Communication Service
+        // -------------------------
+        services.AddScoped<IClientCommunicationService, SignalRClientCommunicationService>();
+
+        // Background Services
+        // -------------------------
+        services.AddHostedService<WorkerMonitorBackgroundService>();
 
         // -------------------------
         // BPMN Element Handlers (با Decorator Pattern برای Variable Mapping)
@@ -141,29 +148,16 @@ public static class DependencyInjection
         services.AddScoped<ServiceTaskHandler>();
         services.AddScoped<DefaultFlowNodeHandler>();
 
-        // سپس هر کدام را با VariableMappingDecorator wrap می‌کنیم و به عنوان IBpmnElementHandler register می‌کنیم
-        services.AddScoped<IBpmnElementHandler>(sp => CreateDecoratedHandler<StartEventHandler>(sp));
-        services.AddScoped<IBpmnElementHandler>(sp => CreateDecoratedHandler<EndEventHandler>(sp));
-        services.AddScoped<IBpmnElementHandler>(sp => CreateDecoratedHandler<GatewayHandler>(sp));
-        services.AddScoped<IBpmnElementHandler>(sp => CreateDecoratedHandler<UserTaskHandler>(sp));
-        services.AddScoped<IBpmnElementHandler>(sp => CreateDecoratedHandler<ScriptTaskHandler>(sp));
-        services.AddScoped<IBpmnElementHandler>(sp => CreateDecoratedHandler<ServiceTaskHandler>(sp));
-        services.AddScoped<IBpmnElementHandler>(sp => CreateDecoratedHandler<DefaultFlowNodeHandler>(sp));
+        // Register handlers directly as IBpmnElementHandler (each handles its own variable mapping)
+        services.AddScoped<IBpmnElementHandler, StartEventHandler>();
+        services.AddScoped<IBpmnElementHandler, EndEventHandler>();
+        services.AddScoped<IBpmnElementHandler, GatewayHandler>();
+        services.AddScoped<IBpmnElementHandler, UserTaskHandler>();
+        services.AddScoped<IBpmnElementHandler, ScriptTaskHandler>();
+        services.AddScoped<IBpmnElementHandler, ServiceTaskHandler>();
+        services.AddScoped<IBpmnElementHandler, DefaultFlowNodeHandler>();
 
         return services;
     }
 
-    /// <summary>
-    /// Helper method برای ساخت decorated handler.
-    /// این متد از Decorator Pattern استفاده می‌کند تا Variable Mapping را به صورت خودکار اضافه کند.
-    /// </summary>
-    private static IBpmnElementHandler CreateDecoratedHandler<THandler>(IServiceProvider sp)
-        where THandler : IBpmnElementHandler
-    {
-        var innerHandler = sp.GetRequiredService<THandler>();
-        var mappingService = sp.GetRequiredService<IVariableMappingService>();
-        var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<VariableMappingElementHandlerDecorator>>();
-
-        return new VariableMappingElementHandlerDecorator(innerHandler, mappingService, logger);
-    }
 }

@@ -6,7 +6,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities;
 /// Stores minimal execution data for each BPMN node that was executed
 /// Tracks the execution path from start to end events with only IsExecutable=true nodes
 /// </summary>
-public sealed class ProcessExecutionNode : BaseAggregateRoot
+public sealed class ExecutedNode : BaseAggregateRoot
 {
     /// <summary>
     /// Foreign key to the Process
@@ -71,9 +71,9 @@ public sealed class ProcessExecutionNode : BaseAggregateRoot
     // Navigation property
     public Process? Process { get; private set; }
 
-    private ProcessExecutionNode() { }
+    private ExecutedNode() { }
 
-    public ProcessExecutionNode(
+    public ExecutedNode(
         Guid processId,
         string nodeId,
         string? nodeName,
@@ -124,5 +124,15 @@ public sealed class ProcessExecutionNode : BaseAggregateRoot
     public void SetArrivedViaFlow(string flowId)
     {
         ArrivedViaFlowId = flowId;
+    }
+
+    public void SetNodeName(string nodeName)
+    {
+        NodeName = nodeName;
+    }
+
+    public void SetNodeType(string nodeType)
+    {
+        NodeType = nodeType;
     }
 }

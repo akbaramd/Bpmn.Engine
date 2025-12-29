@@ -23,9 +23,14 @@ public class GetProcessesQueryHandler : IRequestHandler<GetProcessesQuery, IEnum
             processes = processes.Where(p => p.State == request.State.Value);
         }
 
-        if (!string.IsNullOrEmpty(request.ProcessDefinitionId))
+        if (request.DeploymentId.HasValue)
         {
-            processes = processes.Where(p => p.ProcessDefinitionId == request.ProcessDefinitionId);
+            processes = processes.Where(p => p.DeploymentId == request.DeploymentId.Value);
+        }
+
+        if (!string.IsNullOrEmpty(request.ProcessBpmnId))
+        {
+            processes = processes.Where(p => p.ProcessBpmnId == request.ProcessBpmnId);
         }
 
         return processes
@@ -35,7 +40,8 @@ public class GetProcessesQueryHandler : IRequestHandler<GetProcessesQuery, IEnum
             .Select(p => new ProcessDto(
                 p.Id,
                 p.Name,
-                p.ProcessDefinitionId,
+                p.DeploymentId,
+                p.ProcessBpmnId,
                 p.State,
                 p.CreatedAt,
                 p.StartedAt,

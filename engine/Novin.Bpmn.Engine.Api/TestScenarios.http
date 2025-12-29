@@ -21,6 +21,10 @@ Content-Type: application/json
 POST http://localhost:5000/api/test-scenarios/TimerBoundaryScenario/run
 Content-Type: application/json
 
+### Run Math Sum Scenario
+POST http://localhost:5000/api/test-scenarios/MathSumScenario/run
+Content-Type: application/json
+
 ###
 
 ### Run All Test Scenarios
@@ -41,6 +45,14 @@ Accept: application/json
 
 ### Get Timer Boundary Scenario Status
 GET http://localhost:5000/api/test-scenarios/TimerBoundaryScenario/status
+Accept: application/json
+
+### Get Math Sum Scenario Status
+GET http://localhost:5000/api/test-scenarios/MathSumScenario/status
+Accept: application/json
+
+### Get Math Sum Scenario Status
+GET http://localhost:5000/api/test-scenarios/MathSumScenario/status
 Accept: application/json
 
 ###
@@ -67,10 +79,21 @@ Content-Type: application/json
 POST http://localhost:5000/api/test-scenarios/ExclusiveGatewayScenario/run
 Content-Type: application/json
 
+### Example: Run Math Sum Scenario
+POST http://localhost:5000/api/test-scenarios/MathSumScenario/run
+Content-Type: application/json
+
 ###
 
 ### Example: Get Error Boundary Scenario Status
 GET http://localhost:5000/api/test-scenarios/ErrorBoundaryScenario/status
+Accept: application/json
+
+###
+
+### Health Check (CORS enabled)
+### Verify the BPMN engine is running and healthy
+GET http://localhost:5000/health
 Accept: application/json
 
 ###
@@ -164,8 +187,20 @@ Accept: application/json
 ###   headers: { 'Content-Type': 'application/json' }
 ### }).then(r => r.json());
 ###
+### // Run Math Sum scenario (requires external client running)
+### const mathResult = await fetch('http://localhost:5000/api/test-scenarios/MathSumScenario/run', {
+###   method: 'POST',
+###   headers: { 'Content-Type': 'application/json' }
+### }).then(r => r.json());
+###
 ### // Run Timer Boundary scenario
 ### const timerResult = await fetch('http://localhost:5000/api/test-scenarios/TimerBoundaryScenario/run', {
+###   method: 'POST',
+###   headers: { 'Content-Type': 'application/json' }
+### }).then(r => r.json());
+###
+### // Run Math Sum scenario
+### const mathResult = await fetch('http://localhost:5000/api/test-scenarios/MathSumScenario/run', {
 ###   method: 'POST',
 ###   headers: { 'Content-Type': 'application/json' }
 ### }).then(r => r.json());
@@ -196,6 +231,18 @@ Accept: application/json
 ###
 ### // Visualize the execution flow in BPMN.js
 ### highlightExecutedElements(viewer, executionFlow);
+###
+### // Test external service integration (MathSumScenario)
+### // 1. Start the BPMN Client Demo first:
+### //    cd engine/Novin.Bpmn.Engine.ClientDemo
+### //    dotnet run
+###
+### // 2. Then run the Math Sum scenario:
+### const mathScenarioResult = await fetch('http://localhost:5000/api/test-scenarios/MathSumScenario/run', {
+###   method: 'POST'
+### }).then(r => r.json());
+###
+### // This tests the complete BPMN → External Client → Result flow
 
 ###
 
@@ -203,7 +250,11 @@ Accept: application/json
 ### - ErrorBoundaryScenario: Error handling with boundary events (interrupting)
 ### - EnterpriseDemoScenario: Exception handling (Technical Failure and BPMN Error)
 ### - TimerBoundaryScenario: Timer-based boundary events (interrupting and non-interrupting)
+### - MathSumScenario: Service task with external client calculation (15.5 + 24.7 = 40.2) - Requires BPMN client demo running
 ###
+### Recently implemented:
+### - MathSumScenario: External service task integration with BPMN client
+
 ### Future scenarios to implement:
 ### - UserTaskScenario: User task completion workflows
 ### - ParallelGatewayScenario: Parallel execution flows

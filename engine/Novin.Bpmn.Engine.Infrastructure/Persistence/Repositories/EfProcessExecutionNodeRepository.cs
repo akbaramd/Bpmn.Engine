@@ -5,7 +5,7 @@ using Novin.Bpmn.Engine.Domain.Entities;
 namespace Novin.Bpmn.Engine.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// Entity Framework implementation of ProcessExecutionNode repository
+/// Entity Framework implementation of ExecutedNode repository
 /// </summary>
 public class EfProcessExecutionNodeRepository : IProcessExecutionNodeRepository
 {
@@ -17,22 +17,22 @@ public class EfProcessExecutionNodeRepository : IProcessExecutionNodeRepository
     }
 
     // Basic CRUD operations
-    public async Task<ProcessExecutionNode?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<ExecutedNode?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.ProcessExecutionNodes.FindAsync(new object[] { id }, cancellationToken);
     }
 
-    public async Task<IEnumerable<ProcessExecutionNode>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<ExecutedNode>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _context.ProcessExecutionNodes.ToListAsync(cancellationToken);
     }
 
-    public async Task AddAsync(ProcessExecutionNode entity, CancellationToken cancellationToken = default)
+    public async Task AddAsync(ExecutedNode entity, CancellationToken cancellationToken = default)
     {
         await _context.ProcessExecutionNodes.AddAsync(entity, cancellationToken);
     }
 
-    public async Task UpdateAsync(ProcessExecutionNode entity, CancellationToken cancellationToken = default)
+    public async Task UpdateAsync(ExecutedNode entity, CancellationToken cancellationToken = default)
     {
         _context.ProcessExecutionNodes.Update(entity);
         await Task.CompletedTask; // Make method properly async
@@ -44,11 +44,12 @@ public class EfProcessExecutionNodeRepository : IProcessExecutionNodeRepository
         if (entity != null)
         {
             _context.ProcessExecutionNodes.Remove(entity);
+            await _context.SaveChangesAsync(cancellationToken);
         }
     }
 
     // Domain-specific methods
-    public async Task<IEnumerable<ProcessExecutionNode>> GetByProcessIdAsync(
+    public async Task<IEnumerable<ExecutedNode>> GetByProcessIdAsync(
         Guid processId,
         CancellationToken cancellationToken = default)
     {
@@ -58,7 +59,7 @@ public class EfProcessExecutionNodeRepository : IProcessExecutionNodeRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IEnumerable<ProcessExecutionNode>> GetExecutionPathAsync(
+    public async Task<IEnumerable<ExecutedNode>> GetExecutionPathAsync(
         Guid processId,
         CancellationToken cancellationToken = default)
     {
@@ -68,7 +69,7 @@ public class EfProcessExecutionNodeRepository : IProcessExecutionNodeRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<ProcessExecutionNode?> GetLastExecutedNodeAsync(
+    public async Task<ExecutedNode?> GetLastExecutedNodeAsync(
         Guid processId,
         CancellationToken cancellationToken = default)
     {
@@ -87,7 +88,7 @@ public class EfProcessExecutionNodeRepository : IProcessExecutionNodeRepository
             .AnyAsync(n => n.ProcessId == processId && n.NodeId == nodeId, cancellationToken);
     }
 
-    public async Task<ProcessExecutionNode?> GetNodeAsync(
+    public async Task<ExecutedNode?> GetNodeAsync(
         Guid processId,
         string nodeId,
         CancellationToken cancellationToken = default)

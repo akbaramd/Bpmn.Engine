@@ -3,33 +3,33 @@ using Novin.Bpmn.Engine.Domain.Entities;
 namespace Novin.Bpmn.Engine.Application.Common.Interfaces;
 
 /// <summary>
-/// Repository interface for ProcessExecutionNode entities
+/// Repository interface for ExecutedNode entities
 /// </summary>
-public interface IProcessExecutionNodeRepository : IRepository<ProcessExecutionNode>
+public interface IProcessExecutionNodeRepository : IRepository<ExecutedNode>
 {
     /// <summary>
     /// Update an existing execution node
     /// </summary>
-    Task UpdateAsync(ProcessExecutionNode entity, CancellationToken cancellationToken = default);
+    Task UpdateAsync(ExecutedNode entity, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get all execution nodes for a specific process
     /// </summary>
-    Task<IEnumerable<ProcessExecutionNode>> GetByProcessIdAsync(
+    Task<IEnumerable<ExecutedNode>> GetByProcessIdAsync(
         Guid processId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get execution path from start to end for a process
     /// </summary>
-    Task<IEnumerable<ProcessExecutionNode>> GetExecutionPathAsync(
+    Task<IEnumerable<ExecutedNode>> GetExecutionPathAsync(
         Guid processId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get the last executed node for a process
     /// </summary>
-    Task<ProcessExecutionNode?> GetLastExecutedNodeAsync(
+    Task<ExecutedNode?> GetLastExecutedNodeAsync(
         Guid processId,
         CancellationToken cancellationToken = default);
 
@@ -44,7 +44,7 @@ public interface IProcessExecutionNodeRepository : IRepository<ProcessExecutionN
     /// <summary>
     /// Get a specific execution node for a process
     /// </summary>
-    Task<ProcessExecutionNode?> GetNodeAsync(
+    Task<ExecutedNode?> GetNodeAsync(
         Guid processId,
         string nodeId,
         CancellationToken cancellationToken = default);
@@ -55,17 +55,4 @@ public interface IProcessExecutionNodeRepository : IRepository<ProcessExecutionN
     Task<ProcessExecutionStats> GetExecutionStatsAsync(
         Guid processId,
         CancellationToken cancellationToken = default);
-}
-
-/// <summary>
-/// Execution statistics for a process
-/// </summary>
-public class ProcessExecutionStats
-{
-    public int TotalNodesExecuted { get; set; }
-    public int CompletedNodes { get; set; }
-    public DateTime? FirstExecutedAt { get; set; }
-    public DateTime? LastExecutedAt { get; set; }
-    public TimeSpan? TotalExecutionTime { get; set; }
-    public Dictionary<string, int> NodeTypeCounts { get; set; } = new();
 }

@@ -191,7 +191,7 @@ public enum MissingBehavior
     /// <summary>
     /// Fail the node execution if the source variable is missing (strict validation).
     /// </summary>
-    [XmlEnum("fail")]
-    Fail
+    [XmlEnum("throw")]
+    Throw
 }
 

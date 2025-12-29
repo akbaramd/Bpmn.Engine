@@ -44,8 +44,16 @@ public class EfTokenRepository : ITokenRepository
         if (token != null)
         {
             _context.Tokens.Remove(token);
+            await _context.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Token deleted: {TokenId}", id);
         }
+    }
+
+    public async Task UpdateAsync(Token token, CancellationToken cancellationToken = default)
+    {
+        _context.Tokens.Update(token);
+        await _context.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Token updated: {TokenId}", token.Id);
     }
 
     public async Task<IEnumerable<Token>> GetByProcessIdAsync(Guid processId, CancellationToken cancellationToken = default)

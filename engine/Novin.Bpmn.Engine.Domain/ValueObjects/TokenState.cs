@@ -10,6 +10,6 @@ public enum TokenState
     Waiting,
     Completed,
     Terminated,
-    Failed
+    Failed,
 }
 

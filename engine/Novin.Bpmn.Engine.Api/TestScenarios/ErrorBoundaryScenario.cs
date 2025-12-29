@@ -11,6 +11,7 @@ public sealed class ErrorBoundaryScenario : TestScenario
     public override string Description => "Tests error boundary event (interrupting)";
     public override string BpmnFileName => "error-boundary-test.bpmn";
     public override string ProcessKey => "error-boundary-test";
+    public override string ProcessBpmnId => "error-boundary-test";
 
     public override Task<IReadOnlyList<TestCase>> GetTestCasesAsync()
     {
@@ -19,9 +20,9 @@ public sealed class ErrorBoundaryScenario : TestScenario
             new(
                 "Error Thrown Test",
                 "Tests error boundary when error is thrown (should be caught by boundary)",
-                new Dictionary<string, object>
+                new Dictionary<string, string>
                 {
-                    { "shouldThrowError", true },
+                    { "shouldThrowError", "true" },
                     { "errorCode", "TEST_ERROR" },
                     { "executionPath", "start" } // Initialize execution path
                 },
@@ -29,9 +30,9 @@ public sealed class ErrorBoundaryScenario : TestScenario
             new(
                 "No Error Test",
                 "Tests normal flow when no error is thrown",
-                new Dictionary<string, object>
+                new Dictionary<string, string>
                 {
-                    { "shouldThrowError", false },
+                    { "shouldThrowError", "false" },
                     { "executionPath", "start" } // Initialize execution path
                 },
                 2000)

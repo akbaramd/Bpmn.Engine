@@ -60,7 +60,6 @@
 ## رویدادهای دامنه
 
 ### Process Events
-- `ProcessCreatedEvent`
 - `ProcessStartedEvent`
 - `ProcessCompletedEvent`
 - `ProcessSuspendedEvent`
@@ -96,7 +95,7 @@ services.AddInfrastructure();
 var result = await _mediator.Send(new StartProcessCommand(
     processDefinitionId: "approval-process",
     processName: "Approval Process",
-    initialVariables: new Dictionary<string, object> { { "amount", 1000 } }
+    initialVariables: new Dictionary<string, string> { { "amount", 1000 } }
 ));
 
 // ایجاد نود

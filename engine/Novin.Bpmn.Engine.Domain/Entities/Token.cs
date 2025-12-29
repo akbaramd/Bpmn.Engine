@@ -7,9 +7,14 @@ namespace Novin.Bpmn.Engine.Domain.Entities
 {
     public sealed class Token : BaseAggregateRoot
     {
-        public Guid ProcessId { get; private set; }
-        public string CurrentElementId { get; private set; } = default!;
-        public TokenState State { get; private set; }
+    public Guid ProcessId { get; private set; }
+    public string CurrentElementId { get; private set; } = default!;
+    public TokenState State { get; private set; }
+
+    /// <summary>
+    /// ID of the worker this token is waiting for (if any)
+    /// </summary>
+    public Guid? WorkerId { get; private set; }
 
         /// <summary>
         /// If false => bypass-only token, never executes activities (only moves)
@@ -29,8 +34,8 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         private readonly List<Guid> _parentTokenIds = new();
         public IReadOnlyCollection<Guid> ParentTokenIds => _parentTokenIds.AsReadOnly();
 
-        private readonly Dictionary<string, object> _variables = new();
-        public IReadOnlyDictionary<string, object> Variables => _variables;
+        private readonly Dictionary<string, string> _variables = new();
+        public IReadOnlyDictionary<string, string> Variables => _variables;
 
         public DateTime CreatedAt { get; private set; }
         public DateTime? ActivatedAt { get; private set; }
@@ -80,20 +85,21 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 OccurredAtUtc: DateTime.UtcNow,
                 IsExecutable: IsExecutable));
 
-            RequestProcessing();
         }
 
-        public void Wait(string? reason = null)
+        public void Wait(string? reason = null, Guid? workerId = null)
         {
             EnsureState(TokenState.Active);
 
             State = TokenState.Waiting;
+            WorkerId = workerId;
 
             AddDomainEvent(new TokenWaitingEvent(
                 TokenId: Id,
                 ProcessId: ProcessId,
                 ElementId: CurrentElementId,
                 Reason: reason,
+                WorkerId: workerId,
                 OccurredAtUtc: DateTime.UtcNow,
                 IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
@@ -129,7 +135,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
 
-            RequestProcessing();
         }
 
         /// <summary>
@@ -150,10 +155,8 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
 
-            RequestProcessing();
         }
-
-        public void Complete()
+        public void Complete(string? reason = null)
         {
             EnsureState(TokenState.Active);
 
@@ -161,6 +164,19 @@ namespace Novin.Bpmn.Engine.Domain.Entities
             CompletedAt = DateTime.UtcNow;
 
             AddDomainEvent(new TokenCompletedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                Reason: reason,
+                OccurredAtUtc: CompletedAt.Value,
+                IsExecutable: IsExecutable,
+                ScopeId: ScopeId));
+        }
+        public void Processed()
+        {
+            EnsureState(TokenState.Active);
+            WorkerId = null;
+            AddDomainEvent(new TokenProcessedEvent(
                 TokenId: Id,
                 ProcessId: ProcessId,
                 ElementId: CurrentElementId,
@@ -223,10 +239,55 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
         }
+
+        /// <summary>
+        /// Reports that BPMN error occurred during token processing
+        /// </summary>
+        public void ReportBpmnError(string errorCode, string errorMessage)
+        {
+            if (string.IsNullOrWhiteSpace(errorCode))
+                throw new ArgumentException("Error code cannot be empty", nameof(errorCode));
+
+            AddDomainEvent(new BpmnErrorOccurredEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                ErrorCode: errorCode,
+                ErrorMessage: errorMessage,
+                ScopeId: ScopeId,
+                OccurredAtUtc: DateTime.UtcNow));
+        }
+
+        /// <summary>
+        /// Reports that technical failure occurred during token processing
+        /// </summary>
+        public void ReportTechnicalFailure(string errorMessage, string stackTrace)
+        {
+            if (string.IsNullOrWhiteSpace(errorMessage))
+                throw new ArgumentException("Error message cannot be empty", nameof(errorMessage));
+
+            AddDomainEvent(new TechnicalFailureOccurredEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                ErrorMessage: errorMessage,
+                StackTrace: stackTrace,
+                OccurredAtUtc: DateTime.UtcNow));
+        }
         public void ClearLocalVariables()
         {
             EnsureNotTerminal();
+            if (_variables.Count == 0)
+                return;
+
+            var clearedCount = _variables.Count;
             _variables.Clear();
+
+            AddDomainEvent(new TokenLocalVariablesClearedEvent(
+                Id,
+                ProcessId,
+                clearedCount,
+                DateTime.UtcNow));
         }
         // -------------------- Movement --------------------
         public void MoveTo(string nextElementId, string? viaFlowId)
@@ -250,7 +311,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
 
-            RequestProcessing();
         }
         public void ResumeWithoutProcessing()
         {
@@ -268,17 +328,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
 
             // ❌ عمداً RequestProcessing نمی‌زنیم
         }
-        private void RequestProcessing()
-        {
-            AddDomainEvent(new TokenProcessingRequestedEvent(
-                TokenId: Id,
-                ProcessId: ProcessId,
-                ElementId: CurrentElementId,
-                OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable,
-                ScopeId: ScopeId,
-                ArrivedViaFlowId: ArrivedViaFlowId));
-        }
+    
 
         // -------------------- Fork/Merge correlation --------------------
         public void MarkNonExecutable(string? reason = null)
@@ -323,37 +373,74 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 throw new ArgumentException("ActivityInstanceId cannot be empty", nameof(activityInstanceId));
 
             ActivityInstanceId = activityInstanceId;
+
+            AddDomainEvent(new TokenActivityInstanceAssignedEvent(
+                Id,
+                ProcessId,
+                activityInstanceId,
+                DateTime.UtcNow));
         }
         
         /// <summary>
         /// Clear Activity Instance ID - وقتی token از activity خارج می‌شود
         /// </summary>
-        public void ClearActivityInstance() => ActivityInstanceId = null;
+        public void ClearActivityInstance()
+        {
+            var previous = ActivityInstanceId;
+            ActivityInstanceId = null;
+
+            AddDomainEvent(new TokenActivityInstanceClearedEvent(
+                Id,
+                ProcessId,
+                previous,
+                DateTime.UtcNow));
+        }
 
         // -------------------- Variables --------------------
-        public void SetVariable(string name, object value)
+        public void SetVariable(string name, object? value)
         {
             EnsureNotTerminal();
 
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("Variable name cannot be empty", nameof(name));
 
-            _variables[name] = value;
+            _variables[name] = ConvertToString(value);
+
+            AddDomainEvent(new TokenLocalVariableSetEvent(
+                Id,
+                ProcessId,
+                name,
+                DateTime.UtcNow));
         }
 
-        public bool TryGetVariable(string name, out object? value)
+        public bool TryGetVariable(string name, out string? value)
         {
             value = null;
             if (string.IsNullOrWhiteSpace(name)) return false;
             return _variables.TryGetValue(name, out value);
         }
 
-        public object GetVariable(string name)
+        public string GetVariable(string name)
         {
             if (!_variables.TryGetValue(name, out var value))
                 throw new KeyNotFoundException($"Variable '{name}' not found.");
 
             return value;
+        }
+
+        /// <summary>
+        /// Converts an object to string representation
+        /// </summary>
+        private static string ConvertToString(object? value)
+        {
+            if (value == null)
+                return string.Empty;
+
+            if (value is string str)
+                return str;
+
+            // Use JSON serialization for complex types
+            return Newtonsoft.Json.JsonConvert.SerializeObject(value);
         }
 
         public bool HasVariable(string name) => _variables.ContainsKey(name);

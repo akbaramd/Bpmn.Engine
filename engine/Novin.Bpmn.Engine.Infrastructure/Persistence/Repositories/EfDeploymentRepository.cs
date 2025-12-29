@@ -46,6 +46,7 @@ public class EfDeploymentRepository : IDeploymentRepository
         if (deployment != null)
         {
             _context.Deployments.Remove(deployment);
+            await _context.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Deployment deleted: {DeploymentId}", id);
         }
     }

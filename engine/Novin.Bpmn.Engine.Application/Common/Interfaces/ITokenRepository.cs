@@ -12,5 +12,6 @@ public interface ITokenRepository : IRepository<Token>
     Task<IEnumerable<Token>> GetByStateAsync(Guid processId, TokenState state, CancellationToken cancellationToken = default);
     Task<IEnumerable<Token>> GetByElementIdAsync(Guid processId, string elementId, CancellationToken cancellationToken = default);
     Task<IEnumerable<Token>> GetChildTokensAsync(Guid parentTokenId, CancellationToken cancellationToken = default);
+    Task UpdateAsync(Token token, CancellationToken cancellationToken = default);
 }
 

@@ -1,5 +1,6 @@
 using MediatR;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
+using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 using Novin.Bpmn.Models;
@@ -10,18 +11,21 @@ namespace Novin.Bpmn.Engine.Application.Queries.GetProcessExecutionFlow;
 /// <summary>
 /// Handler for reconstructing the complete execution flow of a process instance
 /// </summary>
-public sealed class GetProcessExecutionFlowQueryHandler :
+    public sealed class GetProcessExecutionFlowQueryHandler :
     IRequestHandler<GetProcessExecutionFlowQuery, ProcessExecutionFlowDto>
 {
     private readonly IUnitOfWork _uow;
     private readonly IBpmnRuntimeContextFactory _ctxFactory;
+    private readonly IProcessExecutionRecorder _executionRecorder;
 
     public GetProcessExecutionFlowQueryHandler(
         IUnitOfWork uow,
-        IBpmnRuntimeContextFactory ctxFactory)
+        IBpmnRuntimeContextFactory ctxFactory,
+        IProcessExecutionRecorder executionRecorder)
     {
         _uow = uow ?? throw new ArgumentNullException(nameof(uow));
         _ctxFactory = ctxFactory ?? throw new ArgumentNullException(nameof(ctxFactory));
+        _executionRecorder = executionRecorder ?? throw new ArgumentNullException(nameof(executionRecorder));
     }
 
     public async Task<ProcessExecutionFlowDto> Handle(
@@ -42,9 +46,12 @@ public sealed class GetProcessExecutionFlowQueryHandler :
         // Get BPMN context for element information
         var bpmnContext = await _ctxFactory.CreateAsync(process, ct);
 
-        // Reconstruct execution flow
-        var executedElements = ReconstructExecutedElements(tokens, bpmnContext);
-        var executedFlows = ReconstructExecutedFlows(tokens);
+        // Get execution nodes from audit trail (contains all executed elements)
+        var executionNodes = await _executionRecorder.GetExecutionPathAsync(request.ProcessId, ct);
+
+        // Reconstruct execution flow using audit trail data
+        var executedElements = await ReconstructExecutedElementsFromAuditTrailAsync(executionNodes, bpmnContext, request.ProcessId, ct);
+        var executedFlows = await ReconstructExecutedFlowsFromAuditTrailAsync(executionNodes, bpmnContext, ct);
         var boundaryEvents = MapBoundaryEvents(subscriptions);
         var executionCycles = ReconstructExecutionCycles(tokens, subscriptions);
         var stats = CalculateStats(process, tokens, executedElements, executedFlows, subscriptions);
@@ -53,7 +60,8 @@ public sealed class GetProcessExecutionFlowQueryHandler :
         {
             ProcessId = process.Id,
             ProcessName = process.Name,
-            ProcessDefinitionId = process.ProcessDefinitionId,
+            ProcessBpmnId = process.ProcessBpmnId,
+            DeploymentId = process.DeploymentId,
             State = process.State,
             CreatedAt = process.CreatedAt,
             CompletedAt = process.CompletedAt,
@@ -65,31 +73,45 @@ public sealed class GetProcessExecutionFlowQueryHandler :
         };
     }
 
-    private IReadOnlyCollection<ExecutedElementDto> ReconstructExecutedElements(
-        IEnumerable<Token> tokens,
-        BpmnRuntimeContext bpmnContext)
+    private async Task<IReadOnlyCollection<ExecutedElementDto>> ReconstructExecutedElementsFromAuditTrailAsync(
+        IEnumerable<ExecutedNode> executionNodes,
+        BpmnRuntimeContext bpmnContext,
+        Guid processId,
+        CancellationToken ct)
     {
         var elementGroups = new Dictionary<string, List<TokenExecutionDto>>();
 
-        foreach (var token in tokens)
+        foreach (var node in executionNodes)
         {
-            // Current element execution
-            if (!string.IsNullOrEmpty(token.CurrentElementId))
+            if (!elementGroups.ContainsKey(node.NodeId))
+                elementGroups[node.NodeId] = new List<TokenExecutionDto>();
+
+            elementGroups[node.NodeId].Add(new TokenExecutionDto
             {
-                if (!elementGroups.ContainsKey(token.CurrentElementId))
-                    elementGroups[token.CurrentElementId] = new List<TokenExecutionDto>();
+                TokenId = node.TokenId,
+                ExecutedAt = node.ExecutedAt,
+                ScopeId = node.ScopeId,
+                IsExecutable = true // ProcessExecutionNodes only track executable tokens
+            });
+        }
 
-                elementGroups[token.CurrentElementId].Add(new TokenExecutionDto
+        // Include boundary events that were actually triggered (executed)
+        var triggeredBoundarySubscriptions = await _uow.BoundarySubscriptions.GetByProcessIdAsync(processId, ct);
+        foreach (var subscription in triggeredBoundarySubscriptions.Where(s => s.State == SubscriptionState.Triggered))
+        {
+            if (!elementGroups.ContainsKey(subscription.BoundaryEventId))
+            {
+                elementGroups[subscription.BoundaryEventId] = new List<TokenExecutionDto>
                 {
-                    TokenId = token.Id,
-                    ExecutedAt = token.CreatedAt, // Use token creation as execution time
-                    ScopeId = token.ScopeId,
-                    IsExecutable = token.IsExecutable
-                });
+                    new TokenExecutionDto
+                    {
+                        TokenId = subscription.TokenId,
+                        ExecutedAt = subscription.TriggeredAt ?? subscription.CreatedAt,
+                        ScopeId = subscription.TokenScopeId,
+                        IsExecutable = true // Boundary events that executed are executable
+                    }
+                };
             }
-
-            // TODO: If we had token movement history, we could track all elements visited
-            // For now, we only track current element
         }
 
         var result = new List<ExecutedElementDto>();
@@ -113,37 +135,40 @@ public sealed class GetProcessExecutionFlowQueryHandler :
         return result.OrderBy(e => e.FirstExecutedAt).ToList();
     }
 
-    private IReadOnlyCollection<ExecutedFlowDto> ReconstructExecutedFlows(IEnumerable<Token> tokens)
+    private async Task<IReadOnlyCollection<ExecutedFlowDto>> ReconstructExecutedFlowsFromAuditTrailAsync(
+        IEnumerable<ExecutedNode> executionNodes,
+        BpmnRuntimeContext bpmnContext,
+        CancellationToken ct)
     {
         var flowGroups = new Dictionary<string, List<TokenExecutionDto>>();
 
-        foreach (var token in tokens)
+        foreach (var node in executionNodes)
         {
-            if (!string.IsNullOrEmpty(token.ArrivedViaFlowId))
+            if (!string.IsNullOrEmpty(node.ArrivedViaFlowId))
             {
-                if (!flowGroups.ContainsKey(token.ArrivedViaFlowId))
-                    flowGroups[token.ArrivedViaFlowId] = new List<TokenExecutionDto>();
+                if (!flowGroups.ContainsKey(node.ArrivedViaFlowId))
+                    flowGroups[node.ArrivedViaFlowId] = new List<TokenExecutionDto>();
 
-                flowGroups[token.ArrivedViaFlowId].Add(new TokenExecutionDto
+                flowGroups[node.ArrivedViaFlowId].Add(new TokenExecutionDto
                 {
-                    TokenId = token.Id,
-                    ExecutedAt = token.CreatedAt,
-                    ScopeId = token.ScopeId,
-                    IsExecutable = token.IsExecutable
+                    TokenId = node.TokenId,
+                    ExecutedAt = node.ExecutedAt,
+                    ScopeId = node.ScopeId,
+                    IsExecutable = true // ProcessExecutionNodes only track executable tokens
                 });
             }
         }
 
-        // TODO: Enhance this to get source/target element IDs and flow names
-        // For now, we just return flow IDs
         var result = new List<ExecutedFlowDto>();
         foreach (var (flowId, executions) in flowGroups)
         {
             result.Add(new ExecutedFlowDto
             {
                 FlowId = flowId,
-                SourceElementId = "unknown", // TODO: Map from BPMN model
-                TargetElementId = "unknown", // TODO: Map from BPMN model
+                SourceElementId = "unknown", // TODO: Map from BPMN model if needed
+                TargetElementId = "unknown", // TODO: Map from BPMN model if needed
+                FlowName = null, // TODO: Get from BPMN model if needed
+                ConditionExpression = null, // TODO: Add condition expression if available
                 FirstExecutedAt = executions.Min(e => e.ExecutedAt),
                 ExecutionCount = executions.Count,
                 TokenExecutions = executions

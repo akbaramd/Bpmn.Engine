@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -12,6 +12,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Novin.Bpmn.Engine.Infrastructure", "Novin.Bpmn.Engine.Infrastructure\Novin.Bpmn.Engine.Infrastructure.csproj", "{5DD96D48-6741-467B-82F9-84423A50950C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Novin.Bpmn.Engine.Api", "Novin.Bpmn.Engine.Api\Novin.Bpmn.Engine.Api.csproj", "{17105571-491F-4B72-B6CB-6D529982A5DF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Novin.Bpmn.Engine.Clients", "Novin.Bpmn.Engine.Clients\Novin.Bpmn.Engine.Clients.csproj", "{B22C564D-E4E7-4E12-81A2-D425DCFCEC2B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Novin.Bpmn.Engine.ClientDemo", "Novin.Bpmn.Engine.ClientDemo\Novin.Bpmn.Engine.ClientDemo.csproj", "{FB9625F2-3B3E-4691-A6B2-8B3B6EC4653F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -83,6 +87,30 @@ Global
 		{17105571-491F-4B72-B6CB-6D529982A5DF}.Release|x64.Build.0 = Release|Any CPU
 		{17105571-491F-4B72-B6CB-6D529982A5DF}.Release|x86.ActiveCfg = Release|Any CPU
 		{17105571-491F-4B72-B6CB-6D529982A5DF}.Release|x86.Build.0 = Release|Any CPU
+		{B22C564D-E4E7-4E12-81A2-D425DCFCEC2B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B22C564D-E4E7-4E12-81A2-D425DCFCEC2B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B22C564D-E4E7-4E12-81A2-D425DCFCEC2B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B22C564D-E4E7-4E12-81A2-D425DCFCEC2B}.Debug|x64.Build.0 = Debug|Any CPU
+		{B22C564D-E4E7-4E12-81A2-D425DCFCEC2B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B22C564D-E4E7-4E12-81A2-D425DCFCEC2B}.Debug|x86.Build.0 = Debug|Any CPU
+		{B22C564D-E4E7-4E12-81A2-D425DCFCEC2B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B22C564D-E4E7-4E12-81A2-D425DCFCEC2B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B22C564D-E4E7-4E12-81A2-D425DCFCEC2B}.Release|x64.ActiveCfg = Release|Any CPU
+		{B22C564D-E4E7-4E12-81A2-D425DCFCEC2B}.Release|x64.Build.0 = Release|Any CPU
+		{B22C564D-E4E7-4E12-81A2-D425DCFCEC2B}.Release|x86.ActiveCfg = Release|Any CPU
+		{B22C564D-E4E7-4E12-81A2-D425DCFCEC2B}.Release|x86.Build.0 = Release|Any CPU
+		{FB9625F2-3B3E-4691-A6B2-8B3B6EC4653F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB9625F2-3B3E-4691-A6B2-8B3B6EC4653F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB9625F2-3B3E-4691-A6B2-8B3B6EC4653F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FB9625F2-3B3E-4691-A6B2-8B3B6EC4653F}.Debug|x64.Build.0 = Debug|Any CPU
+		{FB9625F2-3B3E-4691-A6B2-8B3B6EC4653F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{FB9625F2-3B3E-4691-A6B2-8B3B6EC4653F}.Debug|x86.Build.0 = Debug|Any CPU
+		{FB9625F2-3B3E-4691-A6B2-8B3B6EC4653F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB9625F2-3B3E-4691-A6B2-8B3B6EC4653F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB9625F2-3B3E-4691-A6B2-8B3B6EC4653F}.Release|x64.ActiveCfg = Release|Any CPU
+		{FB9625F2-3B3E-4691-A6B2-8B3B6EC4653F}.Release|x64.Build.0 = Release|Any CPU
+		{FB9625F2-3B3E-4691-A6B2-8B3B6EC4653F}.Release|x86.ActiveCfg = Release|Any CPU
+		{FB9625F2-3B3E-4691-A6B2-8B3B6EC4653F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -91,7 +91,7 @@
 
 ```
 1. Process ایجاد می‌شود
-   → ProcessCreatedEvent منتشر می‌شود
+   → ProcessInstanceCreatedEvent منتشر می‌شود
 
 2. Node ایجاد می‌شود
    → Process.AddNodeId(nodeId) فراخوانی می‌شود

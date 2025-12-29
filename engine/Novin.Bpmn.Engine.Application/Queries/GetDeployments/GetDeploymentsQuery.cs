@@ -9,16 +9,3 @@ public record GetDeploymentsQuery(
     string? DeploymentKey = null,
     bool ActiveOnly = false
 ) : IRequest<IEnumerable<DeploymentDto>>;
-
-/// <summary>
-/// DTO for deployment information (shared with GetDeployment)
-/// </summary>
-public record DeploymentDto(
-    Guid Id,
-    string DeploymentKey,
-    string Label,
-    int Version,
-    string BpmnXml,
-    DateTime DeployedAt,
-    bool IsActive
-);

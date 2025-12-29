@@ -49,14 +49,15 @@ public class EfProcessRepository : IProcessRepository
         if (process != null)
         {
             _context.Processes.Remove(process);
+            await _context.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Process deleted: {ProcessId}", id);
         }
     }
 
-    public async Task<Process?> GetByProcessDefinitionIdAsync(string processDefinitionId, CancellationToken cancellationToken = default)
+    public async Task<Process?> GetByDeploymentAndProcessBpmnIdAsync(Guid deploymentId, string processBpmnId, CancellationToken cancellationToken = default)
     {
         return await _context.Processes
-            .FirstOrDefaultAsync(p => p.ProcessDefinitionId == processDefinitionId, cancellationToken);
+            .FirstOrDefaultAsync(p => p.DeploymentId == deploymentId && p.ProcessBpmnId == processBpmnId, cancellationToken);
     }
 
     public async Task<IEnumerable<Process>> GetByStateAsync(ProcessState state, CancellationToken cancellationToken = default)

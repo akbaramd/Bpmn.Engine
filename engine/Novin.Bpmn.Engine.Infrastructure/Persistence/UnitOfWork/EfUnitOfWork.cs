@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Domain.Common;
+using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Infrastructure.EventBus;
 
 namespace Novin.Bpmn.Engine.Infrastructure.Persistence.UnitOfWork;
@@ -10,8 +11,8 @@ namespace Novin.Bpmn.Engine.Infrastructure.Persistence.UnitOfWork;
 public class EfUnitOfWork : IUnitOfWork
 {
     private readonly BpmnEngineDbContext _context;
-    private readonly DomainEventDispatcher _domainEventDispatcher;
     private readonly ILogger<EfUnitOfWork> _logger;
+    private readonly IJsonSerializer _jsonSerializer;
 
     private IDbContextTransaction? _currentTransaction;
     private bool _disposed;
@@ -19,7 +20,7 @@ public class EfUnitOfWork : IUnitOfWork
     public IDeploymentRepository Deployments { get; }
     public IProcessRepository Processes { get; }
     public ITokenRepository Tokens { get; }
-    public ITaskRepository Tasks { get; }
+    public IWorkerRepository Workers { get; } 
     public IIncidentRepository Incidents { get; }
     public IBoundarySubscriptionRepository BoundarySubscriptions { get; }
 
@@ -33,21 +34,22 @@ public class EfUnitOfWork : IUnitOfWork
         IDeploymentRepository deploymentRepository,
         IProcessRepository processRepository,
         ITokenRepository tokenRepository,
-        ITaskRepository taskRepository,
         IIncidentRepository incidentRepository,
+        IWorkerRepository workerRepository,
         IBoundarySubscriptionRepository boundarySubscriptionRepository,
-        DomainEventDispatcher domainEventDispatcher,
-        ILogger<EfUnitOfWork> logger)
+        ILogger<EfUnitOfWork> logger,
+        IJsonSerializer jsonSerializer)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         Deployments = deploymentRepository ?? throw new ArgumentNullException(nameof(deploymentRepository));
         Processes = processRepository ?? throw new ArgumentNullException(nameof(processRepository));
         Tokens = tokenRepository ?? throw new ArgumentNullException(nameof(tokenRepository));
-        Tasks = taskRepository ?? throw new ArgumentNullException(nameof(taskRepository));
         Incidents = incidentRepository ?? throw new ArgumentNullException(nameof(incidentRepository));
         BoundarySubscriptions = boundarySubscriptionRepository ?? throw new ArgumentNullException(nameof(boundarySubscriptionRepository));
-        _domainEventDispatcher = domainEventDispatcher ?? throw new ArgumentNullException(nameof(domainEventDispatcher));
+        Workers = workerRepository ?? throw new ArgumentNullException(nameof(workerRepository));
+        
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _jsonSerializer = jsonSerializer ?? throw new ArgumentNullException(nameof(jsonSerializer));
     }
 
     // ---------------- Transaction API ----------------
@@ -68,6 +70,7 @@ public class EfUnitOfWork : IUnitOfWork
         try
         {
             await action(ct);
+            await ProcessDomainEventsAndSaveAsync(ct);
             await CommitTransactionAsync(ct);
         }
         catch (Exception ex)
@@ -98,18 +101,26 @@ public class EfUnitOfWork : IUnitOfWork
         // اگر transaction explicit نداریم، فقط save کن
         if (_currentTransaction == null)
         {
-            await SaveChangesAsync(cancellationToken);
+            await ProcessDomainEventsAndSaveAsync(cancellationToken);
             return;
         }
 
         try
         {
-            await SaveChangesAsync(cancellationToken);
+            await ProcessDomainEventsAndSaveAsync(cancellationToken);
             await _currentTransaction.CommitAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "CommitTransactionAsync failed.");
         }
         finally
         {
-            await _currentTransaction.DisposeAsync();
+            if (_currentTransaction != null)
+            {
+                await _currentTransaction.DisposeAsync();
+            }
+
             _currentTransaction = null;
         }
     }
@@ -132,45 +143,152 @@ public class EfUnitOfWork : IUnitOfWork
         }
     }
 
-    // ---------------- SaveChanges + Domain Events ----------------
+    // ---------------- Transaction Processing ----------------
 
-    public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Processes domain events and saves changes: adds events to outbox before SaveChanges
+    /// </summary>
+    private async Task ProcessDomainEventsAndSaveAsync(CancellationToken cancellationToken)
     {
-        // این الگوریتم:
-        // - رویدادها را جمع می‌کند
-        // - clear می‌کند
-        // - SaveChanges می‌کند
-        // - Dispatch می‌کند
-        // تا وقتی که نه رویداد داریم نه تغییرات pending
-        var total = 0;
+        // Collect domain events from aggregates
+        var aggregatesWithEvents = _context.ChangeTracker
+            .Entries<IAggregateRoot>()
+            .Where(e => e.Entity.DomainEvents.Any())
+            .Select(e => e.Entity)
+            .ToList();
 
-        while (true)
+        var domainEvents = aggregatesWithEvents
+            .SelectMany(x => x.DomainEvents)
+            .ToList();
+
+        // Clear events from aggregates
+        aggregatesWithEvents.ForEach(e => e.ClearDomainEvents());
+
+        // Convert domain events to outbox messages and add to context BEFORE saving
+        if (domainEvents.Any())
         {
-            var domainEntities = _context.ChangeTracker
-                .Entries<IAggregateRoot>()
-                .Where(x => x.Entity.DomainEvents.Any())
-                .Select(x => x.Entity)
-                .ToList();
+            var outboxMessages = ConvertDomainEventsToOutboxMessages(domainEvents);
+            foreach (var outboxMessage in outboxMessages)
+            {
+                await _context.OutboxMessages.AddAsync(outboxMessage, cancellationToken);
+            }
 
-            var domainEvents = domainEntities
-                .SelectMany(x => x.DomainEvents)
-                .ToList();
-
-            domainEntities.ForEach(e => e.ClearDomainEvents());
-
-            var hasChanges = _context.ChangeTracker.HasChanges();
-            if (!hasChanges && domainEvents.Count == 0)
-                break;
-
-            // 1) Persist
-            total += await _context.SaveChangesAsync(cancellationToken);
-
-            // 2) Dispatch (ممکن است تغییرات/رویدادهای جدید بسازد)
-            if (domainEvents.Count > 0)
-                await _domainEventDispatcher.DispatchEventsAsync(domainEvents, cancellationToken);
+            _logger.LogDebug("Added {Count} outbox messages to context before save", outboxMessages.Count);
         }
 
-        return total;
+        // Save both data changes and outbox messages
+        await _context.SaveChangesAsync(cancellationToken);
+
+      
+    }
+
+
+    /// <summary>
+    /// Converts domain events to outbox messages
+    /// </summary>
+    private List<OutboxMessage> ConvertDomainEventsToOutboxMessages(List<IDomainEvent> domainEvents)
+    {
+        var outboxMessages = new List<OutboxMessage>();
+
+        foreach (var domainEvent in domainEvents)
+        {
+            var outboxMessage = CreateOutboxMessageFromDomainEvent(domainEvent);
+            outboxMessages.Add(outboxMessage);
+
+            _logger.LogTrace("Created outbox message {MessageId} for event {EventType}",
+                outboxMessage.Id, domainEvent.GetType().Name);
+        }
+
+        return outboxMessages;
+    }
+
+    /// <summary>
+    /// Creates an outbox message from a domain event
+    /// </summary>
+    private OutboxMessage CreateOutboxMessageFromDomainEvent(IDomainEvent domainEvent)
+    {
+        var messageId = Guid.NewGuid();
+        var occurredOnUtc = DateTime.UtcNow;
+
+        // Serialize the domain event using centralized JSON serializer
+        var payload = _jsonSerializer.SerializeObject(domainEvent);
+
+        // Use stable message name (not CLR FullName)
+        var messageName = GetStableMessageName(domainEvent);
+
+        // Extract correlation/aggregate IDs from the event if available
+        var correlationId = ExtractCorrelationId(domainEvent);
+        var aggregateId = ExtractAggregateId(domainEvent);
+
+        return new OutboxMessage(
+            id: messageId,
+            occurredOnUtc: occurredOnUtc,
+            messageName: messageName,
+            messageType: domainEvent.GetType().AssemblyQualifiedName,
+            payload: payload,
+            correlationId: correlationId,
+            partitionKey: null, // Could be set based on business logic
+            aggregateId: aggregateId
+        );
+    }
+
+    /// <summary>
+    /// Gets a stable message name for the domain event (not CLR type name)
+    /// </summary>
+    private static string GetStableMessageName(IDomainEvent domainEvent)
+    {
+        // For now, use the class name without namespace
+        // In production, you might want to use attributes or configuration
+        var typeName = domainEvent.GetType().Name;
+
+        // Remove common suffixes like "Event", "DomainEvent", etc.
+        if (typeName.EndsWith("Event", StringComparison.OrdinalIgnoreCase))
+        {
+            typeName = typeName.Substring(0, typeName.Length - 5);
+        }
+        else if (typeName.EndsWith("DomainEvent", StringComparison.OrdinalIgnoreCase))
+        {
+            typeName = typeName.Substring(0, typeName.Length - 11);
+        }
+
+        return typeName;
+    }
+
+    /// <summary>
+    /// Extracts correlation ID from domain event (e.g., ProcessId)
+    /// </summary>
+    private static Guid? ExtractCorrelationId(IDomainEvent domainEvent)
+    {
+        // Try common property names for correlation IDs
+        var correlationProperties = new[] { "ProcessId", "CorrelationId", "Id" };
+
+        foreach (var propertyName in correlationProperties)
+        {
+            var property = domainEvent.GetType().GetProperty(propertyName);
+            if (property != null && property.PropertyType == typeof(Guid))
+            {
+                return (Guid?)property.GetValue(domainEvent);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts aggregate ID from the event
+    /// </summary>
+    private static Guid? ExtractAggregateId(IDomainEvent domainEvent)
+    {
+        // Try to get aggregate ID from the event first
+        var aggregateIdProperty = domainEvent.GetType().GetProperty("AggregateId") ??
+                                 domainEvent.GetType().GetProperty("Id");
+
+        if (aggregateIdProperty != null && aggregateIdProperty.PropertyType == typeof(Guid))
+        {
+            return (Guid?)aggregateIdProperty.GetValue(domainEvent);
+        }
+
+        return null;
     }
 
     // ---------------- Tracking ----------------

@@ -42,7 +42,7 @@ public sealed class TestScenariosController : ControllerBase
                 {
                     Name = tc.Name,
                     Description = tc.Description,
-                    Variables = tc.Variables ?? new Dictionary<string, object>()
+                    Variables = tc.Variables ?? new Dictionary<string, string>()
                 }).ToList()
             });
         }
@@ -197,7 +197,7 @@ public sealed class TestCaseInfo
 {
     public string Name { get; init; } = default!;
     public string? Description { get; init; }
-    public IReadOnlyDictionary<string, object> Variables { get; init; } = new Dictionary<string, object>();
+    public IReadOnlyDictionary<string, string> Variables { get; init; } = new Dictionary<string, string>();
 }
 
 /// <summary>

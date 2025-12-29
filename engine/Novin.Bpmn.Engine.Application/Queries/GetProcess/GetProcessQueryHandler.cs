@@ -40,10 +40,11 @@ public class GetProcessQueryHandler : IRequestHandler<GetProcessQuery, ProcessDt
         {
             Id = process.Id,
             Name = process.Name,
-            ProcessDefinitionId = process.ProcessDefinitionId,
+            DeploymentId = process.DeploymentId,
+            ProcessBpmnId = process.ProcessBpmnId,
             State = process.State,
             DerivedStatus = derivedStatus,
-            Variables = new Dictionary<string, object>(process.Variables),
+            Variables = new Dictionary<string, string>(process.Variables),
             CreatedAt = process.CreatedAt,
             StartedAt = process.StartedAt,
             CompletedAt = process.CompletedAt

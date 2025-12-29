@@ -3,7 +3,7 @@
 
 ### Get Complete Execution Flow for BPMN Visualization
 ### This endpoint returns all executed elements, flows, boundary events, and execution cycles
-GET http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440000/flow
+GET http://localhost:5000/api/process-execution/87c418b4-1e3d-4072-8778-183a072933f6/flow
 Accept: application/json
 
 ###
@@ -158,6 +158,20 @@ Accept: application/json
 ### Get Audit Trail Statistics
 ### Execution statistics from the minimal audit trail data
 GET http://localhost:5000/api/process-execution/550e8400-e29b-41d4-a716-446655440000/audit-stats
+Accept: application/json
+
+###
+
+### Get Processes with BPMN Models (CORS enabled)
+### Retrieve processes with their complete BPMN model JSON
+GET http://localhost:5000/api/processes/with-models?includeModel=true
+Accept: application/json
+
+###
+
+### Health Check (CORS enabled)
+### Check if the BPMN engine is healthy and running
+GET http://localhost:5000/health
 Accept: application/json
 
 ###

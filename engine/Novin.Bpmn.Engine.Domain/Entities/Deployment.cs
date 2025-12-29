@@ -78,6 +78,29 @@ public class Deployment : BaseAggregateRoot
     }
 
     /// <summary>
+    /// Update the BPMN XML content of this deployment
+    /// </summary>
+    public void UpdateBpmnXml(string bpmnXml)
+    {
+        if (string.IsNullOrWhiteSpace(bpmnXml))
+            throw new ArgumentException("BPMN XML cannot be null or empty", nameof(bpmnXml));
+
+        BpmnXml = bpmnXml;
+
+        AddDomainEvent(new DeploymentUpdatedEvent(Id, DeploymentKey, "BpmnXml", DateTime.UtcNow));
+    }
+
+    /// <summary>
+    /// Update the label of this deployment
+    /// </summary>
+    public void UpdateLabel(string? label)
+    {
+        Label = label;
+
+        AddDomainEvent(new DeploymentUpdatedEvent(Id, DeploymentKey, "Label", DateTime.UtcNow));
+    }
+
+    /// <summary>
     /// Parses the BPMN XML and returns BpmnDefinitions model
     /// </summary>
     public BpmnDefinitions GetDefinitions()

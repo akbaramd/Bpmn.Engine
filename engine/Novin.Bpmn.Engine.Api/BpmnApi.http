@@ -40,6 +40,183 @@ DELETE http://localhost:5000/api/deployments/550e8400-e29b-41d4-a716-44665544000
 
 ###
 
+### Update specific deployment (your ID)
+PUT https://proud-shirts-bathe.loca.lt/api/deployments/3e4e2e0e-3b42-45c7-b313-1e18ea3c2934
+Content-Type: application/json
+
+{
+  "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" id=\"Definitions_1\" targetNamespace=\"http://bpmn.io/schema/bpmn\">\n  <bpmn:process id=\"updated-process\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"StartEvent_1\" name=\"Start\" />\n    <bpmn:userTask id=\"UpdatedTask\" name=\"Updated Task\" />\n    <bpmn:endEvent id=\"EndEvent_1\" name=\"End\" />\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"StartEvent_1\" targetRef=\"UpdatedTask\" />\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"UpdatedTask\" targetRef=\"EndEvent_1\" />\n  </bpmn:process>\n</bpmn:definitions>",
+  "label": "Updated Process v2.0"
+}
+
+###
+
+### Update deployment BPMN XML
+PUT http://localhost:5000/api/deployments/550e8400-e29b-41d4-a716-446655440000
+Content-Type: application/json
+
+{
+  "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" id=\"Definitions_1\" targetNamespace=\"http://bpmn.io/schema/bpmn\">\n  <bpmn:process id=\"updated-process\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"StartEvent_1\" name=\"Start\" />\n    <bpmn:userTask id=\"UpdatedTask\" name=\"Updated Task\" />\n    <bpmn:endEvent id=\"EndEvent_1\" name=\"End\" />\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"StartEvent_1\" targetRef=\"UpdatedTask\" />\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"UpdatedTask\" targetRef=\"EndEvent_1\" />\n  </bpmn:process>\n</bpmn:definitions>"
+}
+
+###
+
+### Update deployment label only
+PUT http://localhost:5000/api/deployments/550e8400-e29b-41d4-a716-446655440000
+Content-Type: application/json
+
+{
+  "label": "Updated Process Label v2.0"
+}
+
+###
+
+### Update both BPMN XML and label
+PUT http://localhost:5000/api/deployments/550e8400-e29b-41d4-a716-446655440000
+Content-Type: application/json
+
+{
+  "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" id=\"Definitions_1\" targetNamespace=\"http://bpmn.io/schema/bpmn\">\n  <bpmn:process id=\"updated-process\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"StartEvent_1\" name=\"Start\" />\n    <bpmn:scriptTask id=\"NewScriptTask\" name=\"Execute Script\" scriptFormat=\"csharp\">\n      <bpmn:script>Console.WriteLine(\"Updated script\");</bpmn:script>\n    </bpmn:scriptTask>\n    <bpmn:endEvent id=\"EndEvent_1\" name=\"End\" />\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"StartEvent_1\" targetRef=\"NewScriptTask\" />\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"NewScriptTask\" targetRef=\"EndEvent_1\" />\n  </bpmn:process>\n</bpmn:definitions>",
+  "label": "Updated Process with New Features"
+}
+
+###
+
+### Error: Update non-existent deployment
+PUT http://localhost:5000/api/deployments/00000000-0000-0000-0000-000000000000
+Content-Type: application/json
+
+{
+  "label": "This will fail"
+}
+
+###
+
+### Error: Update with empty fields
+PUT http://localhost:5000/api/deployments/550e8400-e29b-41d4-a716-446655440000
+Content-Type: application/json
+
+{
+  "bpmnXml": "",
+  "label": ""
+}
+
+###
+
+### Deploy BPMN with Error Boundary Events
+POST http://localhost:5000/api/deployments
+Content-Type: application/json
+
+{
+  "deploymentKey": "error-handling-process",
+  "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" id=\"Definitions_1\" targetNamespace=\"http://bpmn.io/schema/bpmn\">\n  <bpmn:process id=\"error-handling-process\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"StartEvent_1\" name=\"Start\">\n      <bpmn:outgoing>Flow_1</bpmn:outgoing>\n    </bpmn:startEvent>\n    <bpmn:scriptTask id=\"ErrorTask\" name=\"Task That May Fail\" scriptFormat=\"csharp\">\n      <bpmn:incoming>Flow_1</bpmn:incoming>\n      <bpmn:outgoing>Flow_2</bpmn:outgoing>\n      <bpmn:script>throw new Exception(\"Simulated error\");</bpmn:script>\n    </bpmn:scriptTask>\n    <bpmn:boundaryEvent id=\"ErrorBoundary\" name=\"Error Handler\" attachedToRef=\"ErrorTask\">\n      <bpmn:errorEventDefinition errorRef=\"Error_1\" />\n      <bpmn:outgoing>Flow_3</bpmn:outgoing>\n    </bpmn:boundaryEvent>\n    <bpmn:scriptTask id=\"CompensationTask\" name=\"Error Compensation\" scriptFormat=\"csharp\">\n      <bpmn:incoming>Flow_3</bpmn:incoming>\n      <bpmn:outgoing>Flow_4</bpmn:outgoing>\n      <bpmn:script>Console.WriteLine(\"Handling error...\");</bpmn:script>\n    </bpmn:scriptTask>\n    <bpmn:endEvent id=\"EndEvent_1\" name=\"End Success\">\n      <bpmn:incoming>Flow_2</bpmn:incoming>\n    </bpmn:endEvent>\n    <bpmn:endEvent id=\"EndEvent_2\" name=\"End Error\">\n      <bpmn:incoming>Flow_4</bpmn:incoming>\n    </bpmn:endEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"StartEvent_1\" targetRef=\"ErrorTask\" />\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"ErrorTask\" targetRef=\"EndEvent_1\" />\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"ErrorBoundary\" targetRef=\"CompensationTask\" />\n    <bpmn:sequenceFlow id=\"Flow_4\" sourceRef=\"CompensationTask\" targetRef=\"EndEvent_2\" />\n  </bpmn:process>\n  <bpmn:error id=\"Error_1\" name=\"TestError\" errorCode=\"TEST_ERROR\" />\n</bpmn:definitions>",
+  "label": "Error Boundary Event Process"
+}
+
+###
+
+### Deploy BPMN with Timer Events
+POST http://localhost:5000/api/deployments
+Content-Type: application/json
+
+{
+  "deploymentKey": "timer-process",
+  "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" id=\"Definitions_1\" targetNamespace=\"http://bpmn.io/schema/bpmn\">\n  <bpmn:process id=\"timer-process\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"StartEvent_1\" name=\"Start\" />\n    <bpmn:userTask id=\"UserTask_1\" name=\"Review Task\" />\n    <bpmn:boundaryEvent id=\"TimerBoundary\" name=\"Escalation Timer\" attachedToRef=\"UserTask_1\" cancelActivity=\"true\">\n      <bpmn:timerEventDefinition>\n        <bpmn:timeDuration>PT5M</bpmn:timeDuration>\n      </bpmn:timerEventDefinition>\n    </bpmn:boundaryEvent>\n    <bpmn:scriptTask id=\"EscalationTask\" name=\"Send Escalation\" />\n    <bpmn:endEvent id=\"EndEvent_1\" name=\"Completed\" />\n    <bpmn:endEvent id=\"EndEvent_2\" name=\"Escalated\" />\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"StartEvent_1\" targetRef=\"UserTask_1\" />\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"UserTask_1\" targetRef=\"EndEvent_1\" />\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"TimerBoundary\" targetRef=\"EscalationTask\" />\n    <bpmn:sequenceFlow id=\"Flow_4\" sourceRef=\"EscalationTask\" targetRef=\"EndEvent_2\" />\n  </bpmn:process>\n</bpmn:definitions>",
+  "label": "Timer Boundary Event Process"
+}
+
+###
+
+### Deploy BPMN with Parallel Gateway
+POST http://localhost:5000/api/deployments
+Content-Type: application/json
+
+{
+  "deploymentKey": "parallel-gateway-process",
+  "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" id=\"Definitions_1\" targetNamespace=\"http://bpmn.io/schema/bpmn\">\n  <bpmn:process id=\"parallel-gateway-process\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"StartEvent_1\" name=\"Start\" />\n    <bpmn:parallelGateway id=\"SplitGateway\" name=\"Split\" />\n    <bpmn:userTask id=\"TaskA\" name=\"Process Payment\" />\n    <bpmn:userTask id=\"TaskB\" name=\"Send Confirmation\" />\n    <bpmn:userTask id=\"TaskC\" name=\"Update Inventory\" />\n    <bpmn:parallelGateway id=\"JoinGateway\" name=\"Join\" />\n    <bpmn:endEvent id=\"EndEvent_1\" name=\"All Done\" />\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"StartEvent_1\" targetRef=\"SplitGateway\" />\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"SplitGateway\" targetRef=\"TaskA\" />\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"SplitGateway\" targetRef=\"TaskB\" />\n    <bpmn:sequenceFlow id=\"Flow_4\" sourceRef=\"SplitGateway\" targetRef=\"TaskC\" />\n    <bpmn:sequenceFlow id=\"Flow_5\" sourceRef=\"TaskA\" targetRef=\"JoinGateway\" />\n    <bpmn:sequenceFlow id=\"Flow_6\" sourceRef=\"TaskB\" targetRef=\"JoinGateway\" />\n    <bpmn:sequenceFlow id=\"Flow_7\" sourceRef=\"TaskC\" targetRef=\"JoinGateway\" />\n    <bpmn:sequenceFlow id=\"Flow_8\" sourceRef=\"JoinGateway\" targetRef=\"EndEvent_1\" />\n  </bpmn:process>\n</bpmn:definitions>",
+  "label": "Parallel Processing Workflow"
+}
+
+###
+
+### Deploy BPMN with Exclusive Gateway (XOR)
+POST http://localhost:5000/api/deployments
+Content-Type: application/json
+
+{
+  "deploymentKey": "exclusive-gateway-process",
+  "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" id=\"Definitions_1\" targetNamespace=\"http://bpmn.io/schema/bpmn\">\n  <bpmn:process id=\"exclusive-gateway-process\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"StartEvent_1\" name=\"Order Received\" />\n    <bpmn:exclusiveGateway id=\"DecisionGateway\" name=\"Check Amount\" />\n    <bpmn:userTask id=\"ApproveTask\" name=\"Manager Approval\" />\n    <bpmn:userTask id=\"AutoTask\" name=\"Auto Processing\" />\n    <bpmn:endEvent id=\"EndEvent_1\" name=\"Order Processed\" />\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"StartEvent_1\" targetRef=\"DecisionGateway\" />\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"DecisionGateway\" targetRef=\"ApproveTask\">\n      <bpmn:conditionExpression xsi:type=\"bpmn:tFormalExpression\">amount > 1000</bpmn:conditionExpression>\n    </bpmn:sequenceFlow>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"DecisionGateway\" targetRef=\"AutoTask\">\n      <bpmn:conditionExpression xsi:type=\"bpmn:tFormalExpression\">amount <= 1000</bpmn:conditionExpression>\n    </bpmn:sequenceFlow>\n    <bpmn:sequenceFlow id=\"Flow_4\" sourceRef=\"ApproveTask\" targetRef=\"EndEvent_1\" />\n    <bpmn:sequenceFlow id=\"Flow_5\" sourceRef=\"AutoTask\" targetRef=\"EndEvent_1\" />\n  </bpmn:process>\n</bpmn:definitions>",
+  "label": "Conditional Approval Workflow"
+}
+
+###
+
+### Deploy BPMN with Message Events
+POST http://localhost:5000/api/deployments
+Content-Type: application/json
+
+{
+  "deploymentKey": "message-process",
+  "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" id=\"Definitions_1\" targetNamespace=\"http://bpmn.io/schema/bpmn\">\n  <bpmn:process id=\"message-process\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"StartEvent_1\" name=\"Start\" />\n    <bpmn:intermediateCatchEvent id=\"MessageEvent\" name=\"Wait for Payment\">\n      <bpmn:messageEventDefinition messageRef=\"PaymentMessage\" />\n    </bpmn:intermediateCatchEvent>\n    <bpmn:userTask id=\"ProcessPayment\" name=\"Process Payment\" />\n    <bpmn:endEvent id=\"EndEvent_1\" name=\"Payment Complete\" />\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"StartEvent_1\" targetRef=\"MessageEvent\" />\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"MessageEvent\" targetRef=\"ProcessPayment\" />\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"ProcessPayment\" targetRef=\"EndEvent_1\" />\n  </bpmn:process>\n  <bpmn:message id=\"PaymentMessage\" name=\"PaymentReceived\" />\n</bpmn:definitions>",
+  "label": "Message-Driven Process"
+}
+
+###
+
+### Deploy BPMN with Sub-Process
+POST http://localhost:5000/api/deployments
+Content-Type: application/json
+
+{
+  "deploymentKey": "subprocess-example",
+  "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" id=\"Definitions_1\" targetNamespace=\"http://bpmn.io/schema/bpmn\">\n  <bpmn:process id=\"subprocess-example\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"StartEvent_1\" name=\"Order Started\" />\n    <bpmn:subProcess id=\"OrderProcessing\" name=\"Process Order\">\n      <bpmn:startEvent id=\"SubStart\" name=\"Start Processing\" />\n      <bpmn:userTask id=\"ValidateOrder\" name=\"Validate Order\" />\n      <bpmn:userTask id=\"PrepareShipment\" name=\"Prepare Shipment\" />\n      <bpmn:endEvent id=\"SubEnd\" name=\"Processing Complete\" />\n      <bpmn:sequenceFlow id=\"SubFlow_1\" sourceRef=\"SubStart\" targetRef=\"ValidateOrder\" />\n      <bpmn:sequenceFlow id=\"SubFlow_2\" sourceRef=\"ValidateOrder\" targetRef=\"PrepareShipment\" />\n      <bpmn:sequenceFlow id=\"SubFlow_3\" sourceRef=\"PrepareShipment\" targetRef=\"SubEnd\" />\n    </bpmn:subProcess>\n    <bpmn:userTask id=\"SendNotification\" name=\"Send Confirmation\" />\n    <bpmn:endEvent id=\"EndEvent_1\" name=\"Order Complete\" />\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"StartEvent_1\" targetRef=\"OrderProcessing\" />\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"OrderProcessing\" targetRef=\"SendNotification\" />\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"SendNotification\" targetRef=\"EndEvent_1\" />\n  </bpmn:process>\n</bpmn:definitions>",
+  "label": "Sub-Process Example"
+}
+
+###
+
+### Get deployments with filtering
+GET http://localhost:5000/api/deployments?skip=0&take=10
+
+###
+
+### Get active deployments only
+GET http://localhost:5000/api/deployments?isActive=true
+
+###
+
+### Get inactive deployments
+GET http://localhost:5000/api/deployments?isActive=false
+
+###
+
+### Get deployments by partial key match
+GET http://localhost:5000/api/deployments/by-key/process
+
+###
+
+### Error: Deploy invalid BPMN XML
+POST http://localhost:5000/api/deployments
+Content-Type: application/json
+
+{
+  "deploymentKey": "invalid-process",
+  "bpmnXml": "<invalid>xml</invalid>",
+  "label": "Invalid BPMN"
+}
+
+###
+
+### Error: Deploy without required fields
+POST http://localhost:5000/api/deployments
+Content-Type: application/json
+
+{
+  "bpmnXml": "<?xml version=\"1.0\"?><bpmn:definitions></bpmn:definitions>"
+}
+
+###
+
 ### ========================================================================
 ### PROCESS MANAGEMENT
 ### ========================================================================
@@ -49,9 +226,10 @@ POST http://localhost:5000/api/processes/start
 Content-Type: application/json
 
 {
-    "processKey": "my-process",
-    "businessKey": "order-123",
-    "variables": {
+    "deploymentId": "550e8400-e29b-41d4-a716-446655440000",
+    "processBpmnId": "Process_1",
+    "processName": "Order Process Instance",
+    "initialVariables": {
         "amount": 100.50,
         "customerId": "cust-001"
     }
@@ -60,6 +238,13 @@ Content-Type: application/json
 ###
 
 ### Get all process instances
+### Returns paginated list of process instances with filtering options
+### Query Parameters:
+### - state: ProcessState? (Created, Running, Completed, Failed)
+### - processDefinitionId: string? (Filter by BPMN process definition)
+### - skip: int (Pagination offset, default 0)
+### - take: int (Pagination limit, default 50)
+### Response: Array of ProcessListDto objects
 GET http://localhost:5000/api/processes
 
 ### Get processes by state
@@ -70,6 +255,76 @@ GET http://localhost:5000/api/processes?processDefinitionId=my-process
 
 ### Get paginated processes
 GET http://localhost:5000/api/processes?skip=0&take=10
+
+###
+
+### Get processes by deployment key
+GET http://localhost:5000/api/processes/by-deployment/my-process
+Accept: application/json
+
+### Get running processes by deployment key
+GET http://localhost:5000/api/processes/by-deployment/my-process?state=Running
+Accept: application/json
+
+### Get processes with BPMN models (no JSON)
+GET http://localhost:5000/api/processes/with-models?includeModel=false
+Accept: application/json
+
+### Get processes with BPMN model JSON included
+GET http://localhost:5000/api/processes/with-models?includeModel=true&take=5
+Accept: application/json
+
+###
+
+### ========================================================================
+### CLIENT COMMUNICATION (SignalR)
+### ========================================================================
+
+### SignalR Client Hub
+# WebSocket connection for real-time client communication
+# Connect to: ws://localhost:5000/bpmn/clientHub
+
+### Get running processes with models
+GET http://localhost:5000/api/processes/with-models?state=Running&includeModel=true
+Accept: application/json
+
+###
+
+### ProcessListDto Response Schema:
+### [
+###   {
+###     "id": "guid",                    // Unique process instance ID
+###     "name": "string",                // Human-readable process name
+###     "processDefinitionId": "string", // BPMN process definition key
+###     "state": "ProcessState",         // Created | Running | Completed | Failed
+###     "createdAt": "datetime",         // When process was created
+###     "startedAt": "datetime?",        // When process execution started
+###     "completedAt": "datetime?",      // When process completed (if completed)
+###     "variables": {                   // Process variables (key-value pairs)
+###       "key1": "value1",
+###       "key2": 123,
+###       "key3": true
+###     }
+###   }
+### ]
+###
+### Example Response:
+### [
+###   {
+###     "id": "550e8400-e29b-41d4-a716-446655440000",
+###     "name": "Order Process Instance",
+###     "processDefinitionId": "order-process",
+###     "state": "Running",
+###     "createdAt": "2024-12-26T10:30:00Z",
+###     "startedAt": "2024-12-26T10:30:05Z",
+###     "completedAt": null,
+###     "variables": {
+###       "orderId": "ORD-12345",
+###       "amount": 99.99,
+###       "customerEmail": "customer@example.com"
+###     }
+###   }
+### ]
 
 ### Get specific process instance
 GET http://localhost:5000/api/processes/550e8400-e29b-41d4-a716-446655440000
@@ -356,20 +611,23 @@ if (incidentData.length > 0) {
 ### COMPLETE API REFERENCE SUMMARY
 ### ========================================================================
 
-# DEPLOYMENT ENDPOINTS (7 endpoints)
+# DEPLOYMENT ENDPOINTS (8 endpoints)
 # POST   /api/deployments                    - Deploy process
 # GET    /api/deployments                    - List deployments
 # GET    /api/deployments/{id}               - Get deployment
+# PUT    /api/deployments/{id}               - Update deployment
 # GET    /api/deployments/{id}/xml           - Get BPMN XML
 # GET    /api/deployments/by-key/{key}       - Get by process key
 # POST   /api/deployments/{id}/activate      - Activate deployment
 # POST   /api/deployments/{id}/deactivate    - Deactivate deployment
 # DELETE /api/deployments/{id}               - Delete deployment
 
-# PROCESS ENDPOINTS (12 endpoints)
-# POST   /api/processes/start                - Start process
-# GET    /api/processes                      - List processes
+# PROCESS ENDPOINTS (16 endpoints)
+# POST   /api/processes/start                - Start process (deploymentId, processBpmnId)
+# GET    /api/processes                      - List processes (deploymentId, processBpmnId filters)
 # GET    /api/processes/{id}                 - Get process
+# GET    /api/processes/by-deployment/{id}   - Get by deployment ID
+# GET    /api/processes/with-models          - Get with BPMN models
 # POST   /api/processes/{id}/complete        - Complete process
 # DELETE /api/processes/{id}                 - Delete process
 # POST   /api/processes/{id}/suspend         - Suspend process
@@ -400,4 +658,157 @@ if (incidentData.length > 0) {
 # POST   /api/test-scenarios/run-all         - Run all scenarios
 # GET    /api/test-scenarios/{name}/status   - Get status
 
-# TOTAL: 34 comprehensive API endpoints for complete BPMN process management!
+# HEALTH CHECK ENDPOINTS (3 endpoints)
+# GET    /health                            - Basic health check
+# GET    /health/ready                      - Readiness probe
+# GET    /health/live                       - Liveness probe
+
+# TOTAL: 37 comprehensive API endpoints for complete BPMN process management!
+
+# ========================================================================
+# HEALTH CHECK EXAMPLES
+# ========================================================================
+
+### Basic health check
+GET http://localhost:5000/health
+
+### Readiness probe (checks if app is ready to serve traffic)
+GET http://localhost:5000/health/ready
+
+### Liveness probe (checks if app is running)
+GET http://localhost:5000/health/live
+
+# ========================================================================
+# PROCESSES WITH MODELS EXAMPLES
+# ========================================================================
+
+### Get processes with model information (no BPMN JSON)
+GET http://localhost:5000/api/processes/with-models?includeModel=false
+
+### Get processes with BPMN model JSON included
+GET http://localhost:5000/api/processes/with-models?includeModel=true
+
+### Get running processes with models
+GET http://localhost:5000/api/processes/with-models?state=Running&includeModel=true
+
+### Get processes with pagination
+GET http://localhost:5000/api/processes/with-models?skip=0&take=5&includeModel=true
+
+# ========================================================================
+# CORS ENABLED - Frontend Integration Examples
+# ========================================================================
+
+### JavaScript Example - Deploy and Start Process with CORS
+###
+// This will work from any origin due to CORS configuration
+const deployAndStartProcess = async () => {
+    try {
+        // 1. Deploy BPMN process
+        const deployResponse = await fetch('http://localhost:5000/api/deployments', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                deploymentKey: 'order-process',
+                bpmnXml: `<?xml version="1.0" encoding="UTF-8"?>
+                    <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">
+                        <bpmn:process id="order-process" isExecutable="true">
+                            <bpmn:startEvent id="StartEvent_1" name="Order Received"/>
+                            <bpmn:userTask id="UserTask_1" name="Process Order"/>
+                            <bpmn:endEvent id="EndEvent_1" name="Order Completed"/>
+                            <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="UserTask_1"/>
+                            <bpmn:sequenceFlow id="Flow_2" sourceRef="UserTask_1" targetRef="EndEvent_1"/>
+                        </bpmn:process>
+                    </bpmn:definitions>`,
+                label: 'Order Processing Workflow'
+            })
+        });
+
+        const deployResult = await deployResponse.json();
+        console.log('Deployment created:', deployResult);
+
+        // 2. Start process instance
+        const startResponse = await fetch('http://localhost:5000/api/processes/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                processDefinitionId: 'order-process',
+                processName: 'Order Process Instance',
+                initialVariables: {
+                    orderId: 'ORD-12345',
+                    amount: 99.99,
+                    customerEmail: 'customer@example.com'
+                }
+            })
+        });
+
+        const processResult = await startResponse.json();
+        console.log('Process started:', processResult);
+
+        // 3. Get process with model information
+        const modelResponse = await fetch(`http://localhost:5000/api/processes/with-models?includeModel=true`);
+        const processesWithModels = await modelResponse.json();
+        console.log('Processes with models:', processesWithModels);
+
+        // 4. Check health
+        const healthResponse = await fetch('http://localhost:5000/health');
+        const healthStatus = await healthResponse.text();
+        console.log('Health status:', healthStatus);
+
+    } catch (error) {
+        console.error('Error:', error);
+    }
+};
+
+// Call the function
+deployAndStartProcess();
+###
+
+### React/Vue/Angular Example - BPMN Process Viewer
+###
+// Component to display BPMN processes with models
+const BpmnProcessViewer = () => {
+    const [processes, setProcesses] = useState([]);
+    const [selectedProcess, setSelectedProcess] = useState(null);
+
+    useEffect(() => {
+        // Fetch processes with models (CORS enabled)
+        fetch('http://localhost:5000/api/processes/with-models?includeModel=true')
+            .then(response => response.json())
+            .then(data => setProcesses(data))
+            .catch(error => console.error('Error fetching processes:', error));
+    }, []);
+
+    const handleProcessSelect = (process) => {
+        setSelectedProcess(process);
+        // Here you could integrate with bpmn-js to display the BPMN diagram
+        if (process.bpmnModel) {
+            console.log('BPMN Model:', JSON.parse(process.bpmnModel));
+        }
+    };
+
+    return (
+        <div>
+            <h2>BPMN Processes</h2>
+            <ul>
+                {processes.map(proc => (
+                    <li key={proc.process.id} onClick={() => handleProcessSelect(proc)}>
+                        {proc.process.name} - {proc.process.state}
+                        {proc.hasModel && <span> (Model Available)</span>}
+                    </li>
+                ))}
+            </ul>
+
+            {selectedProcess && (
+                <div>
+                    <h3>Process Details</h3>
+                    <pre>{JSON.stringify(selectedProcess, null, 2)}</pre>
+                </div>
+            )}
+        </div>
+    );
+};
+###

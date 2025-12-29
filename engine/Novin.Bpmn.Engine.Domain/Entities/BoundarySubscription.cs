@@ -1,4 +1,5 @@
 using Novin.Bpmn.Engine.Domain.Common;
+using Novin.Bpmn.Engine.Domain.Events;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 
 namespace Novin.Bpmn.Engine.Domain.Entities;
@@ -129,12 +130,25 @@ public sealed class BoundarySubscription : BaseAggregateRoot
         TokenScopeId = tokenScopeId;
         Version = 1;
         CreatedAt = DateTime.UtcNow;
+
+        // Publish creation event
+        AddDomainEvent(new BoundarySubscriptionCreatedEvent(
+            SubscriptionId: Id,
+            ProcessId: ProcessId,
+            TokenId: TokenId,
+            ElementId: AttachedToElementId,
+            BoundaryElementId: BoundaryEventId,
+            ErrorCode: ErrorCode,
+            MessageName: null, // TODO: Add message name support
+            IsErrorHandler: Kind == BoundaryKind.Error,
+            IsMessageHandler: Kind == BoundaryKind.Message,
+            OccurredAtUtc: DateTime.UtcNow));
     }
 
     /// <summary>
     /// Mark subscription as triggered
     /// </summary>
-    public void MarkTriggered()
+    public void MarkTriggered(string? triggerReason = null)
     {
         if (State != SubscriptionState.Active)
             throw new InvalidOperationException($"Cannot trigger subscription in {State} state. Must be Active.");
@@ -142,12 +156,21 @@ public sealed class BoundarySubscription : BaseAggregateRoot
         State = SubscriptionState.Triggered;
         TriggeredAt = DateTime.UtcNow;
         Version++;
+
+        AddDomainEvent(new BoundarySubscriptionTriggeredEvent(
+            SubscriptionId: Id,
+            ProcessId: ProcessId,
+            TokenId: TokenId,
+            ElementId: AttachedToElementId,
+            BoundaryElementId: BoundaryEventId,
+            OccurredAtUtc: DateTime.UtcNow,
+            TriggerReason: triggerReason));
     }
 
     /// <summary>
     /// Cancel subscription (e.g., activity completed before trigger)
     /// </summary>
-    public void Cancel()
+    public void Cancel(string? cancelReason = null)
     {
         if (State != SubscriptionState.Active)
             return; // Idempotent
@@ -155,6 +178,15 @@ public sealed class BoundarySubscription : BaseAggregateRoot
         State = SubscriptionState.Canceled;
         CanceledAt = DateTime.UtcNow;
         Version++;
+
+        AddDomainEvent(new BoundarySubscriptionCancelledEvent(
+            SubscriptionId: Id,
+            ProcessId: ProcessId,
+            TokenId: TokenId,
+            ElementId: AttachedToElementId,
+            BoundaryElementId: BoundaryEventId,
+            OccurredAtUtc: DateTime.UtcNow,
+            CancelReason: cancelReason));
     }
 
     /// <summary>

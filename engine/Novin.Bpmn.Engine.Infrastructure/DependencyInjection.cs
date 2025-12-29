@@ -2,8 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Application.Services;
+using Novin.Bpmn.Engine.Application.Services.Interfaces.Infrastructure;
+using Novin.Bpmn.Engine.Infrastructure.BackgroundServices;
+using Novin.Bpmn.Engine.Infrastructure.Common;
 using Novin.Bpmn.Engine.Infrastructure.EventBus;
 using Novin.Bpmn.Engine.Infrastructure.Persistence;
+using Novin.Bpmn.Engine.Infrastructure.Persistence.Interceptors;
+using Novin.Bpmn.Engine.Infrastructure.Persistence.Outbox;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.Repositories;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.UnitOfWork;
 
@@ -30,7 +35,7 @@ public static class DependencyInjection
 
         // Domain Event Dispatcher
         services.AddScoped<DomainEventDispatcher>();
-        // Save Changes Service (handles domain events and causality)
+
         // Transaction Service (handles transactions directly without UoW abstraction)
         services.AddScoped<ITransactionService, TransactionService>();
         
@@ -38,16 +43,26 @@ public static class DependencyInjection
         services.AddScoped<IDeploymentRepository, EfDeploymentRepository>();
         services.AddScoped<IProcessRepository, EfProcessRepository>();
         services.AddScoped<ITokenRepository, EfTokenRepository>();
-        services.AddScoped<ITaskRepository, EfTaskRepository>();
         services.AddScoped<IIncidentRepository, EfIncidentRepository>();
         services.AddScoped<IBoundarySubscriptionRepository, EfBoundarySubscriptionRepository>();
         services.AddScoped<IProcessExecutionNodeRepository, EfProcessExecutionNodeRepository>();
+        services.AddScoped<IWorkerRepository, EfWorkerRepository>();
+
+        // Outbox Services
+        services.AddScoped<IOutboxMessageRepository, EfOutboxMessageRepository>();
+        services.AddScoped<IOutboxBatchClaimer, SqliteOutboxBatchClaimer>(); // SQLite for development
+
+        // Background Services
+        services.AddHostedService<OutboxProcessorHostedService>();
         
         // Services
         services.AddScoped<IIncidentService, IncidentService>();
         
         // Unit of Work (Scoped - one per request/operation)
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+        
+        // JSON Serialization Service (Singleton - stateless, can be shared)
+        services.AddSingleton<IJsonSerializer, JsonSerializerService>();
         
         return services;
     }

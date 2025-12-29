@@ -40,8 +40,8 @@
       </bpmn:boundaryEvent>
 
       <bpmn:script><![CDATA[
-        var duration = context.Variables.Contains("duration") 
-            ? Convert.ToInt32(context.Variables["duration"]) 
+        var duration = Context.Variables.Contains("duration") 
+            ? Convert.ToInt32(Context.Variables["duration"]) 
             : 5000; // Default 5 seconds
         
         Console.WriteLine($"[longTask] Starting long task - will run for {duration}ms");
@@ -49,8 +49,8 @@
         // Simulate long running task
         System.Threading.Thread.Sleep(duration);
         
-        context.Variables["completed"] = true;
-        context.Variables["taskMessage"] = $"Task completed after {duration}ms";
+        Context.Variables["completed"] = true;
+        Context.Variables["taskMessage"] = $"Task completed after {duration}ms";
         Console.WriteLine("[longTask] Long task completed successfully");
       ]]></bpmn:script>
     </bpmn:scriptTask>
@@ -66,8 +66,8 @@
       <bpmn:outgoing>f_interrupt_to_end</bpmn:outgoing>
 
       <bpmn:script><![CDATA[
-        context.Variables["interrupted"] = true;
-        context.Variables["interruptMessage"] = "Task was interrupted by timer boundary event (interrupting)";
+        Context.Variables["interrupted"] = true;
+        Context.Variables["interruptMessage"] = "Task was interrupted by timer boundary event (interrupting)";
         Console.WriteLine("[interruptHandler] Interrupting timer boundary triggered - task was canceled");
       ]]></bpmn:script>
     </bpmn:scriptTask>
@@ -83,8 +83,8 @@
       <bpmn:outgoing>f_noninterrupt_to_end</bpmn:outgoing>
 
       <bpmn:script><![CDATA[
-        context.Variables["parallelTriggered"] = true;
-        context.Variables["parallelMessage"] = "Non-interrupting timer boundary triggered - running in parallel";
+        Context.Variables["parallelTriggered"] = true;
+        Context.Variables["parallelMessage"] = "Non-interrupting timer boundary triggered - running in parallel";
         Console.WriteLine("[nonInterruptHandler] Non-interrupting timer boundary triggered - running parallel to main task");
       ]]></bpmn:script>
     </bpmn:scriptTask>

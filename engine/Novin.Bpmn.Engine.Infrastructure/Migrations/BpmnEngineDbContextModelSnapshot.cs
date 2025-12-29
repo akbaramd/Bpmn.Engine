@@ -74,6 +74,9 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                     b.Property<Guid>("TokenId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("TokenScopeId")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("TriggeredAt")
                         .HasColumnType("TEXT");
 
@@ -117,6 +120,66 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Deployments");
+                });
+
+            modelBuilder.Entity("Novin.Bpmn.Engine.Domain.Entities.ExecutedNode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ActivityInstanceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ArrivedViaFlowId")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExecutedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("NodeId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NodeName")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NodeType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PreviousNodeId")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ProcessId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ScopeId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SequenceOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("TokenId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProcessId");
+
+                    b.HasIndex("ProcessId", "NodeId");
+
+                    b.HasIndex("ProcessId", "SequenceOrder");
+
+                    b.ToTable("ProcessExecutionNodes");
                 });
 
             modelBuilder.Entity("Novin.Bpmn.Engine.Domain.Entities.Incident", b =>
@@ -174,10 +237,91 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                     b.ToTable("Incidents");
                 });
 
+            modelBuilder.Entity("Novin.Bpmn.Engine.Domain.Entities.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("AggregateId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("CorrelationId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("LockId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LockedUntilUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MessageName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MessageType")
+                        .HasMaxLength(400)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("NextAttemptOnUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("OccurredOnUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PartitionKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ProcessedOnUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AggregateId")
+                        .HasDatabaseName("IX_OutboxMessages_AggregateId")
+                        .HasFilter("[AggregateId] IS NOT NULL");
+
+                    b.HasIndex("CorrelationId")
+                        .HasDatabaseName("IX_OutboxMessages_CorrelationId")
+                        .HasFilter("[CorrelationId] IS NOT NULL");
+
+                    b.HasIndex("Status", "LockedUntilUtc")
+                        .HasDatabaseName("IX_OutboxMessages_Status_LockedUntil")
+                        .HasFilter("[Status] = 1 AND [LockedUntilUtc] IS NOT NULL");
+
+                    b.HasIndex("PartitionKey", "Status", "OccurredOnUtc")
+                        .HasDatabaseName("IX_OutboxMessages_PartitionKey_Status_Occurred")
+                        .HasFilter("[PartitionKey] IS NOT NULL");
+
+                    b.HasIndex("Status", "OccurredOnUtc", "NextAttemptOnUtc")
+                        .HasDatabaseName("IX_OutboxMessages_Status_Occurred_NextAttempt")
+                        .HasFilter("[Status] IN (0, 3)");
+
+                    b.ToTable("OutboxMessages");
+                });
+
             modelBuilder.Entity("Novin.Bpmn.Engine.Domain.Entities.Process", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BusinessKey")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("CompletedAt")
@@ -186,12 +330,21 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("DeploymentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("FailedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FailureReason")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("ProcessDefinitionId")
+                    b.Property<string>("ProcessBpmnId")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
@@ -201,6 +354,15 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
 
                     b.Property<string>("State")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("SuspendedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("TerminatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TerminationReason")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("_tokenIds")
@@ -262,6 +424,9 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("WorkerId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("_parentTokenIds")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -271,53 +436,123 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                     b.ToTable("Tokens");
                 });
 
-            modelBuilder.Entity("Novin.Bpmn.Engine.Domain.Entities.UserTask", b =>
+            modelBuilder.Entity("Novin.Bpmn.Engine.Domain.Entities.Worker", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("AssignedTo")
-                        .HasMaxLength(500)
+                    b.Property<string>("ActorId")
+                        .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime?>("CompletedAt")
+                    b.Property<DateTime?>("ClaimedAtUtc")
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ElementId")
                         .IsRequired()
-                        .HasMaxLength(500)
+                        .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("InputVariables")
-                        .IsRequired()
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("Metadata")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("OutputVariables")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("text");
 
                     b.Property<Guid>("ProcessId")
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime?>("StartedAt")
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("BLOB");
+
+                    b.Property<DateTime?>("StartedAtUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasMaxLength(32)
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("TaskName")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("TokenId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Variables")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
-                    b.ToTable("Tasks");
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("CompletedAtUtc");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("ProcessId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TokenId");
+
+                    b.HasIndex("Type");
+
+                    b.HasIndex("ProcessId", "ElementId");
+
+                    b.HasIndex("ProcessId", "Status", "Type");
+
+                    b.ToTable("Workers", (string)null);
+                });
+
+            modelBuilder.Entity("Novin.Bpmn.Engine.Domain.Entities.ExecutedNode", b =>
+                {
+                    b.HasOne("Novin.Bpmn.Engine.Domain.Entities.Process", "Process")
+                        .WithMany("ExecutionNodes")
+                        .HasForeignKey("ProcessId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Process");
+                });
+
+            modelBuilder.Entity("Novin.Bpmn.Engine.Domain.Entities.Worker", b =>
+                {
+                    b.HasOne("Novin.Bpmn.Engine.Domain.Entities.Process", null)
+                        .WithMany()
+                        .HasForeignKey("ProcessId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Novin.Bpmn.Engine.Domain.Entities.Token", null)
+                        .WithMany()
+                        .HasForeignKey("TokenId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Novin.Bpmn.Engine.Domain.Entities.Process", b =>
+                {
+                    b.Navigation("ExecutionNodes");
                 });
 #pragma warning restore 612, 618
         }

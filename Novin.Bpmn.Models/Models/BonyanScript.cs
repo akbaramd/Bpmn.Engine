@@ -126,3 +126,28 @@ public class BonyanScriptBody
     }
 }
 
+/// <summary>
+/// Bonyan Service extension element for service task client routing.
+/// Specifies which external client should handle the service task execution.
+/// </summary>
+[GeneratedCode("xsd", "4.8.3928.0")]
+[Serializable]
+[DebuggerStepThrough]
+[DesignerCategory("code")]
+[XmlType("service", Namespace = BpmnXmlNamespaces.Bonyan)]
+[XmlRoot("service", Namespace = BpmnXmlNamespaces.Bonyan, IsNullable = false)]
+public class BonyanService
+{
+    private string? clientIdField;
+
+    /// <summary>
+    /// Client ID that should handle this service task.
+    /// The BPMN engine will route the task to the specified client.
+    /// </summary>
+    [XmlAttribute("clientId")]
+    public string? ClientId
+    {
+        get { return clientIdField; }
+        set { clientIdField = value; }
+    }
+}

@@ -1,5 +1,6 @@
 using MediatR;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
+using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 
 namespace Novin.Bpmn.Engine.Api.TestScenarios;
@@ -31,15 +32,13 @@ public sealed class TestScenarioRunner
 
         try
         {
-            // Deploy process
-            _logger.LogInformation("1. Deploying process...");
-            await scenario.DeployProcessAsync(_mediator, _logger, ct);
+            await EnsureDeploymentAsync(scenario, ct);
 
             // Get test cases
             var testCases = await scenario.GetTestCasesAsync();
 
             // Run test cases
-            _logger.LogInformation("2. Running test cases...");
+            _logger.LogInformation("1. Running test cases...");
             for (int i = 0; i < testCases.Count; i++)
             {
                 var testCase = testCases[i];
@@ -49,7 +48,7 @@ public sealed class TestScenarioRunner
                     testCase.Name);
                 _logger.LogInformation("   Description: {Description}", testCase.Description);
 
-                var processId = await scenario.StartProcessAsync(
+                var processId = await scenario.CreateAndStartProcessAsync(
                     _mediator,
                     _logger,
                     testCase.Name,
@@ -102,13 +101,99 @@ public sealed class TestScenarioRunner
         }
     }
 
+    private async Task EnsureDeploymentAsync(TestScenario scenario, CancellationToken ct)
+    {
+        if (scenario.GetDeploymentId() != Guid.Empty)
+        {
+            _logger.LogInformation("Using existing deployment {DeploymentId} for scenario {Scenario}",
+                scenario.GetDeploymentId(), scenario.Name);
+            return;
+        }
+
+        // Try to find existing active deployment
+        var existingDeployment = await _uow.Deployments.GetLatestByDeploymentKeyAsync(scenario.ProcessKey, ct);
+        if (existingDeployment != null && existingDeployment.IsActive)
+        {
+            scenario.SetDeploymentId(existingDeployment.Id);
+            _logger.LogInformation("Using existing deployment {DeploymentId} (key={DeploymentKey}, version={Version}) for scenario {Scenario}",
+                existingDeployment.Id, existingDeployment.DeploymentKey, existingDeployment.Version, scenario.Name);
+            return;
+        }
+
+        // Deploy from BPMN file
+        _logger.LogInformation("Deploying BPMN file '{BpmnFileName}' for scenario {Scenario}",
+            scenario.BpmnFileName, scenario.Name);
+
+        // Try multiple possible paths for BPMN file
+        var possiblePaths = new[]
+        {
+            Path.Combine("Bpmn", scenario.BpmnFileName),
+            Path.Combine(AppContext.BaseDirectory, "Bpmn", scenario.BpmnFileName),
+            Path.Combine(Directory.GetCurrentDirectory(), "Bpmn", scenario.BpmnFileName),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Bpmn", scenario.BpmnFileName)
+        };
+
+        string? bpmnFilePath = null;
+        foreach (var path in possiblePaths)
+        {
+            if (File.Exists(path))
+            {
+                bpmnFilePath = path;
+                break;
+            }
+        }
+
+        if (bpmnFilePath == null)
+        {
+            var searchedPaths = string.Join(", ", possiblePaths);
+            throw new FileNotFoundException(
+                $"BPMN file not found: {scenario.BpmnFileName}. Searched paths: {searchedPaths}. Please ensure the file exists in the Bpmn directory.");
+        }
+
+        _logger.LogDebug("Found BPMN file at: {BpmnFilePath}", bpmnFilePath);
+
+        var bpmnXml = await File.ReadAllTextAsync(bpmnFilePath, ct);
+        if (string.IsNullOrWhiteSpace(bpmnXml))
+        {
+            throw new InvalidOperationException($"BPMN file is empty: {bpmnFilePath}");
+        }
+
+        // Get next version for this deployment key
+        var nextVersion = await _uow.Deployments.GetNextVersionAsync(scenario.ProcessKey, ct);
+
+        // Create deployment
+        await _uow.BeginTransactionAsync(ct);
+        try
+        {
+            var deployment = new Deployment(
+                deploymentKey: scenario.ProcessKey,
+                bpmnXml: bpmnXml,
+                version: nextVersion,
+                label: $"{scenario.Name} - {scenario.BpmnFileName}");
+
+            await _uow.Deployments.AddAsync(deployment, ct);
+            await _uow.CommitTransactionAsync(ct);
+
+            scenario.SetDeploymentId(deployment.Id);
+            _logger.LogInformation("✓ Deployed BPMN file '{BpmnFileName}'. DeploymentId={DeploymentId} Key={DeploymentKey} Version={Version}",
+                scenario.BpmnFileName, deployment.Id, deployment.DeploymentKey, deployment.Version);
+        }
+        catch (Exception ex)
+        {
+            await _uow.RollbackTransactionAsync(ct);
+            _logger.LogError(ex, "Failed to deploy BPMN file '{BpmnFileName}'", scenario.BpmnFileName);
+            throw;
+        }
+    }
+
     public static IReadOnlyList<TestScenario> GetAllScenarios()
     {
         return new List<TestScenario>
         {
             new EnterpriseDemoScenario(),
             new ErrorBoundaryScenario(),
-            new TimerBoundaryScenario()
+            new TimerBoundaryScenario(),
+            new MathSumScenario()
         };
     }
 
