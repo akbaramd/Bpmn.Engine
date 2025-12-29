@@ -19,53 +19,53 @@ public sealed class EfBoundarySubscriptionRepository : IBoundarySubscriptionRepo
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task<BoundarySubscription?> GetByIdAsync(Guid subscriptionId, CancellationToken ct = default)
+    public async Task<BoundaryEventSubscription?> GetByIdAsync(Guid subscriptionId, CancellationToken ct = default)
     {
-        return await _context.BoundarySubscriptions
+        return await _context.BoundaryEventSubscription
             .FirstOrDefaultAsync(s => s.Id == subscriptionId, ct);
     }
 
-    public async Task<IEnumerable<BoundarySubscription>> GetByTokenIdAsync(Guid tokenId, CancellationToken ct = default)
+    public async Task<IEnumerable<BoundaryEventSubscription>> GetByTokenIdAsync(Guid tokenId, CancellationToken ct = default)
     {
-        return await _context.BoundarySubscriptions
+        return await _context.BoundaryEventSubscription
             .Where(s => s.TokenId == tokenId)
             .ToListAsync(ct);
     }
 
-    public async Task<IEnumerable<BoundarySubscription>> GetByProcessIdAsync(Guid processId, CancellationToken ct = default)
+    public async Task<IEnumerable<BoundaryEventSubscription>> GetByProcessIdAsync(Guid processId, CancellationToken ct = default)
     {
-        return await _context.BoundarySubscriptions
+        return await _context.BoundaryEventSubscription
             .Where(s => s.ProcessId == processId)
             .ToListAsync(ct);
     }
 
-    public async Task<IEnumerable<BoundarySubscription>> GetActiveByAttachedElementAsync(
+    public async Task<IEnumerable<BoundaryEventSubscription>> GetActiveByAttachedElementAsync(
         Guid processId,
         string attachedToElementId,
         CancellationToken ct = default)
     {
-        return await _context.BoundarySubscriptions
+        return await _context.BoundaryEventSubscription
             .Where(s => s.ProcessId == processId
-                        && s.AttachedToElementId == attachedToElementId
+                        && s.HostElementId == attachedToElementId
                         && s.State == SubscriptionState.Active)
             .ToListAsync(ct);
     }
 
-    public async Task<IEnumerable<BoundarySubscription>> GetActiveByActivityInstanceAsync(
+    public async Task<IEnumerable<BoundaryEventSubscription>> GetActiveByActivityInstanceAsync(
         Guid activityInstanceId,
         CancellationToken ct = default)
     {
-        return await _context.BoundarySubscriptions
+        return await _context.BoundaryEventSubscription
             .Where(s => s.ActivityInstanceId == activityInstanceId
                         && s.State == SubscriptionState.Active)
             .ToListAsync(ct);
     }
 
-    public async Task<IEnumerable<BoundarySubscription>> GetActiveTimersDueBeforeAsync(
+    public async Task<IEnumerable<BoundaryEventSubscription>> GetActiveTimersDueBeforeAsync(
         DateTimeOffset dueBefore,
         CancellationToken ct = default)
     {
-        return await _context.BoundarySubscriptions
+        return await _context.BoundaryEventSubscription
             .Where(s => s.Kind == BoundaryKind.Timer
                         && s.State == SubscriptionState.Active
                         && s.DueAt.HasValue
@@ -73,22 +73,22 @@ public sealed class EfBoundarySubscriptionRepository : IBoundarySubscriptionRepo
             .ToListAsync(ct);
     }
 
-    public async Task<IEnumerable<BoundarySubscription>> GetByCorrelationKeyAsync(
+    public async Task<IEnumerable<BoundaryEventSubscription>> GetByCorrelationKeyAsync(
         string correlationKey,
         CancellationToken ct = default)
     {
-        return await _context.BoundarySubscriptions
+        return await _context.BoundaryEventSubscription
             .Where(s => s.CorrelationKey == correlationKey
                         && s.State == SubscriptionState.Active)
             .ToListAsync(ct);
     }
 
-    public async Task<IEnumerable<BoundarySubscription>> GetActiveErrorSubscriptionsByErrorCodeAsync(
+    public async Task<IEnumerable<BoundaryEventSubscription>> GetActiveErrorSubscriptionsByErrorCodeAsync(
         Guid processId,
         string errorCode,
         CancellationToken ct = default)
     {
-        return await _context.BoundarySubscriptions
+        return await _context.BoundaryEventSubscription
             .Where(s => s.ProcessId == processId
                         && s.Kind == BoundaryKind.Error
                         && s.State == SubscriptionState.Active
@@ -96,24 +96,24 @@ public sealed class EfBoundarySubscriptionRepository : IBoundarySubscriptionRepo
             .ToListAsync(ct);
     }
 
-    public async Task<IEnumerable<BoundarySubscription>> GetActiveErrorSubscriptionsByErrorCodeAndElementAsync(
+    public async Task<IEnumerable<BoundaryEventSubscription>> GetActiveErrorSubscriptionsByErrorCodeAndElementAsync(
         Guid processId,
         string errorCode,
         string attachedToElementId,
         CancellationToken ct = default)
     {
-        return await _context.BoundarySubscriptions
+        return await _context.BoundaryEventSubscription
             .Where(s => s.ProcessId == processId
                         && s.Kind == BoundaryKind.Error
                         && s.State == SubscriptionState.Active
-                        && s.AttachedToElementId == attachedToElementId
+                        && s.HostElementId == attachedToElementId
                         && (s.ErrorCode == errorCode || s.ErrorCode == null)) // null = catches all errors ("Any")
             .ToListAsync(ct);
     }
 
-    public async Task AddAsync(BoundarySubscription subscription, CancellationToken ct = default)
+    public async Task AddAsync(BoundaryEventSubscription subscription, CancellationToken ct = default)
     {
-        await _context.BoundarySubscriptions.AddAsync(subscription, ct);
+        await _context.BoundaryEventSubscription.AddAsync(subscription, ct);
         _logger.LogDebug(
             "[BOUNDARY-SUBSCRIPTION-REPO] Subscription added. SubscriptionId={SubscriptionId} ProcessId={ProcessId} TokenId={TokenId}",
             subscription.Id,
@@ -121,9 +121,9 @@ public sealed class EfBoundarySubscriptionRepository : IBoundarySubscriptionRepo
             subscription.TokenId);
     }
 
-    public Task UpdateAsync(BoundarySubscription subscription, CancellationToken ct = default)
+    public Task UpdateAsync(BoundaryEventSubscription subscription, CancellationToken ct = default)
     {
-        _context.BoundarySubscriptions.Update(subscription);
+        _context.BoundaryEventSubscription.Update(subscription);
         _logger.LogDebug(
             "[BOUNDARY-SUBSCRIPTION-REPO] Subscription updated. SubscriptionId={SubscriptionId} State={State}",
             subscription.Id,

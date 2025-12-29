@@ -129,7 +129,7 @@ public static class WebApplicationExtensions
     {
         var worker = workerRegistry.GetWorker(workerId);
         if (worker == null)
-            return Results.NotFound(new { error = $"Worker '{workerId}' not found" });
+            return Results.NotFound(new { error = $"Job '{workerId}' not found" });
 
         var workerInfo = new
         {
@@ -191,7 +191,7 @@ public static class WebApplicationExtensions
     {
         var worker = workerRegistry.GetWorker(workerId);
         if (worker == null)
-            return Results.NotFound(new { error = $"Worker '{workerId}' not found" });
+            return Results.NotFound(new { error = $"Job '{workerId}' not found" });
 
         // In a real implementation, this would return actual runtime status
         var status = new

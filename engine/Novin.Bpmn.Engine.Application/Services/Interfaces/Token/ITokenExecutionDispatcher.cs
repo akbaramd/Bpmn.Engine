@@ -3,11 +3,12 @@ using Novin.Bpmn.Models.Models;
 
 namespace Novin.Bpmn.Engine.Application.Services;
 
-public interface ITokenExecutionDispatcher
+public interface INodeExecutionDispatcher
 {
     Task<ElementProcessResult> DispatchProcessAsync(
         Process process,
         Token token,
+        NodeInstance node,
         BpmnFlowElement element,
         BpmnRuntimeContext ctx,
         bool isResume,
@@ -16,6 +17,7 @@ public interface ITokenExecutionDispatcher
     Task DispatchNavigateAsync(
         Process process,
         Token token,
+        NodeInstance node,
         BpmnFlowElement element,
         BpmnRuntimeContext ctx,
         bool isResume,

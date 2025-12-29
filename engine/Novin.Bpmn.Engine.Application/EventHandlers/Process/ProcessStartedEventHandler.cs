@@ -13,18 +13,15 @@ public sealed class ProcessStartedEventHandler : INotificationHandler<ProcessSta
 {
     private readonly IUnitOfWork _uow;
     private readonly IMediator _mediator;
-    private readonly IProcessExecutionRecorder _executionRecorder;
     private readonly ILogger<ProcessStartedEventHandler> _logger;
 
     public ProcessStartedEventHandler(
         IUnitOfWork uow,
         IMediator mediator,
-        IProcessExecutionRecorder executionRecorder,
         ILogger<ProcessStartedEventHandler> logger)
     {
         _uow = uow ?? throw new ArgumentNullException(nameof(uow));
         _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
-        _executionRecorder = executionRecorder ?? throw new ArgumentNullException(nameof(executionRecorder));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 

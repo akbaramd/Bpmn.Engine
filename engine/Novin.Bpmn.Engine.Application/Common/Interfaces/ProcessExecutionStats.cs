@@ -1,14 +1,18 @@
-﻿namespace Novin.Bpmn.Engine.Application.Common.Interfaces;
-
+﻿
 /// <summary>
 /// Execution statistics for a process
 /// </summary>
-public class ProcessExecutionStats
+namespace Novin.Bpmn.Engine.Application.Queries
 {
-    public int TotalNodesExecuted { get; set; }
-    public int CompletedNodes { get; set; }
-    public DateTime? FirstExecutedAt { get; set; }
-    public DateTime? LastExecutedAt { get; set; }
-    public TimeSpan? TotalExecutionTime { get; set; }
-    public Dictionary<string, int> NodeTypeCounts { get; set; } = new();
+    public class ProcessExecutionStats
+    {
+        public int TotalTokens { get; set; }
+        public int ActiveTokens { get; set; }
+        public int CompletedTokens { get; set; }
+        public int FailedTokens { get; set; }
+        public int TotalNodes { get; set; }
+        public int ActiveNodes { get; set; }
+        public int CompletedNodes { get; set; }
+        public int FailedNodes { get; set; }
+    }
 }

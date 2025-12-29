@@ -1,4 +1,4 @@
-using Novin.Bpmn.Engine.Application.Common.Interfaces;
+﻿using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Domain.Entities;
 using MediatR;
 
@@ -31,16 +31,16 @@ public class FailWorkerCommandHandler
             var worker = await _workerRepository.GetByIdAsync(request.WorkerId, trxCt);
             if (worker == null)
             {
-                _logger.LogWarning("Worker {WorkerId} not found", request.WorkerId);
+                _logger.LogWarning("Job {WorkerId} not found", request.WorkerId);
                 return;
             }
 
             // Mark worker as failed - this will raise WorkerFailedEvent
             // which can be handled by WorkerFailedEventHandler for retry logic, process failure, etc.
-            worker.MarkFailed(request.Error, request.CompletedBy);
+            worker.Fail(request.Error);
             await _workerRepository.UpdateAsync(worker, trxCt);
 
-            _logger.LogInformation("Worker {WorkerId} marked as failed", request.WorkerId);
+            _logger.LogInformation("Job {WorkerId} marked as failed", request.WorkerId);
         }, cancellationToken);
     }
 }

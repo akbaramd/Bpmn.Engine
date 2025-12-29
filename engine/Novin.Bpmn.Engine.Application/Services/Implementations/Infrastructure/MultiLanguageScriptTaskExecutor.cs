@@ -380,7 +380,7 @@ public sealed class MultiLanguageScriptTaskExecutor : IScriptTaskExecutor
     {
         if (string.IsNullOrWhiteSpace(json)) return;
 
-        var dict = _jsonSerializer.DeserializeObject<Dictionary<string, object>>(json);
+        var dict = _jsonSerializer.DeserializeObject<Dictionary<string,string>>(json);
         if (dict == null) return;
 
         foreach (var (k, v) in dict)

@@ -31,7 +31,7 @@ public class WorkerMonitorBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Worker Monitor Background Service started");
+        _logger.LogInformation("Job Monitor Background Service started");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -51,13 +51,13 @@ public class WorkerMonitorBackgroundService : BackgroundService
             }
         }
 
-        _logger.LogInformation("Worker Monitor Background Service stopped");
+        _logger.LogInformation("Job Monitor Background Service stopped");
     }
 
     private async Task CheckForTimedOutWorkersAsync(CancellationToken cancellationToken)
     {
         // Get workers that are in progress and have been running longer than the timeout
-        var timedOutWorkers = await _workerRepository.GetByStatusAsync(WorkerStatus.InProgress, cancellationToken);
+        var timedOutWorkers = await _workerRepository.GetByStatusAsync(JobStatus.Running, cancellationToken);
         var now = DateTime.UtcNow;
 
         var actuallyTimedOut = timedOutWorkers.Where(w =>
@@ -66,19 +66,19 @@ public class WorkerMonitorBackgroundService : BackgroundService
 
         foreach (var worker in actuallyTimedOut)
         {
-            _logger.LogWarning("Worker {WorkerId} ({TaskName}) timed out after {Timeout}",
+            _logger.LogWarning("Job {WorkerId} ({TaskName}) timed out after {Timeout}",
                 worker.Id, worker.TaskName, _timeoutThreshold);
 
             try
             {
                 // Mark as timed out
-                worker.MarkTimedOut();
+                worker.Fail("timed out");
                 await _workerRepository.UpdateAsync(worker, cancellationToken);
 
                 // TODO: Could implement retry logic here
                 // For now, just mark as timed out
 
-                _logger.LogInformation("Worker {WorkerId} marked as timed out", worker.Id);
+                _logger.LogInformation("Job {WorkerId} marked as timed out", worker.Id);
             }
             catch (Exception ex)
             {
@@ -86,7 +86,7 @@ public class WorkerMonitorBackgroundService : BackgroundService
                 if (ex.Message.Contains("FOREIGN KEY constraint failed") ||
                     ex.InnerException?.Message.Contains("FOREIGN KEY constraint failed") == true)
                 {
-                    _logger.LogWarning("Worker {WorkerId} appears to be orphaned (referenced Process/Token deleted). Deleting worker.", worker.Id);
+                    _logger.LogWarning("Job {WorkerId} appears to be orphaned (referenced Process/Token deleted). Deleting worker.", worker.Id);
 
                     try
                     {

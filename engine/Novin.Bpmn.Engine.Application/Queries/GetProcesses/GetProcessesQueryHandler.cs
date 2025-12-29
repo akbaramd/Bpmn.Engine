@@ -34,7 +34,7 @@ public class GetProcessesQueryHandler : IRequestHandler<GetProcessesQuery, IEnum
         }
 
         return processes
-            .OrderByDescending(p => p.CreatedAt)
+            .OrderByDescending(p => p.CreatedAtUtc)
             .Skip(request.Skip)
             .Take(request.Take)
             .Select(p => new ProcessDto(
@@ -43,9 +43,9 @@ public class GetProcessesQueryHandler : IRequestHandler<GetProcessesQuery, IEnum
                 p.DeploymentId,
                 p.ProcessBpmnId,
                 p.State,
-                p.CreatedAt,
-                p.StartedAt,
-                p.CompletedAt,
+                p.CreatedAtUtc,
+                p.StartedAtUtc,
+                p.CompletedAtUtc,
                 p.Variables
             ));
     }

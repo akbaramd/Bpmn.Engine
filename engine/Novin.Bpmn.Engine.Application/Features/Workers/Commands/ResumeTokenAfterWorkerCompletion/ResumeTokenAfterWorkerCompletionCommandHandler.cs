@@ -38,7 +38,7 @@ public class ResumeTokenAfterWorkerCompletionCommandHandler
             var worker = await _workerRepository.GetByIdAsync(request.WorkerId, trxCt);
             if (worker == null)
             {
-                _logger.LogWarning("Worker {WorkerId} not found", request.WorkerId);
+                _logger.LogWarning("Job {WorkerId} not found", request.WorkerId);
                 return;
             }
 
@@ -106,7 +106,7 @@ public class ResumeTokenAfterWorkerCompletionCommandHandler
             // Resume token processing (this will continue the BPMN flow)
             token.Resume();
 
-            _logger.LogInformation("Worker {WorkerId} completion processed, token {TokenId} resumed",
+            _logger.LogInformation("Job {WorkerId} completion processed, token {TokenId} resumed",
                 request.WorkerId, worker.TokenId);
         }, cancellationToken);
     }

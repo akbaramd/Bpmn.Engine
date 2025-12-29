@@ -15,16 +15,13 @@ namespace Novin.Bpmn.Engine.Application.Commands.MoveToken;
 public sealed class MoveTokenCommandHandler : IRequestHandler<MoveTokenCommand, MoveTokenResult>
 {
     private readonly IUnitOfWork _uow;
-    private readonly IProcessExecutionRecorder _executionRecorder;
     private readonly ILogger<MoveTokenCommandHandler> _logger;
 
     public MoveTokenCommandHandler(
         IUnitOfWork uow,
-        IProcessExecutionRecorder executionRecorder,
         ILogger<MoveTokenCommandHandler> logger)
     {
         _uow = uow ?? throw new ArgumentNullException(nameof(uow));
-        _executionRecorder = executionRecorder ?? throw new ArgumentNullException(nameof(executionRecorder));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 

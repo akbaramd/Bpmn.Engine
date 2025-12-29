@@ -63,7 +63,7 @@ public class BpmnClientBackgroundService : BackgroundService
             if (!allWorkers.Any())
             {
                 _logger.LogWarning("No service workers found. Client will not be able to handle work requests. This may be due to PostConfigure not having run yet.");
-                _logger.LogInformation("Worker registry will be checked again during connection.");
+                _logger.LogInformation("Job registry will be checked again during connection.");
                 return;
             }
 
@@ -72,7 +72,7 @@ public class BpmnClientBackgroundService : BackgroundService
             foreach (var worker in allWorkers)
             {
                 _logger.LogInformation(
-                    "Worker '{WorkerId}' ({Name}) - Status: {Status}, Work Types: {WorkTypes}",
+                    "Job '{WorkerId}' ({Name}) - Status: {Status}, Work Types: {WorkTypes}",
                     worker.WorkerId,
                     worker.Name,
                     worker.Enabled ? "Enabled" : "Disabled",
@@ -80,7 +80,7 @@ public class BpmnClientBackgroundService : BackgroundService
 
                 if (!worker.Enabled)
                 {
-                    _logger.LogWarning("Worker '{WorkerId}' is disabled and will not handle requests", worker.WorkerId);
+                    _logger.LogWarning("Job '{WorkerId}' is disabled and will not handle requests", worker.WorkerId);
                 }
             }
 
@@ -90,7 +90,7 @@ public class BpmnClientBackgroundService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error discovering workers. Worker registry may not be properly initialized.");
+            _logger.LogError(ex, "Error discovering workers. Job registry may not be properly initialized.");
         }
     }
 
@@ -103,7 +103,7 @@ public class BpmnClientBackgroundService : BackgroundService
             if (allWorkers.Any())
             {
                 var totalWorkTypes = allWorkers.SelectMany(w => w.SupportedWorkTypes).Distinct().ToList();
-                _logger.LogInformation("Worker verification after connection: {WorkerCount} workers supporting {WorkTypeCount} work types",
+                _logger.LogInformation("Job verification after connection: {WorkerCount} workers supporting {WorkTypeCount} work types",
                     allWorkers.Count, totalWorkTypes.Count);
             }
             else

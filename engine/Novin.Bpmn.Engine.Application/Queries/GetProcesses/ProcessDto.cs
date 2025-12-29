@@ -16,3 +16,14 @@ public record ProcessDto(
     DateTime? CompletedAt,
     IReadOnlyDictionary<string, string> Variables
 );
+
+public record ProcessListDto
+{
+    public Guid Id { get; init; }
+    public string Name { get; init; } = default!;
+    public string ProcessBpmnId { get; init; } = default!;
+    public ProcessState State { get; init; }
+    public DateTime CreatedAt { get; init; }
+    public DateTime? StartedAt { get; init; }
+    public DateTime? CompletedAt { get; init; }
+}

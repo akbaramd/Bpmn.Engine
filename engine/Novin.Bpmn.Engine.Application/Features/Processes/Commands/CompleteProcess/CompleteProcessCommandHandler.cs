@@ -52,7 +52,7 @@ public class CompleteProcessCommandHandler : IRequestHandler<CompleteProcessComm
             return new CompleteProcessResult
             {
                 ProcessId = process.Id,
-                CompletedAt = process.CompletedAt!.Value,
+                CompletedAt = process.CompletedAtUtc!.Value,
                 Success = true
             };
         }

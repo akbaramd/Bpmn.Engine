@@ -1,3 +1,5 @@
+using Novin.Bpmn.Engine.Domain.Repositories;
+
 namespace Novin.Bpmn.Engine.Application.Common.Interfaces;
 
 /// <summary>
@@ -8,10 +10,12 @@ public interface IUnitOfWork : IDisposable
 {
     IDeploymentRepository Deployments { get; }
     IProcessRepository Processes { get; }
+    IUserTaskInstanceRepository UserTaskInstances { get; }
     ITokenRepository Tokens { get; }
     IWorkerRepository Workers { get; }
     IIncidentRepository Incidents { get; }
     IBoundarySubscriptionRepository BoundarySubscriptions { get; }
+    INodeInstanceRepository NodeInstances { get; }
 
 
     Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, CancellationToken ct);

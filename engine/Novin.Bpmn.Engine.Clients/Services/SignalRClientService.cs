@@ -434,7 +434,7 @@ public class SignalRClientService : ISignalRClientService, IAsyncDisposable
             // Process the work
             if (selectedWorker.HandlerType == null)
             {
-                await SendWorkFailedAsync(workItem.WorkerId, "Worker handler type not configured");
+                await SendWorkFailedAsync(workItem.WorkerId, "Job handler type not configured");
                 return;
             }
 
@@ -575,7 +575,7 @@ public class SignalRClientService : ISignalRClientService, IAsyncDisposable
             // Execute the service task
             if (selectedWorker.HandlerType == null)
             {
-                await SendServiceTaskFailedAsync(request.ExecutionId, "Worker handler type not configured");
+                await SendServiceTaskFailedAsync(request.ExecutionId, "Job handler type not configured");
                 return;
             }
 
@@ -617,14 +617,7 @@ public class SignalRClientService : ISignalRClientService, IAsyncDisposable
                 }
             }
 
-            // Copy any additional metadata from request (already strings)
-            if (request.Metadata != null)
-            {
-                foreach (var kvp in request.Metadata)
-                {
-                    workerContext.Metadata[kvp.Key] = kvp.Value ?? string.Empty;
-                }
-            }
+      
 
             // Execute the handler
             await handler.ExecuteAsync(workerContext);

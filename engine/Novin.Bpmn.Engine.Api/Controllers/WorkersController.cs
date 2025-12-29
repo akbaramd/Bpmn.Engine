@@ -36,6 +36,7 @@ public sealed class WorkersController : ControllerBase
             WorkerId: workerId,
             Assignee: body.Assignee,
             CandidateGroups: body.CandidateGroups,
+            CandidateUsers: body.CandidateUsers,
             Priority: body.Priority,
             DueDateUtc: body.DueDateUtc,
             AssignedBy: GetActor()
@@ -45,8 +46,8 @@ public sealed class WorkersController : ControllerBase
 
         return result switch
         {
-            AssignUserTaskResult.NotFound => NotFound(new { error = $"Worker {workerId} not found" }),
-            AssignUserTaskResult.InvalidState => Conflict(new { error = "Worker is not assignable in its current status" }),
+            AssignUserTaskResult.NotFound => NotFound(new { error = $"Job {workerId} not found" }),
+            AssignUserTaskResult.InvalidState => Conflict(new { error = "Job is not assignable in its current status" }),
             _ => NoContent()
         };
     }
@@ -71,8 +72,8 @@ public sealed class WorkersController : ControllerBase
 
         return result switch
         {
-            CompleteUserTaskResult.NotFound => NotFound(new { error = $"Worker {workerId} not found" }),
-            CompleteUserTaskResult.InvalidState => Conflict(new { error = "Worker is not completable in its current status" }),
+            CompleteUserTaskResult.NotFound => NotFound(new { error = $"Job {workerId} not found" }),
+            CompleteUserTaskResult.InvalidState => Conflict(new { error = "Job is not completable in its current status" }),
             CompleteUserTaskResult.TokenNotWaiting => Conflict(new { error = "Token is not waiting for this worker" }),
             _ => NoContent()
         };
@@ -97,8 +98,8 @@ public sealed class WorkersController : ControllerBase
 
         return result switch
         {
-            CompleteServiceTaskResult.NotFound => NotFound(new { error = $"Worker {workerId} not found" }),
-            CompleteServiceTaskResult.InvalidState => Conflict(new { error = "Worker is not completable in its current status" }),
+            CompleteServiceTaskResult.NotFound => NotFound(new { error = $"Job {workerId} not found" }),
+            CompleteServiceTaskResult.InvalidState => Conflict(new { error = "Job is not completable in its current status" }),
             CompleteServiceTaskResult.TokenNotWaiting => Conflict(new { error = "Token is not waiting for this worker" }),
             _ => NoContent()
         };
@@ -124,8 +125,8 @@ public sealed class WorkersController : ControllerBase
 
         return result switch
         {
-            FailServiceTaskResult.NotFound => NotFound(new { error = $"Worker {workerId} not found" }),
-            FailServiceTaskResult.InvalidState => Conflict(new { error = "Worker is not fail-able in its current status" }),
+            FailServiceTaskResult.NotFound => NotFound(new { error = $"Job {workerId} not found" }),
+            FailServiceTaskResult.InvalidState => Conflict(new { error = "Job is not fail-able in its current status" }),
             FailServiceTaskResult.TokenNotWaiting => Conflict(new { error = "Token is not waiting for this worker" }),
             _ => NoContent()
         };
@@ -137,6 +138,7 @@ public sealed class WorkersController : ControllerBase
     public sealed record AssignUserTaskRequest(
         string? Assignee,
         string? CandidateGroups,
+        string? CandidateUsers,
         int? Priority,
         DateTime? DueDateUtc);
 
@@ -159,13 +161,10 @@ public sealed class WorkersController : ControllerBase
         Guid TokenId,
         string ElementId,
         string TaskName,
-        string Type,
         string Status,
         DateTime CreatedAtUtc,
         DateTime? StartedAtUtc,
         DateTime? CompletedAtUtc,
-        string? CompletedBy,
-        IReadOnlyDictionary<string, string> Metadata,
         IReadOnlyDictionary<string, string> Variables,
         string? ErrorMessage);
 
@@ -175,14 +174,11 @@ public sealed class WorkersController : ControllerBase
         TokenId: w.TokenId,
         ElementId: w.ElementId,
         TaskName: w.TaskName,
-        Type: w.Type.ToString(),
         Status: w.Status.ToString(),
         CreatedAtUtc: w.CreatedAtUtc,
         StartedAtUtc: w.StartedAtUtc,
         CompletedAtUtc: w.CompletedAtUtc,
-        CompletedBy: w.ActorId,
-        Metadata: new Dictionary<string, string>(w.Metadata),
-        Variables: new Dictionary<string, string>(w.Variables),
+        Variables: new Dictionary<string, string>(w.Payload),
         ErrorMessage: w.ErrorMessage
     );
 

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Domain.Common;
 using Novin.Bpmn.Engine.Domain.Entities;
+using Novin.Bpmn.Engine.Domain.Repositories;
 using Novin.Bpmn.Engine.Infrastructure.EventBus;
 
 namespace Novin.Bpmn.Engine.Infrastructure.Persistence.UnitOfWork;
@@ -18,11 +19,13 @@ public class EfUnitOfWork : IUnitOfWork
     private bool _disposed;
 
     public IDeploymentRepository Deployments { get; }
+    public IUserTaskInstanceRepository UserTaskInstances { get; }
     public IProcessRepository Processes { get; }
     public ITokenRepository Tokens { get; }
     public IWorkerRepository Workers { get; } 
     public IIncidentRepository Incidents { get; }
     public IBoundarySubscriptionRepository BoundarySubscriptions { get; }
+    public INodeInstanceRepository NodeInstances { get; }
 
     /// <summary>
     /// Checks if a transaction is currently active
@@ -37,6 +40,8 @@ public class EfUnitOfWork : IUnitOfWork
         IIncidentRepository incidentRepository,
         IWorkerRepository workerRepository,
         IBoundarySubscriptionRepository boundarySubscriptionRepository,
+        INodeInstanceRepository nodeRepository,
+        IUserTaskInstanceRepository userTaskInstances,
         ILogger<EfUnitOfWork> logger,
         IJsonSerializer jsonSerializer)
     {
@@ -47,9 +52,10 @@ public class EfUnitOfWork : IUnitOfWork
         Incidents = incidentRepository ?? throw new ArgumentNullException(nameof(incidentRepository));
         BoundarySubscriptions = boundarySubscriptionRepository ?? throw new ArgumentNullException(nameof(boundarySubscriptionRepository));
         Workers = workerRepository ?? throw new ArgumentNullException(nameof(workerRepository));
-        
+        NodeInstances =nodeRepository ?? throw new ArgumentNullException(nameof(nodeRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _jsonSerializer = jsonSerializer ?? throw new ArgumentNullException(nameof(jsonSerializer));
+        UserTaskInstances = userTaskInstances ?? throw new ArgumentNullException(nameof(userTaskInstances));
     }
 
     // ---------------- Transaction API ----------------

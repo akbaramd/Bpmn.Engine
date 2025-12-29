@@ -1,15 +1,18 @@
-using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using MediatR;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Application.Queries.GetProcessExecutionFlow;
-using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
+using System.Linq;
+using Novin.Bpmn.Engine.Application.Queries;
+using Novin.Bpmn.Engine.Application.Services;
+using NodeState = Novin.Bpmn.Engine.Domain.Entities.NodeState;
 
 namespace Novin.Bpmn.Engine.Api.Controllers;
 
 /// <summary>
-/// Powerful controller for process execution dashboards + BPMN modeler visualization.
+/// Controller for process execution dashboards + BPMN modeler visualization.
 /// Returns: executed nodes/flows, ALL tokens (no filtering), process variables, and basic process info.
 /// </summary>
 [ApiController]
@@ -17,18 +20,15 @@ namespace Novin.Bpmn.Engine.Api.Controllers;
 public sealed class ProcessExecutionController : ControllerBase
 {
     private readonly IMediator _mediator;
-    private readonly IProcessExecutionRecorder _executionRecorder;
     private readonly IUnitOfWork _uow;
     private readonly IBpmnRuntimeContextFactory _ctxFactory;
 
     public ProcessExecutionController(
         IMediator mediator,
-        IProcessExecutionRecorder executionRecorder,
         IUnitOfWork uow,
         IBpmnRuntimeContextFactory ctxFactory)
     {
         _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
-        _executionRecorder = executionRecorder ?? throw new ArgumentNullException(nameof(executionRecorder));
         _uow = uow ?? throw new ArgumentNullException(nameof(uow));
         _ctxFactory = ctxFactory ?? throw new ArgumentNullException(nameof(ctxFactory));
     }
@@ -61,22 +61,31 @@ public sealed class ProcessExecutionController : ControllerBase
 
     /// <summary>Minimal execution path (audit trail) — executable nodes only (as your recorder defines).</summary>
     [HttpGet("{processId:guid}/path")]
-    [ProducesResponseType(typeof(IEnumerable<ExecutedNode>), 200)]
+    [ProducesResponseType(typeof(IEnumerable<NodeInstance>), 200)]
     [ProducesResponseType(404)]
-    public async Task<ActionResult<IEnumerable<ExecutedNode>>> GetExecutionPath(Guid processId, CancellationToken ct = default)
+    public async Task<ActionResult<IEnumerable<NodeInstance>>> GetExecutionPath(Guid processId, CancellationToken ct = default)
     {
-        var executionPath = (await _executionRecorder.GetExecutionPathAsync(processId, ct)).ToList();
-        if (executionPath.Count == 0) return NotFound(new { error = $"No execution path found for process {processId}" });
-        return Ok(executionPath);
+        var nodeInstances = await _uow.NodeInstances.GetByProcessIdAsync(processId, ct);
+        if (nodeInstances == null || !nodeInstances.Any()) 
+            return NotFound(new { error = $"No execution path found for process {processId}" });
+        return Ok(nodeInstances);
     }
 
-    /// <summary>Execution stats from audit trail (recorder-based).</summary>
+    /// <summary>Execution stats from node instances.</summary>
     [HttpGet("{processId:guid}/audit-stats")]
     [ProducesResponseType(typeof(ProcessExecutionStats), 200)]
     [ProducesResponseType(404)]
     public async Task<ActionResult<ProcessExecutionStats>> GetAuditStats(Guid processId, CancellationToken ct = default)
     {
-        var stats = await _executionRecorder.GetExecutionStatsAsync(processId, ct);
+        var nodeInstances = await _uow.NodeInstances.GetByProcessIdAsync(processId, ct);
+        var stats = new ProcessExecutionStats
+        {
+            TotalNodes = nodeInstances.Count,
+            CompletedNodes = nodeInstances.Count(x => x.State == NodeState.Completed),
+            FailedNodes = nodeInstances.Count(x => x.State == NodeState.Failed),
+            ActiveNodes = nodeInstances.Count(x => x.State == NodeState.Created)
+        };
+
         return Ok(stats);
     }
 
@@ -108,7 +117,6 @@ public sealed class ProcessExecutionController : ControllerBase
                 IsExecutable: t.IsExecutable,
                 ScopeId: t.ScopeId,
                 ArrivedViaFlowId: t.ArrivedViaFlowId,
-                WorkerId: t.WorkerId,
                 ActivityInstanceId: t.ActivityInstanceId,
                 ParentTokenIds: t.ParentTokenIds?.ToArray() ?? Array.Empty<Guid>(),
                 CreatedAtUtc: t.CreatedAt,
@@ -141,10 +149,10 @@ public sealed class ProcessExecutionController : ControllerBase
             Name: process.Name,
             State: process.State.ToString(),
             DeploymentId: process.DeploymentId,
-            ProcessDefinitionId: process.ProcessDefinitionId,
+            ProcessDefinitionId: process.ProcessBpmnId,
             ProcessBpmnId: process.ProcessBpmnId,
-            StartedAtUtc: process.StartedAt,
-            CompletedAtUtc: process.CompletedAt,
+            StartedAtUtc: process.StartedAtUtc,
+            CompletedAtUtc: process.CompletedAtUtc,
             Variables: process.Variables?.ToDictionary(k => k.Key, v => v.Value) ?? new Dictionary<string, string>()
         );
 
@@ -198,10 +206,6 @@ public sealed class ProcessExecutionController : ControllerBase
         // Execution flow (your existing query DTO)
         var executionFlow = await _mediator.Send(new GetProcessExecutionFlowQuery(processId), ct);
 
-        // Audit path (recorder)
-        var auditPath = (await _executionRecorder.GetExecutionPathAsync(processId, ct)).ToList();
-        var auditStats = await _executionRecorder.GetExecutionStatsAsync(processId, ct);
-
         // Tokens (ALL)
         var tokens = (await _uow.Tokens.GetByProcessIdAsync(processId, ct)).ToList();
         var tokenDtos = tokens
@@ -214,7 +218,6 @@ public sealed class ProcessExecutionController : ControllerBase
                 IsExecutable: t.IsExecutable,
                 ScopeId: t.ScopeId,
                 ArrivedViaFlowId: t.ArrivedViaFlowId,
-                WorkerId: t.WorkerId,
                 ActivityInstanceId: t.ActivityInstanceId,
                 ParentTokenIds: t.ParentTokenIds?.ToArray() ?? Array.Empty<Guid>(),
                 CreatedAtUtc: t.CreatedAt,
@@ -229,10 +232,10 @@ public sealed class ProcessExecutionController : ControllerBase
             Name: process.Name,
             State: process.State.ToString(),
             DeploymentId: process.DeploymentId,
-            ProcessDefinitionId: process.ProcessDefinitionId,
+            ProcessDefinitionId: process.ProcessBpmnId,
             ProcessBpmnId: process.ProcessBpmnId,
-            StartedAtUtc: process.StartedAt,
-            CompletedAtUtc: process.CompletedAt,
+            StartedAtUtc: process.StartedAtUtc,
+            CompletedAtUtc: process.CompletedAtUtc,
             Variables: process.Variables?.ToDictionary(k => k.Key, v => v.Value) ?? new Dictionary<string, string>()
         );
 
@@ -240,8 +243,6 @@ public sealed class ProcessExecutionController : ControllerBase
             Process: processDto,
             Model: model,
             ExecutionFlow: executionFlow,
-            AuditPath: auditPath,
-            AuditStats: auditStats,
             Tokens: tokenDtos
         );
 
@@ -260,7 +261,6 @@ public sealed class ProcessExecutionController : ControllerBase
         bool IsExecutable,
         Guid? ScopeId,
         string? ArrivedViaFlowId,
-        Guid? WorkerId,
         Guid? ActivityInstanceId,
         IReadOnlyList<Guid> ParentTokenIds,
         DateTime CreatedAtUtc,
@@ -304,23 +304,9 @@ public sealed class ProcessExecutionController : ControllerBase
         ProcessDashboardDto Process,
         BpmnModelDto Model,
         ProcessExecutionFlowDto? ExecutionFlow,
-        IReadOnlyList<ExecutedNode> AuditPath,
-        ProcessExecutionStats AuditStats,
         IReadOnlyList<TokenDashboardDto> Tokens
     );
-    public sealed record AuditNodeDto(
-        Guid Id,
-        Guid ProcessId,
-        string ElementId,
-        string? ElementName,
-        string ElementType,
-        string EventType,
-        DateTime OccurredAtUtc,
-        Guid? TokenId,
-        string? ArrivedViaFlowId,
-        Guid? ScopeId,
-        bool IsExecutable
-    );
+    
     // ----------------------------------------------------------------------
     // Helpers
     // ----------------------------------------------------------------------

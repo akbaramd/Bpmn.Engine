@@ -1,3 +1,4 @@
+// File: Novin.Bpmn.Engine.Application/Services/IncidentService.cs
 using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Domain.Entities;
@@ -10,9 +11,7 @@ public sealed class IncidentService : IIncidentService
     private readonly IUnitOfWork _uow;
     private readonly ILogger<IncidentService> _logger;
 
-    public IncidentService(
-        IUnitOfWork uow,
-        ILogger<IncidentService> logger)
+    public IncidentService(IUnitOfWork uow, ILogger<IncidentService> logger)
     {
         _uow = uow ?? throw new ArgumentNullException(nameof(uow));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -21,60 +20,63 @@ public sealed class IncidentService : IIncidentService
     public async Task<Incident> CreateTechnicalFailureAsync(
         Guid processId,
         Guid tokenId,
+        Guid? nodeInstanceId,
+        Guid? workerId,
         string elementId,
         string message,
         string? stackTrace = null,
         CancellationToken ct = default)
     {
-        var incident = new Incident(
-            processId,
-            tokenId,
-            elementId,
-            ErrorType.TechnicalFailure,
-            message,
+        var inc = Incident.Open(
+            processId: processId,
+            tokenId: tokenId,
+            nodeInstanceId: nodeInstanceId,
+            workerId: workerId,
+            elementId: elementId,
+            scope: nodeInstanceId.HasValue ? IncidentScope.Node : IncidentScope.Token,
+            cause: IncidentCause.TechnicalFailure,
+            message: message,
             errorCode: null,
-            stackTrace);
+            stackTrace: stackTrace);
 
-        await _uow.Incidents.AddAsync(incident, ct);
-        
-            _logger.LogInformation(
-            "[INCIDENT] Technical failure incident created. IncidentId={IncidentId} ProcessId={ProcessId} TokenId={TokenId} ElementId={ElementId}",
-                incident.Id,
-                processId,
-                tokenId,
-                elementId);
+        await _uow.Incidents.AddAsync(inc, ct);
 
-        return incident;
+        _logger.LogInformation(
+            "[INCIDENT] TechnicalFailure opened. IncidentId={IncidentId} P={ProcessId} T={TokenId} N={NodeId} W={WorkerId} E={ElementId}",
+            inc.Id, processId, tokenId, nodeInstanceId, workerId, elementId);
+
+        return inc;
     }
 
     public async Task<Incident> CreateBpmnErrorAsync(
         Guid processId,
         Guid tokenId,
+        Guid? nodeInstanceId,
+        Guid? workerId,
         string elementId,
         string errorCode,
         string message,
         CancellationToken ct = default)
     {
-        var incident = new Incident(
-            processId,
-            tokenId,
-            elementId,
-            ErrorType.BpmnError,
-            message,
-            errorCode,
+        var inc = Incident.Open(
+            processId: processId,
+            tokenId: tokenId,
+            nodeInstanceId: nodeInstanceId,
+            workerId: workerId,
+            elementId: elementId,
+            scope: nodeInstanceId.HasValue ? IncidentScope.Node : IncidentScope.Token,
+            cause: IncidentCause.BpmnError,
+            message: message,
+            errorCode: errorCode,
             stackTrace: null);
 
-        await _uow.Incidents.AddAsync(incident, ct);
-        
-            _logger.LogInformation(
-            "[INCIDENT] BPMN error incident created. IncidentId={IncidentId} ProcessId={ProcessId} TokenId={TokenId} ElementId={ElementId} ErrorCode={ErrorCode}",
-                incident.Id,
-                processId,
-                tokenId,
-                elementId,
-                errorCode);
+        await _uow.Incidents.AddAsync(inc, ct);
 
-        return incident;
+        _logger.LogInformation(
+            "[INCIDENT] BpmnError opened. IncidentId={IncidentId} P={ProcessId} T={TokenId} N={NodeId} W={WorkerId} E={ElementId} Code={Code}",
+            inc.Id, processId, tokenId, nodeInstanceId, workerId, elementId, errorCode);
+
+        return inc;
     }
 
     public async Task RetryIncidentAsync(Guid incidentId, CancellationToken ct = default)
@@ -82,9 +84,9 @@ public sealed class IncidentService : IIncidentService
         await _uow.ExecuteInTransactionAsync(async trxCt =>
         {
             var incident = await _uow.Incidents.GetByIdAsync(incidentId, trxCt);
-            if (incident == null)
+            if (incident is null)
             {
-                _logger.LogWarning("[INCIDENT] Incident not found for retry. IncidentId={IncidentId}", incidentId);
+                _logger.LogWarning("[INCIDENT] Not found for retry. IncidentId={IncidentId}", incidentId);
                 return;
             }
 
@@ -92,30 +94,26 @@ public sealed class IncidentService : IIncidentService
             await _uow.Incidents.UpdateAsync(incident, trxCt);
 
             _logger.LogInformation(
-                "[INCIDENT] Incident retried. IncidentId={IncidentId} Retries={Retries}",
-                incidentId,
-                incident.Retries);
+                "[INCIDENT] Retried. IncidentId={IncidentId} RetryCount={RetryCount}",
+                incidentId, incident.RetryCount);
         }, ct);
     }
 
-    public async Task ResolveIncidentAsync(Guid incidentId, CancellationToken ct = default)
+    public async Task ResolveIncidentAsync(Guid incidentId, string? note = null, CancellationToken ct = default)
     {
         await _uow.ExecuteInTransactionAsync(async trxCt =>
         {
             var incident = await _uow.Incidents.GetByIdAsync(incidentId, trxCt);
-            if (incident == null)
+            if (incident is null)
             {
-                _logger.LogWarning("[INCIDENT] Incident not found for resolve. IncidentId={IncidentId}", incidentId);
+                _logger.LogWarning("[INCIDENT] Not found for resolve. IncidentId={IncidentId}", incidentId);
                 return;
             }
 
-            incident.Resolve();
+            incident.Resolve(note);
             await _uow.Incidents.UpdateAsync(incident, trxCt);
 
-            _logger.LogInformation(
-                "[INCIDENT] Incident resolved. IncidentId={IncidentId}",
-                incidentId);
+            _logger.LogInformation("[INCIDENT] Resolved. IncidentId={IncidentId}", incidentId);
         }, ct);
     }
 }
-

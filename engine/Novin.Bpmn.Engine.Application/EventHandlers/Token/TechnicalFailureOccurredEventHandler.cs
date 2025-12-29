@@ -56,6 +56,8 @@ public sealed class TechnicalFailureOccurredEventHandler : INotificationHandler<
             var incident = await _incidentService.CreateTechnicalFailureAsync(
                 @event.ProcessId,
                 @event.TokenId,
+                null,
+                null,
                 @event.ElementId,
                 @event.ErrorMessage,
                 @event.StackTrace,

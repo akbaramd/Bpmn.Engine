@@ -59,7 +59,6 @@ if (existingService != null)
 {
     builder.Services.Remove(existingService);
 }
-builder.Services.AddScoped<IBoundaryTimerScheduler, QuartzBoundaryTimerScheduler>();
 
 // Register test scenario runner for API access
 builder.Services.AddScoped<Novin.Bpmn.Engine.Api.TestScenarios.TestScenarioRunner>();

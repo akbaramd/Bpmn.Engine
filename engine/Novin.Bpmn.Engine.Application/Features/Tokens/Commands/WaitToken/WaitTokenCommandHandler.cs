@@ -35,7 +35,7 @@ public sealed class WaitTokenCommandHandler : IRequestHandler<WaitTokenCommand, 
                 return new WaitTokenResult(request.TokenId, false, $"Token is {token.State}, expected Active");
             }
 
-            token.Wait(request.Reason, request.WorkerId);
+            token.Wait(request.Reason);
 
             await _uow.CommitTransactionAsync(cancellationToken);
             return new WaitTokenResult(request.TokenId, true);

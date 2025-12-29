@@ -21,6 +21,7 @@ public interface IBpmnElementHandler
     Task<ElementProcessResult> ProcessAsync(
         Process process,
         Token token,
+        NodeInstance nodeInstance,
         BpmnFlowElement element,
         BpmnRuntimeContext ctx,
         bool isResume,
@@ -29,6 +30,7 @@ public interface IBpmnElementHandler
     Task NavigateAsync(
         Process process,
         Token token,
+        NodeInstance nodeInstance,
         BpmnFlowElement element,
         BpmnRuntimeContext ctx,
         bool isResume,

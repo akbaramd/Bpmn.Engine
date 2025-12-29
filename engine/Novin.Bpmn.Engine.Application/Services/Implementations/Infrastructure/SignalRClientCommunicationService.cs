@@ -48,18 +48,15 @@ public class SignalRClientCommunicationService : IClientCommunicationService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task RouteServiceTaskToClientsAsync(Worker worker, CancellationToken cancellationToken = default)
+    public async Task RouteServiceTaskToClientsAsync(Job? worker, CancellationToken cancellationToken = default)
     {
         if (worker == null)
             throw new ArgumentNullException(nameof(worker));
 
-        if (worker.Type is not ( WorkerType.ServiceTask or WorkerType.UserTask))
-            throw new ArgumentException("Worker must be of type ServiceTask", nameof(worker));
+       
 
-        _logger.LogInformation("Routing worker {WorkerId} to client {ClientId}",
-            worker.Id, worker.Metadata.GetValueOrDefault("targetClientId"));
 
-        var targetClientId = worker.Metadata.GetValueOrDefault("targetClientId")?.ToString();
+        var targetClientId = worker.ClientId;
 
         if (string.IsNullOrEmpty(targetClientId))
         {
@@ -86,8 +83,7 @@ public class SignalRClientCommunicationService : IClientCommunicationService
             }
 
             // Mark worker as started
-            worker.Claim(client.ClientId);
-            worker.MarkStarted(client.ClientId);
+            worker.Start();
             await _workerRepository.UpdateAsync(worker, cancellationToken);
 
             // Create the service task request payload
@@ -99,9 +95,8 @@ public class SignalRClientCommunicationService : IClientCommunicationService
                 TokenId = worker.TokenId,
                 ElementId = worker.ElementId,
                 TaskName = worker.TaskName,
-                Implementation = worker.Metadata.GetValueOrDefault("implementation") ?? "",
-                Metadata = worker.Metadata,
-                Variables = worker.Variables
+                Implementation = worker.Implementation,
+                Variables = worker.Payload
             };
 
             // Send to the specific client via SignalR using the connection ID
@@ -109,7 +104,7 @@ public class SignalRClientCommunicationService : IClientCommunicationService
                 .Client(client.ConnectionId)
                 .SendAsync("ExecuteServiceTask", request, cancellationToken);
 
-            _logger.LogInformation("Worker {WorkerId} sent to client {ClientId} (Connection: {ConnectionId})",
+            _logger.LogInformation("Job {WorkerId} sent to client {ClientId} (Connection: {ConnectionId})",
                 worker.Id, targetClientId, client.ConnectionId);
         }
         catch (Exception ex)
@@ -122,7 +117,7 @@ public class SignalRClientCommunicationService : IClientCommunicationService
 
     public async Task NotifyWorkerCompletedAsync(Guid workerId, Dictionary<string, string>? result = null, string? completedBy = null, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Worker {WorkerId} completed notification", workerId);
+        _logger.LogInformation("Job {WorkerId} completed notification", workerId);
 
         // Send command to complete the worker
         var command = new CompleteWorkerCommand(
@@ -137,7 +132,7 @@ public class SignalRClientCommunicationService : IClientCommunicationService
 
     public async Task NotifyWorkerFailedAsync(Guid workerId, string error, string? completedBy = null, CancellationToken cancellationToken = default)
     {
-        _logger.LogWarning("Worker {WorkerId} failed: {Error}", workerId, error);
+        _logger.LogWarning("Job {WorkerId} failed: {Error}", workerId, error);
 
         // Send command to fail the worker
         var command = new FailWorkerCommand(

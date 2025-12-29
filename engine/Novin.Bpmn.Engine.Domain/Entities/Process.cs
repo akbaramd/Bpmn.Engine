@@ -28,7 +28,7 @@ public sealed class Process : BaseAggregateRoot
     private readonly HashSet<Guid> _tokenIds = new();
     public IReadOnlyCollection<Guid> TokenIds => _tokenIds;
 
-    private readonly HashSet<Guid> _nodeInstanceIds = new();   // ✅ جایگزین ExecutedNode
+    private readonly HashSet<Guid> _nodeInstanceIds = new();   // ✅ جایگزین NodeInstance
     public IReadOnlyCollection<Guid> NodeInstanceIds => _nodeInstanceIds;
 
     // ---- Variables ----
@@ -174,4 +174,90 @@ public sealed class Process : BaseAggregateRoot
         if (State is ProcessState.Completed or ProcessState.Terminated or ProcessState.Failed)
             throw new InvalidOperationException($"Process in {State} is immutable.");
     }
+
+// داخل کلاس Process
+
+public void SetVariable(string key, string value)
+{
+    if (string.IsNullOrWhiteSpace(key))
+        throw new ArgumentException("Variable key cannot be empty.", nameof(key));
+
+    EnsureCanAcceptRuntimeMutations();
+
+    key = key.Trim();
+
+    // Convention: empty => remove
+    if (string.IsNullOrWhiteSpace(value))
+    {
+        if (_variables.Remove(key))
+        {
+            AddDomainEvent(new ProcessVariablesChangedEvent(
+                Id,
+                new Dictionary<string, string>(StringComparer.Ordinal),
+                new List<string> { key }.AsReadOnly(),
+                DateTime.UtcNow));
+        }
+        return;
+    }
+
+    var newValue = value; // already string
+
+    // Idempotent upsert: if unchanged => no event
+    if (_variables.TryGetValue(key, out var oldValue) &&
+        string.Equals(oldValue, newValue, StringComparison.Ordinal))
+        return;
+
+    _variables[key] = newValue;
+
+    AddDomainEvent(new ProcessVariablesChangedEvent(
+        Id,
+        new Dictionary<string, string>(StringComparer.Ordinal) { [key] = newValue },
+        Array.Empty<string>(),
+        DateTime.UtcNow));
+}
+
+public bool HasVariable(string key)
+{
+    if (string.IsNullOrWhiteSpace(key))
+        return false;
+
+    return _variables.ContainsKey(key.Trim());
+}
+
+public string? GetVariable(string key)
+{
+    if (string.IsNullOrWhiteSpace(key))
+        return null;
+
+    key = key.Trim();
+    return _variables.TryGetValue(key, out var v) ? v : null;
+}
+
+// Optional but useful
+public bool TryGetVariable(string key, out string value)
+{
+    value = string.Empty;
+    if (string.IsNullOrWhiteSpace(key))
+        return false;
+
+    return _variables.TryGetValue(key.Trim(), out value!);
+}
+
+public void RemoveVariable(string key)
+{
+    if (string.IsNullOrWhiteSpace(key))
+        return;
+
+    EnsureCanAcceptRuntimeMutations();
+
+    key = key.Trim();
+    if (!_variables.Remove(key))
+        return;
+
+    AddDomainEvent(new ProcessVariablesChangedEvent(
+        Id,
+        new Dictionary<string, string>(StringComparer.Ordinal),
+        new List<string> { key }.AsReadOnly(),
+        DateTime.UtcNow));
+}
 }

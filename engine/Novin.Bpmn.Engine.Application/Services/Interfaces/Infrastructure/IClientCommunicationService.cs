@@ -15,7 +15,7 @@ public interface IClientCommunicationService
     /// <param name="worker">The worker to route</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>A task representing the asynchronous operation</returns>
-    Task RouteServiceTaskToClientsAsync(Worker worker, CancellationToken cancellationToken = default);
+    Task RouteServiceTaskToClientsAsync(Job? worker, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Notifies that a worker has been completed

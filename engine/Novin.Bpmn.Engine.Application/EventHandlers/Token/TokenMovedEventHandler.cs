@@ -1,13 +1,15 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Novin.Bpmn.Engine.Application.Commands.ProcessToken;
+using Novin.Bpmn.Engine.Application.Commands.NodeDispatch;
+using Novin.Bpmn.Engine.Application.Commands.NodeInstances;
 using Novin.Bpmn.Engine.Domain.Events;
 
 namespace Novin.Bpmn.Engine.Application.EventHandlers;
 
 /// <summary>
-/// Handles TokenMovedEvent and triggers processing at the new element.
-/// This is the PRIMARY trigger for element processing after movement.
+/// Reacts to TokenMovedEvent:
+/// 1) Creates NodeInstance at new element
+/// 2) Dispatches node processing
 /// </summary>
 public sealed class TokenMovedEventHandler : INotificationHandler<TokenMovedEvent>
 {
@@ -16,25 +18,38 @@ public sealed class TokenMovedEventHandler : INotificationHandler<TokenMovedEven
 
     public TokenMovedEventHandler(
         IMediator mediator,
-        ILogger<TokenMovedEventHandler> _logger)
+        ILogger<TokenMovedEventHandler> logger)
     {
         _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
-        this._logger = _logger ?? throw new ArgumentNullException(nameof(_logger));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async System.Threading.Tasks.Task Handle(TokenMovedEvent notification, CancellationToken ct)
+    public async Task Handle(TokenMovedEvent e, CancellationToken ct)
     {
         _logger.LogInformation(
-            "[TOKEN-MOVED] TokenId={TokenId} ProcessId={ProcessId} From={FromElementId} To={ToElementId} ViaFlow={ViaFlowId} IsExecutable={IsExecutable}",
-            notification.TokenId,
-            notification.ProcessId,
-            notification.FromElementId,
-            notification.ToElementId,
-            notification.ViaFlowId,
-            notification.IsExecutable);
+            "[TOKEN-MOVED] TokenId={TokenId} ProcessId={ProcessId} From={From} To={To} Executable={Executable}",
+            e.TokenId, e.ProcessId, e.FromElementId, e.ToElementId, e.IsExecutable);
 
-        // Process token at the new element
-        var command = new ProcessTokenCommand(notification.ProcessId, notification.TokenId);
-        await _mediator.Send(command, ct);
+        // Trace / non-executable tokens DO NOT create nodes
+        if (!e.IsExecutable)
+        {
+            _logger.LogDebug(
+                "[TOKEN-MOVED] Skip node creation (non-executable token). TokenId={TokenId}",
+                e.TokenId);
+            return;
+        }
+
+        // 1) Create node for the new element
+        var nodeId = await _mediator.Send(new CreateNodeInstanceCommand(
+            ProcessId: e.ProcessId,
+            TokenId: e.TokenId,
+            ElementId: e.ToElementId,
+            ScopeId: e.ScopeId,
+            ActivityInstanceId: e.ActivityInstanceId,
+            ArrivedViaFlowId: e.ViaFlowId
+        ), ct);
+
+        // 2) Dispatch node processing
+        await _mediator.Send(new DispatchNodeProcessCommand(nodeId), ct);
     }
 }

@@ -16,20 +16,20 @@ public class EfWorkerRepository : IWorkerRepository
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task<Worker?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Job?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await _context.Workers.FindAsync(new object[] { id }, cancellationToken);
+        return await _context.Jobs.FindAsync(new object[] { id }, cancellationToken);
     }
 
-    public async Task<IEnumerable<Worker>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<Job?>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        return await _context.Workers.ToListAsync(cancellationToken);
+        return await _context.Jobs.ToListAsync(cancellationToken);
     }
 
-    public async Task AddAsync(Worker aggregate, CancellationToken cancellationToken = default)
+    public async Task AddAsync(Job? aggregate, CancellationToken cancellationToken = default)
     {
-        await _context.Workers.AddAsync(aggregate, cancellationToken);
-        _logger.LogInformation("Worker added: {WorkerId}", aggregate.Id);
+        await _context.Jobs.AddAsync(aggregate, cancellationToken);
+        _logger.LogInformation("Job added: {WorkerId}", aggregate.Id);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
@@ -37,66 +37,47 @@ public class EfWorkerRepository : IWorkerRepository
         var worker = await GetByIdAsync(id, cancellationToken);
         if (worker != null)
         {
-            _context.Workers.Remove(worker);
+            _context.Jobs.Remove(worker);
             await _context.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Worker deleted: {WorkerId}", id);
+            _logger.LogInformation("Job deleted: {WorkerId}", id);
         }
     }
 
-    public async Task<IEnumerable<Worker>> GetByProcessIdAsync(Guid processId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<Job?>> GetByProcessIdAsync(Guid processId, CancellationToken cancellationToken = default)
     {
-        return await _context.Workers
+        return await _context.Jobs
             .Where(w => w.ProcessId == processId)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IEnumerable<Worker>> GetByStatusAsync(WorkerStatus status, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<Job?>> GetByStatusAsync(JobStatus status, CancellationToken cancellationToken = default)
     {
-        return await _context.Workers
+        return await _context.Jobs
             .Where(w => w.Status == status)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IEnumerable<Worker>> GetByTypeAsync(WorkerType type, CancellationToken cancellationToken = default)
+
+
+   
+
+    public async Task<Job?> GetByTokenIdAsync(Guid tokenId, CancellationToken cancellationToken = default)
     {
-        return await _context.Workers
-            .Where(w => w.Type == type)
-            .ToListAsync(cancellationToken);
-    }
-
-    public async Task<IEnumerable<Worker>> GetPendingWorkersAsync(string? assignee = null, string? clientId = null, CancellationToken cancellationToken = default)
-    {
-        var query = _context.Workers.Where(w => w.Status == WorkerStatus.Pending);
-
-        if (!string.IsNullOrEmpty(assignee))
-        {
-            query = query.Where(w => w.Type == WorkerType.UserTask &&
-                                    w.Metadata.ContainsKey("assignee") &&
-                                    w.Metadata["assignee"].ToString() == assignee);
-        }
-
-        if (!string.IsNullOrEmpty(clientId))
-        {
-            query = query.Where(w => w.Type == WorkerType.ServiceTask &&
-                                    w.Metadata.ContainsKey("targetClientId") &&
-                                    (w.Metadata["targetClientId"].ToString() == clientId ||
-                                     w.Metadata["targetClientId"] == null)); // Broadcast tasks
-        }
-
-        return await query.ToListAsync(cancellationToken);
-    }
-
-    public async Task<Worker?> GetByTokenIdAsync(Guid tokenId, CancellationToken cancellationToken = default)
-    {
-        return await _context.Workers
+        return await _context.Jobs
             .FirstOrDefaultAsync(w => w.TokenId == tokenId, cancellationToken);
     }
 
-    public async Task UpdateAsync(Worker worker, CancellationToken cancellationToken = default)
+    public async Task UpdateAsync(Job? worker, CancellationToken cancellationToken = default)
     {
-        _context.Workers.Update(worker);
+        _context.Jobs.Update(worker);
         await _context.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Worker updated: {WorkerId}, Status: {Status}",
+        _logger.LogInformation("Job updated: {WorkerId}, Status: {Status}",
             worker.Id, worker.Status);
+    }
+
+    public   async Task<Job?> GetByTokenAndElementAsync(Guid tokenId, string elementId, CancellationToken ct)
+    {
+        return await _context.Jobs
+            .FirstOrDefaultAsync(w => w.TokenId == tokenId && w.ElementId == elementId, ct);
     }
 }

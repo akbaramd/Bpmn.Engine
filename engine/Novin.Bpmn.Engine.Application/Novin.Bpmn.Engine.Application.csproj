@@ -20,4 +20,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Novin.Bpmn.Engine.Domain\Novin.Bpmn.Engine.Domain.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="EventHandlers\Worker\" />
+    <Folder Include="Features\Boundaries\" />
+  </ItemGroup>
 </Project>

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -9,6 +9,7 @@ public sealed record AssignUserTaskCommand(
     Guid WorkerId,
     string? Assignee,
     string? CandidateGroups,
+    string? CandidateUsers,
     int? Priority,
     DateTime? DueDateUtc,
     string AssignedBy

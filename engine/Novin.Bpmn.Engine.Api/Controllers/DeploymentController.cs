@@ -1,95 +1,119 @@
 using Microsoft.AspNetCore.Mvc;
 using MediatR;
-using Novin.Bpmn.Engine.Application.Commands.CreateProcessInstance;
 using Novin.Bpmn.Engine.Application.Commands.StartProcess;
 using Novin.Bpmn.Engine.Application.Queries.GetDeployment;
 using Novin.Bpmn.Engine.Application.Queries.GetDeployments;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Domain.Entities;
+
 using DeploymentDto = Novin.Bpmn.Engine.Application.Queries.GetDeployment.DeploymentDto;
 
 namespace Novin.Bpmn.Engine.Api.Controllers;
 
 /// <summary>
-/// Controller for managing BPMN process deployments
+/// Controller for managing BPMN deployments.
+/// ✅ POST creates a deployment ONLY (does NOT start a process).
+/// ✅ Starting a process is a separate endpoint: POST /api/deployments/{id}/start
 /// </summary>
 [ApiController]
 [Route("api/deployments")]
-public class DeploymentController : ControllerBase
+public sealed class DeploymentController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly IDeploymentRepository _deploymentRepository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IUnitOfWork _uow;
     private readonly ILogger<DeploymentController> _logger;
 
     public DeploymentController(
         IMediator mediator,
         IDeploymentRepository deploymentRepository,
-        IUnitOfWork unitOfWork,
+        IUnitOfWork uow,
         ILogger<DeploymentController> logger)
     {
         _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
         _deploymentRepository = deploymentRepository ?? throw new ArgumentNullException(nameof(deploymentRepository));
-        _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
+        _uow = uow ?? throw new ArgumentNullException(nameof(uow));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    // ----------------------------------------------------------------------
+    // CREATE DEPLOYMENT (NO START)
+    // ----------------------------------------------------------------------
+
     /// <summary>
-    /// Create and start a process instance for an existing deployment.
+    /// Create a deployment (no process instance is started here).
     /// </summary>
-    /// <returns>Start result with process ID.</returns>
     [HttpPost]
-    [ProducesResponseType(typeof(StartProcessResult), 200)]
+    [ProducesResponseType(typeof(DeploymentDto), 201)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult<StartProcessResult>> CreateAndStartProcess([FromBody] CreateAndStartRequest request)
+    public async Task<ActionResult<DeploymentDto>> CreateDeployment(
+        [FromBody] CreateDeploymentRequest request,
+        CancellationToken ct = default)
     {
-        if (request == null)
+        if (request is null)
             return BadRequest(new { error = "Request body is required." });
+
+        if (request.ProjectId == Guid.Empty)
+            return BadRequest(new { error = "ProjectId is required." });
+
+        if (string.IsNullOrWhiteSpace(request.DeploymentKey))
+            return BadRequest(new { error = "DeploymentKey is required." });
+
+        if (string.IsNullOrWhiteSpace(request.BpmnXml))
+            return BadRequest(new { error = "BpmnXml is required." });
 
         try
         {
-            _logger.LogInformation("Creating process instance for deployment {DeploymentId} process {ProcessBpmnId}", request.DeploymentId, request.ProcessBpmnId);
+            Deployment? created = null;
 
-            var createCommand = new CreateProcessInstanceCommand(
-                request.DeploymentId,
-                request.ProcessBpmnId,
-                request.ProcessName,
-                request.InitialVariables,
-                request.BusinessKey);
+            await _uow.ExecuteInTransactionAsync(async trxCt =>
+            {
+                created = Deployment.Create(
+                    projectId: request.ProjectId,
+                    deploymentKey: request.DeploymentKey.Trim(),
+                    bpmnXml: request.BpmnXml,
+                    label: string.IsNullOrWhiteSpace(request.Label) ? null : request.Label.Trim());
 
-            var createResult = await _mediator.Send(createCommand);
+                await _deploymentRepository.AddAsync(created, trxCt);
 
-            var startCommand = new StartProcessCommand(createResult.ProcessId);
-            var startResult = await _mediator.Send(startCommand);
+                // IMPORTANT: if your ExecuteInTransactionAsync already SaveChanges, you can remove this.
 
-            _logger.LogInformation("Process instance created and started. ProcessId={ProcessId}", startResult.ProcessId);
+                _logger.LogInformation(
+                    "Deployment created. DeploymentId={DeploymentId} Key={Key} ProjectId={ProjectId}",
+                    created.Id, created.DeploymentKey, created.ProjectId);
+            }, ct);
 
-            return CreatedAtAction(nameof(GetDeployment), new { id = request.DeploymentId }, startResult);
+            return CreatedAtAction(nameof(GetDeployment), new { id = created!.Id }, MapToDto(created!));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating/starting process for deployment {DeploymentId}", request.DeploymentId);
+            _logger.LogError(ex, "Error creating deployment. Key={Key} ProjectId={ProjectId}", request.DeploymentKey, request.ProjectId);
             return StatusCode(500, new { error = ex.Message });
         }
     }
 
+    // ----------------------------------------------------------------------
+    // START PROCESS FROM DEPLOYMENT (SEPARATE ENDPOINT)
+    // ----------------------------------------------------------------------
+
     /// <summary>
-    /// Get all deployments
-    /// </summary>
-    /// <param name="deploymentKey">Optional filter by deployment key</param>
-    /// <param name="activeOnly">Filter only active deployments</param>
-    /// <returns>List of deployments</returns>
+    /// Start a new process instance using an existing deployment.
+
+    // READ
+    // ----------------------------------------------------------------------
+
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<DeploymentDto>), 200)]
     public async Task<ActionResult<IEnumerable<DeploymentDto>>> GetDeployments(
         [FromQuery] string? deploymentKey = null,
-        [FromQuery] bool activeOnly = false)
+        [FromQuery] bool activeOnly = false,
+        CancellationToken ct = default)
     {
         try
         {
             var query = new GetDeploymentsQuery(deploymentKey, activeOnly);
-            var result = await _mediator.Send(query);
+            var result = await _mediator.Send(query, ct);
             return Ok(result);
         }
         catch (Exception ex)
@@ -99,20 +123,15 @@ public class DeploymentController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get deployment by ID
-    /// </summary>
-    /// <param name="id">Deployment ID</param>
-    /// <returns>Deployment details</returns>
-    [HttpGet("{id}")]
+    [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(DeploymentDto), 200)]
     [ProducesResponseType(404)]
-    public async Task<ActionResult<DeploymentDto>> GetDeployment(Guid id)
+    public async Task<ActionResult<DeploymentDto>> GetDeployment(Guid id, CancellationToken ct = default)
     {
         try
         {
             var query = new GetDeploymentQuery(id);
-            var result = await _mediator.Send(query);
+            var result = await _mediator.Send(query, ct);
 
             if (result == null)
                 return NotFound(new { error = $"Deployment {id} not found" });
@@ -126,19 +145,14 @@ public class DeploymentController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get deployment BPMN XML
-    /// </summary>
-    /// <param name="id">Deployment ID</param>
-    /// <returns>BPMN XML content</returns>
-    [HttpGet("{id}/xml")]
+    [HttpGet("{id:guid}/xml")]
     [ProducesResponseType(typeof(string), 200)]
     [ProducesResponseType(404)]
-    public async Task<ActionResult<string>> GetDeploymentXml(Guid id)
+    public async Task<ActionResult<string>> GetDeploymentXml(Guid id, CancellationToken ct = default)
     {
         try
         {
-            var deployment = await _deploymentRepository.GetByIdAsync(id);
+            var deployment = await _deploymentRepository.GetByIdAsync(id, ct);
             if (deployment == null)
                 return NotFound(new { error = $"Deployment {id} not found" });
 
@@ -151,14 +165,9 @@ public class DeploymentController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get deployments by deployment key
-    /// </summary>
-    /// <param name="deploymentKey">Deployment key</param>
-    /// <returns>List of deployments for the deployment key</returns>
     [HttpGet("by-key/{deploymentKey}")]
     [ProducesResponseType(typeof(IEnumerable<DeploymentDto>), 200)]
-    public async Task<ActionResult<IEnumerable<DeploymentDto>>> GetDeploymentsByKey(string deploymentKey)
+    public async Task<ActionResult<IEnumerable<DeploymentDto>>> GetDeploymentsByKey(string deploymentKey, CancellationToken ct = default)
     {
         try
         {
@@ -172,159 +181,38 @@ public class DeploymentController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Delete a deployment (soft delete - mark as inactive)
-    /// </summary>
-    /// <param name="id">Deployment ID</param>
-    /// <returns>Success status</returns>
-    [HttpDelete("{id}")]
-    [ProducesResponseType(204)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> DeleteDeployment(Guid id)
-    {
-        try
-        {
-            await _unitOfWork.ExecuteInTransactionAsync(async trxCt =>
-            {
-                var deployment = await _deploymentRepository.GetByIdAsync(id, trxCt);
-                if (deployment == null)
-                    throw new InvalidOperationException($"Deployment {id} not found");
+    // ----------------------------------------------------------------------
+    // UPDATE
+    // ----------------------------------------------------------------------
 
-                // Mark as inactive instead of hard delete
-                deployment.Deactivate();
-                await _deploymentRepository.UpdateAsync(deployment, trxCt);
-
-                _logger.LogInformation("Deployment {Id} marked as inactive", id);
-            }, CancellationToken.None);
-
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Deployment not found: {Id}", id);
-            return NotFound(new { error = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting deployment {Id}", id);
-            return StatusCode(500, new { error = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Activate a deployment
-    /// </summary>
-    /// <param name="id">Deployment ID</param>
-    /// <returns>Success status</returns>
-    [HttpPost("{id}/activate")]
-    [ProducesResponseType(204)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> ActivateDeployment(Guid id, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            await _unitOfWork.ExecuteInTransactionAsync(async trxCt =>
-            {
-                var deployment = await _deploymentRepository.GetByIdAsync(id, trxCt);
-                if (deployment == null)
-                    throw new InvalidOperationException($"Deployment {id} not found");
-
-                deployment.Activate();
-                await _deploymentRepository.UpdateAsync(deployment, trxCt);
-
-                _logger.LogInformation("Deployment {Id} activated", id);
-            }, cancellationToken);
-
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Deployment not found: {Id}", id);
-            return NotFound(new { error = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error activating deployment {Id}", id);
-            return StatusCode(500, new { error = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Deactivate a deployment
-    /// </summary>
-    /// <param name="id">Deployment ID</param>
-    /// <returns>Success status</returns>
-    [HttpPost("{id}/deactivate")]
-    [ProducesResponseType(204)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> DeactivateDeployment(Guid id, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            await _unitOfWork.ExecuteInTransactionAsync(async trxCt =>
-            {
-                var deployment = await _deploymentRepository.GetByIdAsync(id, trxCt);
-                if (deployment == null)
-                    throw new InvalidOperationException($"Deployment {id} not found");
-
-                deployment.Deactivate();
-                await _deploymentRepository.UpdateAsync(deployment, trxCt);
-
-                _logger.LogInformation("Deployment {Id} deactivated", id);
-            }, cancellationToken);
-
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Deployment not found: {Id}", id);
-            return NotFound(new { error = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deactivating deployment {Id}", id);
-            return StatusCode(500, new { error = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Update an existing deployment
-    /// </summary>
-    /// <param name="id">Deployment ID</param>
-    /// <param name="request">Update request</param>
-    /// <returns>Updated deployment information</returns>
-    [HttpPut("{id}")]
+    [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(DeploymentDto), 200)]
     [ProducesResponseType(404)]
     public async Task<ActionResult<DeploymentDto>> UpdateDeployment(
         Guid id,
-        [FromBody] UpdateDeploymentRequest request)
+        [FromBody] UpdateDeploymentRequest request,
+        CancellationToken ct = default)
     {
         try
         {
             DeploymentDto? result = null;
-            await _unitOfWork.ExecuteInTransactionAsync(async trxCt =>
+
+            await _uow.ExecuteInTransactionAsync(async trxCt =>
             {
                 var deployment = await _deploymentRepository.GetByIdAsync(id, trxCt);
                 if (deployment == null)
-                {
                     throw new InvalidOperationException($"Deployment {id} not found");
-                }
 
-                // Update allowed fields
                 if (!string.IsNullOrWhiteSpace(request.BpmnXml))
-                {
                     deployment.UpdateBpmnXml(request.BpmnXml);
-                }
 
                 if (!string.IsNullOrWhiteSpace(request.Label))
-                {
-                    deployment.UpdateLabel(request.Label);
-                }
+                    deployment.UpdateLabel(request.Label.Trim());
 
                 await _deploymentRepository.UpdateAsync(deployment, trxCt);
+
                 result = MapToDto(deployment);
-            }, CancellationToken.None);
+            }, ct);
 
             return Ok(result);
         }
@@ -340,47 +228,35 @@ public class DeploymentController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Update the BPMN XML definition of a deployment
-    /// </summary>
-    /// <param name="id">Deployment ID</param>
-    /// <param name="request">XML update request</param>
-    /// <returns>Updated deployment information</returns>
-    [HttpPut("{id}/xml")]
+    [HttpPut("{id:guid}/xml")]
     [ProducesResponseType(typeof(DeploymentDto), 200)]
     [ProducesResponseType(404)]
     public async Task<ActionResult<DeploymentDto>> UpdateDeploymentXml(
         Guid id,
-        [FromBody] UpdateDeploymentXmlRequest request)
+        [FromBody] UpdateDeploymentXmlRequest request,
+        CancellationToken ct = default)
     {
+        if (request is null || string.IsNullOrWhiteSpace(request.BpmnXml))
+            return BadRequest(new { error = "BpmnXml cannot be empty." });
+
         try
         {
             DeploymentDto? result = null;
-            await _unitOfWork.ExecuteInTransactionAsync(async trxCt =>
+
+            await _uow.ExecuteInTransactionAsync(async trxCt =>
             {
                 var deployment = await _deploymentRepository.GetByIdAsync(id, trxCt);
                 if (deployment == null)
-                {
                     throw new InvalidOperationException($"Deployment {id} not found");
-                }
-
-                if (string.IsNullOrWhiteSpace(request.BpmnXml))
-                {
-                    throw new ArgumentException("BPMN XML cannot be null or empty");
-                }
 
                 deployment.UpdateBpmnXml(request.BpmnXml);
 
                 await _deploymentRepository.UpdateAsync(deployment, trxCt);
+
                 result = MapToDto(deployment);
-            }, CancellationToken.None);
+            }, ct);
 
             return Ok(result);
-        }
-        catch (ArgumentException ex)
-        {
-            _logger.LogWarning(ex, "Invalid BPMN XML for deployment {Id}", id);
-            return BadRequest(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -394,39 +270,144 @@ public class DeploymentController : ControllerBase
         }
     }
 
+    // ----------------------------------------------------------------------
+    // ACTIVATE / DEACTIVATE / DELETE (SOFT)
+    // ----------------------------------------------------------------------
+
+    [HttpPost("{id:guid}/activate")]
+    [ProducesResponseType(204)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> ActivateDeployment(Guid id, CancellationToken ct = default)
+    {
+        try
+        {
+            await _uow.ExecuteInTransactionAsync(async trxCt =>
+            {
+                var deployment = await _deploymentRepository.GetByIdAsync(id, trxCt);
+                if (deployment == null)
+                    throw new InvalidOperationException($"Deployment {id} not found");
+
+                deployment.Activate();
+                await _deploymentRepository.UpdateAsync(deployment, trxCt);
+            }, ct);
+
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Deployment not found: {Id}", id);
+            return NotFound(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error activating deployment {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("{id:guid}/deactivate")]
+    [ProducesResponseType(204)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> DeactivateDeployment(Guid id, CancellationToken ct = default)
+    {
+        try
+        {
+            await _uow.ExecuteInTransactionAsync(async trxCt =>
+            {
+                var deployment = await _deploymentRepository.GetByIdAsync(id, trxCt);
+                if (deployment == null)
+                    throw new InvalidOperationException($"Deployment {id} not found");
+
+                deployment.Deactivate();
+                await _deploymentRepository.UpdateAsync(deployment, trxCt);
+            }, ct);
+
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Deployment not found: {Id}", id);
+            return NotFound(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deactivating deployment {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpDelete("{id:guid}")]
+    [ProducesResponseType(204)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> DeleteDeployment(Guid id, CancellationToken ct = default)
+    {
+        try
+        {
+            await _uow.ExecuteInTransactionAsync(async trxCt =>
+            {
+                var deployment = await _deploymentRepository.GetByIdAsync(id, trxCt);
+                if (deployment == null)
+                    throw new InvalidOperationException($"Deployment {id} not found");
+
+                deployment.Deactivate(); // soft delete
+                await _deploymentRepository.UpdateAsync(deployment, trxCt);
+            }, ct);
+
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Deployment not found: {Id}", id);
+            return NotFound(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting deployment {Id}", id);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    // ----------------------------------------------------------------------
+    // DTO mapping
+    // ----------------------------------------------------------------------
+
     private static DeploymentDto MapToDto(Deployment deployment)
     {
         var label = string.IsNullOrWhiteSpace(deployment.Label) ? deployment.DeploymentKey : deployment.Label;
         return new DeploymentDto(
-        deployment.Id,
-        deployment.DeploymentKey,
+            deployment.Id,
+            deployment.DeploymentKey,
             label,
-        deployment.Version,
-        deployment.BpmnXml,
-        deployment.DeployedAt,
-        deployment.IsActive
-    );
-}
+            deployment.Version,
+            deployment.BpmnXml,
+            deployment.DeployedAtUtc,
+            deployment.IsActive
+        );
+    }
 }
 
-public sealed record CreateAndStartRequest(
-    Guid DeploymentId,
+// ----------------------------------------------------------------------
+// Requests
+// ----------------------------------------------------------------------
+
+public sealed record CreateDeploymentRequest(
+    Guid ProjectId,
+    string DeploymentKey,
+    string BpmnXml,
+    string? Label = null
+);
+
+public sealed record StartProcessFromDeploymentRequest(
     string ProcessBpmnId,
-    string ProcessName,
-    Dictionary<string, object?>? InitialVariables = null,
-    string? BusinessKey = null);
+    string? BusinessKey = null,
+    IDictionary<string, object?>? Variables = null
+);
 
-/// <summary>
-/// Request to update a deployment
-/// </summary>
-public record UpdateDeploymentRequest(
+public sealed record UpdateDeploymentRequest(
     string? BpmnXml = null,
     string? Label = null
 );
 
-/// <summary>
-/// Request to update deployment XML
-/// </summary>
-public record UpdateDeploymentXmlRequest(
+public sealed record UpdateDeploymentXmlRequest(
     string BpmnXml
 );

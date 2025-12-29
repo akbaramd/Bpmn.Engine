@@ -51,6 +51,10 @@ public class EfDeploymentRepository : IDeploymentRepository
         }
     }
 
+
+    public Deployment? GetById(Guid deploymentId)
+        => _context.Set<Deployment>().SingleOrDefault(x => x.Id == deploymentId);
+
     public async Task<Deployment?> GetByDeploymentKeyAsync(string deploymentKey, CancellationToken cancellationToken = default)
     {
         return await _context.Deployments

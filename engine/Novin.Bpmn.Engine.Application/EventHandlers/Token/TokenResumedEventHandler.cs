@@ -1,6 +1,5 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.Extensions.Logging;
-using Novin.Bpmn.Engine.Application.Commands.ProcessToken;
 using Novin.Bpmn.Engine.Domain.Events;
 
 namespace Novin.Bpmn.Engine.Application.EventHandlers;
@@ -33,10 +32,5 @@ public sealed class TokenResumedEventHandler : INotificationHandler<TokenResumed
 
         // Process token at current element (resume semantics)
         // Pass IsResume=true to indicate this is a resume operation
-        var command = new ProcessTokenCommand(
-            ProcessId: notification.ProcessId, 
-            TokenId: notification.TokenId,
-            IsResume: true);
-        await _mediator.Send(command, ct);
     }
 }

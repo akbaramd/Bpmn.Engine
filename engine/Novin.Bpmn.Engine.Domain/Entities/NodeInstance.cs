@@ -38,8 +38,9 @@ public sealed class NodeInstance : BaseAggregateRoot
     public Guid? ActivityInstanceId { get; private set; }
     public string? ArrivedViaFlowId { get; private set; }
 
-    /// <summary>Worker correlation if this node waits for external/user completion</summary>
+    /// <summary>Job correlation if this node waits for external/user completion</summary>
     public Guid? WorkerId { get; private set; }
+    public Guid? UserTaskId { get; private set; }
 
     /// <summary>Failure detail (revealed to ops/UI if needed)</summary>
     public string? ErrorMessage { get; private set; }
@@ -100,19 +101,21 @@ public sealed class NodeInstance : BaseAggregateRoot
         ));
     }
 
-    /// <summary>
-    /// Put node in waiting state, correlated to a worker.
+// <summary>
+    /// Put node in waiting state, correlated to a worker/job.
     /// </summary>
-    public void Wait(Guid workerId, string? reason = null)
+    public void WaitForWorker(Guid workerId, string? reason = null)
     {
         if (workerId == Guid.Empty) throw new ArgumentException("WorkerId cannot be empty.", nameof(workerId));
         if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
 
-        // If still Created, auto-start before waiting (safe UX)
         if (State == NodeState.Created)
             Start();
 
+        // Correlation
         WorkerId = workerId;
+        UserTaskId = null;
+
         State = NodeState.Waiting;
 
         AddDomainEvent(new NodeWaitingDomainEvent(
@@ -121,11 +124,41 @@ public sealed class NodeInstance : BaseAggregateRoot
             TokenId: TokenId,
             ElementId: ElementId,
             WorkerId: workerId,
+            UserTaskId: null,
             Reason: string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
             OccurredAtUtc: DateTime.UtcNow
         ));
     }
 
+    /// <summary>
+    /// Put node in waiting state, correlated to a UserTaskInstance (human task).
+    /// Optionally also stores WorkerId if your engine treats UserTask as a kind of worker record.
+    /// </summary>
+    public void WaitForUserTask(Guid userTaskId, Guid? workerId = null, string? reason = null)
+    {
+        if (userTaskId == Guid.Empty) throw new ArgumentException("UserTaskId cannot be empty.", nameof(userTaskId));
+        if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
+
+        if (State == NodeState.Created)
+            Start();
+
+        // Correlation
+        UserTaskId = userTaskId;
+        WorkerId = workerId is { } w && w != Guid.Empty ? w : null;
+
+        State = NodeState.Waiting;
+
+        AddDomainEvent(new NodeWaitingDomainEvent(
+            NodeId: Id,
+            ProcessId: ProcessId,
+            TokenId: TokenId,
+            ElementId: ElementId,
+            WorkerId: WorkerId,
+            UserTaskId: userTaskId,
+            Reason: string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
+            OccurredAtUtc: DateTime.UtcNow
+        ));
+    }
     /// <summary>
     /// Resume node from waiting back to processing.
     /// </summary>
@@ -295,7 +328,8 @@ public sealed record NodeWaitingDomainEvent(
     Guid ProcessId,
     Guid TokenId,
     string ElementId,
-    Guid WorkerId,
+    Guid? WorkerId,
+    Guid? UserTaskId,
     string? Reason,
     DateTime OccurredAtUtc
 ) : IDomainEvent;

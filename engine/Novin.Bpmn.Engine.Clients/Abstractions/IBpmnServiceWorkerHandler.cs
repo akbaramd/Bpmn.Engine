@@ -28,7 +28,7 @@ public abstract class BpmnWorkerHandler
 }
 
 /// <summary>
-/// Context representing a worker execution environment, similar to the Worker entity
+/// Context representing a worker execution environment, similar to the Job entity
 /// All fields are strings, Variables use BonyanVariables
 /// </summary>
 public class WorkerContext
@@ -59,22 +59,22 @@ public class WorkerContext
     public string TaskName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Worker implementation type
+    /// Job implementation type
     /// </summary>
     public string Implementation { get; set; } = string.Empty;
 
     /// <summary>
-    /// Worker type (comes from the worker configuration)
+    /// Job type (comes from the worker configuration)
     /// </summary>
     public string WorkerType { get; set; } = string.Empty;
 
     /// <summary>
-    /// Worker metadata (assignee, priority, due date, etc.) - all values as strings
+    /// Job metadata (assignee, priority, due date, etc.) - all values as strings
     /// </summary>
     public Dictionary<string, string> Metadata { get; set; } = new();
 
     /// <summary>
-    /// Worker variables/result data - uses BonyanVariables with typed setter/getter methods
+    /// Job variables/result data - uses BonyanVariables with typed setter/getter methods
     /// </summary>
     public BonyanVariables Variables { get; set; } = new();
 

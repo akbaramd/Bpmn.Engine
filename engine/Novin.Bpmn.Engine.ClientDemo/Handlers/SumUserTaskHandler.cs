@@ -49,7 +49,7 @@ public class SumUserTaskHandler : BpmnWorkerHandler
         await Task.Delay(100, cancellationToken);
 
         _logger.LogInformation(
-            "UserTask input collected successfully for Worker {WorkerId}",
+            "UserTask input collected successfully for Job {WorkerId}",
             workItem.WorkerId);
     }
 

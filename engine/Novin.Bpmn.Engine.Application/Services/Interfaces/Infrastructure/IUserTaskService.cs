@@ -5,5 +5,10 @@ namespace Novin.Bpmn.Engine.Application.Services;
 
 public interface IUserTaskService
 {
-    Task<Guid> CreateAsync(Process process, Token token, BpmnUserTask ut, CancellationToken ct);
+    Task<Guid> CreateOrGetAsync(
+        Process process,
+        Token token,
+        NodeInstance node,
+        BpmnUserTask userTask,
+        CancellationToken ct);
 }

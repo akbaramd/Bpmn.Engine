@@ -3,7 +3,7 @@
 ## ✅ موارد پیاده‌سازی شده (مطابق با توصیه‌ها)
 
 ### 1. Boundary Subscription Runtime ✅
-- `BoundarySubscription` entity ایجاد شده
+- `BoundaryEventSubscription` entity ایجاد شده
 - تمام فیلدهای مورد نیاز (Timer, Message, Error, ActivityInstanceId) وجود دارد
 - Version برای optimistic concurrency
 
@@ -74,7 +74,7 @@ public sealed class BoundaryTimerSubscriptionCreatedEventHandler
 
 **راه حل:** در repository implementation:
 ```csharp
-public async Task<IEnumerable<BoundarySubscription>> GetActiveByActivityInstanceAsync(
+public async Task<IEnumerable<BoundaryEventSubscription>> GetActiveByActivityInstanceAsync(
     Guid activityInstanceId, 
     CancellationToken ct)
 {
@@ -97,7 +97,7 @@ public async Task<IEnumerable<BoundarySubscription>> GetActiveByActivityInstance
 
 ## 📋 چک‌لیست نهایی
 
-- [x] BoundarySubscription entity
+- [x] BoundaryEventSubscription entity
 - [x] ActivityInstanceId در Token
 - [x] BoundarySubscriptionManager (TokenMovedEvent handler)
 - [x] IBoundaryTimerScheduler interface

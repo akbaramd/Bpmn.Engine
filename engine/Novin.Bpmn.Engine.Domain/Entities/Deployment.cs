@@ -48,6 +48,8 @@ public sealed class Deployment : BaseAggregateRoot
         DeployedAtUtc = DateTime.UtcNow;
         Version = 1;
         IsActive = true;
+        UpdatedAtUtc = DeployedAtUtc;
+        
     }
 
     public static Deployment Create(

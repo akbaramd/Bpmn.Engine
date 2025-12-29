@@ -165,10 +165,10 @@ public sealed class TestScenarioRunner
         await _uow.BeginTransactionAsync(ct);
         try
         {
-            var deployment = new Deployment(
+            var deployment =  Deployment.Create(
+                Guid.Empty, 
                 deploymentKey: scenario.ProcessKey,
                 bpmnXml: bpmnXml,
-                version: nextVersion,
                 label: $"{scenario.Name} - {scenario.BpmnFileName}");
 
             await _uow.Deployments.AddAsync(deployment, ct);

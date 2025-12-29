@@ -6,7 +6,7 @@ This library provides client-side functionality for connecting to and communicat
 
 - **Auto-Connect Background Service**: Automatically connects to BPMN engine on application startup
 - **SignalR-based Communication**: Real-time bidirectional communication with BPMN engines
-- **Service Worker Discovery**: Automatically discovers and logs all registered workers on startup
+- **Service Job Discovery**: Automatically discovers and logs all registered workers on startup
 - **Automatic Reconnection**: Built-in connection management with automatic reconnection
 - **Client Registration**: Automatic registration with the engine upon connection
 - **Work Item Processing**: Process work items received from the engine

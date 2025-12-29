@@ -30,15 +30,13 @@ public sealed class GetIncidentsQueryHandler : IRequestHandler<GetIncidentsQuery
             ProcessId = i.ProcessId,
             TokenId = i.TokenId,
             ElementId = i.ElementId,
-            Type = i.Type.ToString(),
             ErrorCode = i.ErrorCode,
             Message = i.Message,
-            StackTrace = i.StackTrace,
             Status = i.Status.ToString(),
-            Retries = i.Retries,
-            CreatedAt = i.CreatedAt,
-            LastOccurredAt = i.LastOccurredAt,
-            ResolvedAt = i.ResolvedAt
+            RetryCount = i.RetryCount,
+            CreatedAt = i.CreatedAtUtc,
+            LastOccurredAt = i.LastOccurredAtUtc,
+            ResolvedAt = i.ResolvedAtUtc
         });
     }
 }

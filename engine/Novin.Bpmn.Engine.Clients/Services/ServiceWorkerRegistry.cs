@@ -19,7 +19,7 @@ public class ServiceWorkerRegistry : IServiceWorkerRegistry
             throw new ArgumentNullException(nameof(config));
 
         if (string.IsNullOrWhiteSpace(config.WorkerId))
-            throw new ArgumentException("Worker ID cannot be null or empty", nameof(config.WorkerId));
+            throw new ArgumentException("Job ID cannot be null or empty", nameof(config.WorkerId));
 
         _workers[config.WorkerId] = config;
         System.Diagnostics.Debug.WriteLine($"Registered worker: {config.WorkerId} with {_workers.Count} total workers");

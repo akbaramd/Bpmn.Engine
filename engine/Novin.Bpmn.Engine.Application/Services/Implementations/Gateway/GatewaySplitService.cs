@@ -89,10 +89,10 @@ public sealed class GatewaySplitService : IGatewaySplitService
     private static string ExecKey(Guid scopeId)  => $"{ExpectedExecPrefix}{scopeId:N}";
 
     private static void RegisterExpectedTotal(Process p, Guid scopeId, int total)
-        => p.SetVariable(TotalKey(scopeId), total);
+        => p.SetVariable(TotalKey(scopeId), total.ToString());
 
     private static void RegisterExpectedExec(Process p, Guid scopeId, int exec)
-        => p.SetVariable(ExecKey(scopeId), exec);
+        => p.SetVariable(ExecKey(scopeId), exec.ToString());
 
     public static bool TryReadExpectedTotal(Process p, Guid scopeId, out int total)
     {

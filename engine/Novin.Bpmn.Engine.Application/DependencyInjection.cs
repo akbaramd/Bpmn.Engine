@@ -11,6 +11,7 @@ using Novin.Bpmn.Engine.Application.EventHandlers;
 
 // Core services
 using Novin.Bpmn.Engine.Application.Services;
+using Novin.Bpmn.Engine.Domain.DomainServices;
 
 namespace Novin.Bpmn.Engine.Application;
 
@@ -37,7 +38,7 @@ public static class DependencyInjection
         // -------------------------
         // Dispatcher (Handler-based)
         // -------------------------
-        services.AddScoped<ITokenExecutionDispatcher, TokenExecutionDispatcher>();
+        services.AddScoped<INodeExecutionDispatcher, NodeExecutionDispatcher>();
 
         // -------------------------
         // FEEL
@@ -66,19 +67,14 @@ public static class DependencyInjection
         // -------------------------
         // Process Completion Evaluation (BPMN2 semantics)
         // -------------------------
-        services.AddScoped<IProcessCompletionEvaluator, ProcessCompletionEvaluator>();
 
         // -------------------------
         // Process Status Service (Derived Status)
         // -------------------------
-        services.AddScoped<IProcessStatusService, ProcessStatusService>();
-        services.AddOptions<ProcessRuntimeOptions>();
-        services.AddSingleton<IProcessStartPolicy, AutoStartProcessStartPolicy>();
 
         // -------------------------
         // Process Execution Recorder (Minimal audit trail for executed nodes)
         // -------------------------
-        services.AddScoped<IProcessExecutionRecorder, ProcessExecutionRecorder>();
 
         // -------------------------
         // BPMN Error Boundary Finder
@@ -88,17 +84,18 @@ public static class DependencyInjection
         // -------------------------
         // Token Management (Retry, Move, Terminate)
         // -------------------------
-        services.AddScoped<ITokenManagementService, TokenManagementService>();
 
         // -------------------------
         // Incident Service
         // -------------------------
         services.AddScoped<IIncidentService, IncidentService>();
+        services.AddScoped<IBpmnQuery, BpmnQuery>();
+        services.AddScoped<IBpmnStartResolver, BpmnStartResolver>();
+        services.AddScoped<IProcessInstantiationService, ProcessInstantiationService>();
 
         // -------------------------
         // Boundary Events
         // -------------------------
-        services.AddScoped<IBoundaryEventExecutor, BoundaryEventExecutor>();
         services.AddScoped<IClock, SystemClock>();
         
         // Boundary Timer Scheduler: Use Quartz in production, Null for testing

@@ -14,7 +14,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
     /// <summary>
     /// ID of the worker this token is waiting for (if any)
     /// </summary>
-    public Guid? WorkerId { get; private set; }
 
         /// <summary>
         /// If false => bypass-only token, never executes activities (only moves)
@@ -87,19 +86,17 @@ namespace Novin.Bpmn.Engine.Domain.Entities
 
         }
 
-        public void Wait(string? reason = null, Guid? workerId = null)
+        public void Wait(string? reason = null )
         {
             EnsureState(TokenState.Active);
 
             State = TokenState.Waiting;
-            WorkerId = workerId;
 
             AddDomainEvent(new TokenWaitingEvent(
                 TokenId: Id,
                 ProcessId: ProcessId,
                 ElementId: CurrentElementId,
                 Reason: reason,
-                WorkerId: workerId,
                 OccurredAtUtc: DateTime.UtcNow,
                 IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
@@ -175,7 +172,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         public void Processed()
         {
             EnsureState(TokenState.Active);
-            WorkerId = null;
             AddDomainEvent(new TokenProcessedEvent(
                 TokenId: Id,
                 ProcessId: ProcessId,
@@ -298,6 +294,8 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 throw new ArgumentException("Next element id cannot be empty", nameof(nextElementId));
 
             var from = CurrentElementId;
+            var activityInstanceId = ActivityInstanceId; // 🔴 snapshot قبل از تغییر
+
             CurrentElementId = nextElementId;
             ArrivedViaFlowId = viaFlowId;
 
@@ -309,9 +307,11 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ViaFlowId: viaFlowId,
                 OccurredAtUtc: DateTime.UtcNow,
                 IsExecutable: IsExecutable,
-                ScopeId: ScopeId));
-
+                ScopeId: ScopeId,
+                ActivityInstanceId: activityInstanceId
+            ));
         }
+
         public void ResumeWithoutProcessing()
         {
             EnsureState(TokenState.Waiting);

@@ -39,19 +39,14 @@ public class WorkerTaskRequest
     public string TaskName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Worker implementation (e.g., "SumNumbers" for service tasks, assignee for user tasks)
+    /// Job implementation (e.g., "SumNumbers" for service tasks, assignee for user tasks)
     /// </summary>
     public string Implementation { get; set; } = string.Empty;
 
     /// <summary>
-    /// Worker variables (process variables and task-specific data) - all values as strings
+    /// Job variables (process variables and task-specific data) - all values as strings
     /// </summary>
     public Dictionary<string, string>? Variables { get; set; }
-
-    /// <summary>
-    /// Worker metadata (configuration and execution metadata) - all values as strings
-    /// </summary>
-    public Dictionary<string, string>? Metadata { get; set; }
 
     /// <summary>
     /// Additional payload data (legacy support) - all values as strings

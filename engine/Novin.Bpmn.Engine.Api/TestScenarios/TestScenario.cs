@@ -1,5 +1,4 @@
 using MediatR;
-using Novin.Bpmn.Engine.Application.Commands.CreateProcessInstance;
 using Novin.Bpmn.Engine.Application.Commands.StartProcess;
 
 namespace Novin.Bpmn.Engine.Api.TestScenarios;
@@ -45,16 +44,15 @@ public abstract class TestScenario
         var objectVars = variables?.ToDictionary(kv => kv.Key, kv => (object?)kv.Value)
             ?? new Dictionary<string, object?>();
 
-        var createCommand = new CreateProcessInstanceCommand(
-            DeploymentId,
-            ProcessBpmnId,
-            $"{Name} - {testCaseName}",
-            objectVars);
+      
 
-        var createResult = await mediator.Send(createCommand, ct);
-        logger.LogInformation("   ✓ Process instance created. ProcessId: {ProcessId}", createResult.ProcessId);
-
-        var startCommand = new StartProcessCommand(createResult.ProcessId);
+        var startCommand = new StartProcessCommand()
+        {
+            
+            DeploymentId = DeploymentId,
+            ProcessBpmnId = ProcessBpmnId,
+            ProjectId = Guid.Empty 
+        };
         var startResult = await mediator.Send(startCommand, ct);
 
         logger.LogInformation(

@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Application.Services.Interfaces.Infrastructure;
+using Novin.Bpmn.Engine.Domain.DomainServices;
+using Novin.Bpmn.Engine.Domain.Repositories;
 using Novin.Bpmn.Engine.Infrastructure.BackgroundServices;
 using Novin.Bpmn.Engine.Infrastructure.Common;
 using Novin.Bpmn.Engine.Infrastructure.EventBus;
@@ -11,6 +13,7 @@ using Novin.Bpmn.Engine.Infrastructure.Persistence.Interceptors;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.Outbox;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.Repositories;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.UnitOfWork;
+using IDeploymentRepository = Novin.Bpmn.Engine.Application.Common.Interfaces.IDeploymentRepository;
 
 namespace Novin.Bpmn.Engine.Infrastructure;
 
@@ -45,8 +48,10 @@ public static class DependencyInjection
         services.AddScoped<ITokenRepository, EfTokenRepository>();
         services.AddScoped<IIncidentRepository, EfIncidentRepository>();
         services.AddScoped<IBoundarySubscriptionRepository, EfBoundarySubscriptionRepository>();
-        services.AddScoped<IProcessExecutionNodeRepository, EfProcessExecutionNodeRepository>();
+        services.AddScoped<INodeInstanceRepository, NodeInstanceRepository>();
+        services.AddScoped<IUserTaskInstanceRepository, UserTaskInstanceRepository>();
         services.AddScoped<IWorkerRepository, EfWorkerRepository>();
+        services.AddScoped<IProjectRepository, ProjectRepository>();
 
         // Outbox Services
         services.AddScoped<IOutboxMessageRepository, EfOutboxMessageRepository>();

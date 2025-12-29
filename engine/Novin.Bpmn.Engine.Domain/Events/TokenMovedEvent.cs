@@ -28,15 +28,16 @@ public sealed record TokenMovedEvent(
     string? ViaFlowId,
     DateTime OccurredAtUtc,
     bool IsExecutable,
-    Guid? ScopeId
+    Guid? ScopeId,
+    Guid? ActivityInstanceId
 ) : IDomainEvent;
+
 
 public sealed record TokenWaitingEvent(
     Guid TokenId,
     Guid ProcessId,
     string ElementId,
     string? Reason,
-    Guid? WorkerId,
     DateTime OccurredAtUtc,
     bool IsExecutable,
     Guid? ScopeId
@@ -126,14 +127,13 @@ public sealed record TokenScopeAssignedEvent(
     DateTime OccurredAtUtc
 ) : IDomainEvent;
 
-// Worker Events
+// Job Events
 public sealed record WorkerCreatedEvent(
     Guid WorkerId,
     Guid ProcessId,
     Guid TokenId,
     string ElementId,
     string TaskName,
-    WorkerType Type,
     DateTime OccurredAtUtc
 ) : IDomainEvent;
 

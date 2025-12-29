@@ -45,9 +45,9 @@ public class GetProcessQueryHandler : IRequestHandler<GetProcessQuery, ProcessDt
             State = process.State,
             DerivedStatus = derivedStatus,
             Variables = new Dictionary<string, string>(process.Variables),
-            CreatedAt = process.CreatedAt,
-            StartedAt = process.StartedAt,
-            CompletedAt = process.CompletedAt
+            CreatedAt = process.CreatedAtUtc,
+            StartedAt = process.StartedAtUtc,
+            CompletedAt = process.CompletedAtUtc
         };
     }
 }

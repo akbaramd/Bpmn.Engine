@@ -6,8 +6,7 @@
 public sealed class TokenExecutionDto
 {
     public Guid TokenId { get; init; }
-    public DateTime ExecutedAt { get; init; }
-    public Guid? ScopeId { get; init; }
-    public bool IsExecutable { get; init; }
-    public string CurrentElementId { get; set; }
+    public DateTime FirstExecutedAt { get; init; }
+    public DateTime? LastExecutedAt { get; init; }
+    public int ExecutionCount { get; init; }
 }

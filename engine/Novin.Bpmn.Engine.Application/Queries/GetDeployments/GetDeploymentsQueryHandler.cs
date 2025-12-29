@@ -35,7 +35,7 @@ public class GetDeploymentsQueryHandler : IRequestHandler<GetDeploymentsQuery, I
                 d.Label,
                 d.Version,
                 d.BpmnXml,
-                d.DeployedAt,
+                d.DeployedAtUtc,
                 d.IsActive
             ));
     }

@@ -1,4 +1,4 @@
-using Novin.Bpmn.Engine.Application.Common.Interfaces;
+﻿using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Domain.Entities;
 using MediatR;
 
@@ -31,16 +31,16 @@ public class CompleteWorkerCommandHandler
             var worker = await _workerRepository.GetByIdAsync(request.WorkerId, trxCt);
             if (worker == null)
             {
-                _logger.LogWarning("Worker {WorkerId} not found", request.WorkerId);
+                _logger.LogWarning("Job {WorkerId} not found", request.WorkerId);
                 return;
             }
 
             // Mark worker as completed - this will raise WorkerCompletedEvent
             // which will be handled by WorkerCompletedEventHandler
-            worker.MarkCompleted(request.CompletedBy, request.Result);
+            worker.Succeed(request.Result);
             await _workerRepository.UpdateAsync(worker, trxCt);
 
-            _logger.LogInformation("Worker {WorkerId} marked as completed", request.WorkerId);
+            _logger.LogInformation("Job {WorkerId} marked as completed", request.WorkerId);
         }, cancellationToken);
     }
 }

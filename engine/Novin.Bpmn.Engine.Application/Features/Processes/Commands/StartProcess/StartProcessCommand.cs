@@ -1,37 +1,22 @@
+// Application/Commands/StartProcess/StartProcessCommand.cs (add ProjectId + optional ExplicitStartElementId)
+using System;
+using System.Collections.Generic;
 using MediatR;
 
 namespace Novin.Bpmn.Engine.Application.Commands.StartProcess;
 
-public class StartProcessCommand : IRequest<StartProcessResult>
+public sealed record StartProcessCommand : IRequest<StartProcessResult>
 {
-    public Guid? ProcessId { get; set; }
-    public Guid DeploymentId { get; set; }
-    public string ProcessBpmnId { get; set; } = string.Empty;
-    public string ProcessName { get; set; } = string.Empty;
-    public string? BusinessKey { get; set; }
-    public Dictionary<string, string>? InitialVariables { get; set; }
+    public Guid? ProcessId { get; init; }
 
-    // Parameterless constructor for JSON deserialization
-    public StartProcessCommand()
-    {
-    }
+    // New instance path
+    public Guid ProjectId { get; init; }                // ✅ multi-tenant boundary
+    public Guid DeploymentId { get; init; }
+    public string? ProcessBpmnId { get; init; }
+    public string? ProcessName { get; init; }
+    public string? BusinessKey { get; init; }
+    public IDictionary<string, string>? InitialVariables { get; init; }
 
-    public StartProcessCommand(
-        Guid deploymentId,
-        string processBpmnId,
-        string processName,
-        Dictionary<string, string>? initialVariables = null,
-        string? businessKey = null)
-    {
-        DeploymentId = deploymentId;
-        ProcessBpmnId = processBpmnId;
-        ProcessName = processName;
-        InitialVariables = initialVariables;
-        BusinessKey = businessKey;
-    }
-
-    public StartProcessCommand(Guid processId)
-    {
-        ProcessId = processId;
-    }
+    // Optional: disambiguate multiple start events
+    public string? ExplicitStartElementId { get; init; }
 }

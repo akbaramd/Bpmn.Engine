@@ -210,7 +210,7 @@ public class ClientHub : Hub
     {
         try
         {
-            _logger.LogInformation("Worker completed: {WorkerId} from connection {ConnectionId}",
+            _logger.LogInformation("Job completed: {WorkerId} from connection {ConnectionId}",
                 workerId, Context.ConnectionId);
 
             // Pass the result dictionary directly to the communication service
@@ -226,7 +226,7 @@ public class ClientHub : Hub
 
             await Clients.Caller.SendAsync("ServiceTaskCompletedAck", workerId, ackResult);
 
-            _logger.LogInformation("Worker {WorkerId} completion processed successfully and acknowledgment sent", workerId);
+            _logger.LogInformation("Job {WorkerId} completion processed successfully and acknowledgment sent", workerId);
         }
         catch (Exception ex)
         {
