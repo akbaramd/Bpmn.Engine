@@ -6,6 +6,7 @@ using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 using Novin.Bpmn.Models.Models;
+using NodeState = Novin.Bpmn.Engine.Domain.Entities.NodeState;
 
 namespace Novin.Bpmn.Engine.Application.EventHandlers;
 
@@ -14,6 +15,7 @@ public sealed class GatewayHandler : BpmnElementHandlerBase
     private readonly IGatewaySplitService _split;
     private readonly IVariableMappingService _variableMapping;
     private readonly ITokenRepository _tokenRepository;
+    private readonly INodeInstanceRepository _nodeRepository;
     private readonly IUnitOfWork _uow;
     private readonly IMediator _mediator;
     private readonly ILogger<GatewayHandler> _logger;
@@ -25,6 +27,7 @@ public sealed class GatewayHandler : BpmnElementHandlerBase
         IFeelExpressionEvaluator feel,
         ILogger<GatewayHandler> logger,
         ITokenRepository tokenRepository,
+        INodeInstanceRepository nodeRepository,
         IUnitOfWork uow,
         IMediator mediator)
         : base(feel, logger)
@@ -33,6 +36,7 @@ public sealed class GatewayHandler : BpmnElementHandlerBase
         _variableMapping = variableMapping ?? throw new ArgumentNullException(nameof(variableMapping));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _tokenRepository = tokenRepository ?? throw new ArgumentNullException(nameof(tokenRepository));
+        _nodeRepository = nodeRepository ?? throw new ArgumentNullException(nameof(nodeRepository));
         _uow = uow ?? throw new ArgumentNullException(nameof(uow));
         _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
     }
@@ -140,6 +144,24 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
         }
 
         // First token to arrive: terminate it and create merged token
+        // ✅ Complete node for executable token when merged
+        if (token.IsExecutable)
+        {
+            var tokenNodes = await _nodeRepository.GetByTokenIdAsync(token.Id, ct);
+            foreach (var node in tokenNodes)
+            {
+                // Only complete nodes that are waiting or processing (not already completed/failed)
+                if (node.State == NodeState.Waiting || node.State == NodeState.Processing || node.State == NodeState.Created)
+                {
+                    node.Complete();
+                    await _nodeRepository.UpdateAsync(node, ct);
+                    _logger.LogInformation(
+                        "[JOIN] Completed node for XOR merged executable token. NodeId={NodeId} TokenId={TokenId} ElementId={ElementId}",
+                        node.Id, token.Id, node.ElementId);
+                }
+            }
+        }
+        
         token.Terminate("Merged at XOR merge gateway.");
         IncIntVar(process, consumedKey, 1);
         
@@ -299,6 +321,7 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
 
     // ✅ Policy: Terminate ALL arrived tokens (executable and non-executable)
     // No winner concept - all tokens are consumed by the merge
+    // ✅ IMPORTANT: Complete nodes for executable tokens, skip nodes for non-executable tokens
     var parentTokenIds = new List<Guid>(arrivedExecutableTokens.Count);
     
     for (var i = 0; i < allArrivedTokens.Count; i++)
@@ -312,10 +335,27 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
         if (t.IsExecutable)
         {
             parentTokenIds.Add(t.Id);
+            
+            // ✅ Complete nodes for executable tokens when merged
+            var tokenNodes = await _nodeRepository.GetByTokenIdAsync(t.Id, ct);
+            foreach (var node in tokenNodes)
+            {
+                // Only complete nodes that are waiting or processing (not already completed/failed)
+                if (node.State == NodeState.Waiting || node.State == NodeState.Processing || node.State == NodeState.Created)
+                {
+                    node.Complete();
+                    await _nodeRepository.UpdateAsync(node, ct);
+                    _logger.LogInformation(
+                        "[JOIN] Completed node for merged executable token. NodeId={NodeId} TokenId={TokenId} ElementId={ElementId}",
+                        node.Id, t.Id, node.ElementId);
+                }
+            }
+            
             t.Terminate("Merged at join gateway - executable token consumed.");
         }
         else
         {
+            // Non-executable tokens shouldn't have nodes, but if they do, skip them
             t.Terminate("Trace merged at join gateway.");
         }
         
