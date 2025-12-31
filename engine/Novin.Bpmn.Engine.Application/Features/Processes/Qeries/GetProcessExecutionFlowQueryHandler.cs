@@ -179,9 +179,11 @@ public sealed class GetProcessExecutionFlowQueryHandler
         // ----------------------------
         // ExecutedFlows (فقط با ArrivedViaFlowIds از NodeInstances)
         // هر NodeInstance مقصد یک flow هست => ArrivedViaFlowIds همان flowهای اجرا شده است
+        // IMPORTANT: Only use ArrivedViaFlowIds from executable nodes (nodes are only created from executable tokens)
         // ----------------------------
-        // Flatten all ArrivedViaFlowIds from all nodes
+        // Flatten all ArrivedViaFlowIds from executable nodes only
         var executedFlows = nodes
+            .Where(n => n.IsExecutable) // Only executable nodes (nodes are only created from executable tokens)
             .SelectMany(n => n.ArrivedViaFlowIds.Select(flowId => new { Node = n, FlowId = flowId }))
             .Where(x => !string.IsNullOrWhiteSpace(x.FlowId))
             .GroupBy(x => x.FlowId!, StringComparer.Ordinal)
