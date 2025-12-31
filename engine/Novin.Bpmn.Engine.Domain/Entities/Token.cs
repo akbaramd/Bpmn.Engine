@@ -318,12 +318,12 @@ namespace Novin.Bpmn.Engine.Domain.Entities
             var activityInstanceId = ActivityInstanceId; // 🔴 snapshot قبل از تغییر
 
             CurrentElementId = nextElementId;
+            
+            // Clear previous flow IDs and set only the current flow ID for this move
+            _arrivedViaFlowIds.Clear();
             if (!string.IsNullOrWhiteSpace(viaFlowId))
             {
-                if (!_arrivedViaFlowIds.Contains(viaFlowId, StringComparer.Ordinal))
-                {
-                    _arrivedViaFlowIds.Add(viaFlowId);
-                }
+                _arrivedViaFlowIds.Add(viaFlowId);
             }
 
             AddDomainEvent(new TokenMovedEvent(
