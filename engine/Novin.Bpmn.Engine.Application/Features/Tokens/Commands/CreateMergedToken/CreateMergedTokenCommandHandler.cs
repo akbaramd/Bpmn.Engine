@@ -101,16 +101,17 @@ public sealed class CreateMergedTokenCommandHandler : IRequestHandler<CreateMerg
                         startElementId: cmd.GatewayId,
                         parentTokenIds: parentIds);
 
-                    // Collect all ArrivedViaFlowIds from parent tokens and merge with provided flow IDs
+                    // Collect all ArrivedViaFlowIds from EXECUTABLE parent tokens and merge with provided flow IDs
                     var allFlowIds = new HashSet<string>(StringComparer.Ordinal);
                     
-                    // Add flow IDs from parent tokens
+                    // Add flow IDs ONLY from executable parent tokens (non-executable tokens don't create nodes)
                     if (parentIds.Count > 0)
                     {
                         foreach (var parentId in parentIds)
                         {
                             var parentToken = await _uow.Tokens.GetByIdAsync(parentId, trxCt);
-                            if (parentToken != null)
+                            // Only collect flow IDs from executable tokens
+                            if (parentToken != null && parentToken.IsExecutable)
                             {
                                 foreach (var flowId in parentToken.ArrivedViaFlowIds)
                                 {

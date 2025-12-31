@@ -165,17 +165,21 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
         }
 
         // Create merged token via command
-        // Collect flow IDs from parent token and add the outgoing flow
+        // Collect flow IDs ONLY from executable token and add the outgoing flow
         var xorFlowIds = new List<string>();
         if (!string.IsNullOrWhiteSpace(xorNextFlow.id))
         {
             xorFlowIds.Add(xorNextFlow.id);
         }
-        foreach (var flowId in token.ArrivedViaFlowIds)
+        // Only collect flow IDs from executable tokens (non-executable tokens don't create nodes)
+        if (token.IsExecutable)
         {
-            if (!string.IsNullOrWhiteSpace(flowId) && !xorFlowIds.Contains(flowId, StringComparer.Ordinal))
+            foreach (var flowId in token.ArrivedViaFlowIds)
             {
-                xorFlowIds.Add(flowId);
+                if (!string.IsNullOrWhiteSpace(flowId) && !xorFlowIds.Contains(flowId, StringComparer.Ordinal))
+                {
+                    xorFlowIds.Add(flowId);
+                }
             }
         }
         
