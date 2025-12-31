@@ -275,7 +275,9 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
         return TokenProcessResult.Failed;
     }
 
-    // Mark join as closed (prevents late arrivals)
+    // ✅ CRITICAL: Mark join as closed BEFORE terminating tokens and creating merged token
+    // This prevents late arrivals from triggering another merge attempt
+    // Must be set in the same transaction as token termination and merged token creation
     SetVar(process, closedKey, true);
 
     // ✅ Policy: Terminate ALL arrived tokens (executable and non-executable)
@@ -306,10 +308,13 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
         IncIntVar(process, consumedKey, 1);
     }
     
-    // Save process variable changes
+    // ✅ CRITICAL: Save process variable changes (including closedKey) BEFORE creating merged token
+    // This ensures that if another token arrives concurrently, it will see closedKey=true
+    // and will be terminated as a late arrival instead of triggering another merge
     await _uow.Processes.UpdateAsync(process, ct);
 
     // ✅ Create new merged token via Command (with idempotency support)
+    // The command handler will check again for existing merged token inside its transaction
     var joinOutgoing = ctx.Model.GetOutgoingSequenceFlows(ctx.BpmnProcessId, gwId);
     if (joinOutgoing.Count == 0)
     {
