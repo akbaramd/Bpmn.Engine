@@ -124,18 +124,7 @@ public sealed class CreateMergedTokenCommandHandler : IRequestHandler<CreateMerg
                         }
                     }
                     
-                    // Add provided flow IDs
-                    if (cmd.ArrivedViaFlowIds != null)
-                    {
-                        foreach (var flowId in cmd.ArrivedViaFlowIds)
-                        {
-                            if (!string.IsNullOrWhiteSpace(flowId))
-                            {
-                                allFlowIds.Add(flowId);
-                            }
-                        }
-                    }
-                    
+           
                     // Set all collected flow IDs
                     if (allFlowIds.Count > 0)
                     {

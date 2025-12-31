@@ -15,6 +15,5 @@ public sealed record CreateMergedTokenCommand(
     Guid ProcessId,
     string GatewayId,
     Guid ScopeId,
-    IReadOnlyList<Guid>? ParentTokenIds = null,
-    IEnumerable<string>? ArrivedViaFlowIds = null
+    IReadOnlyList<Guid>? ParentTokenIds = null
 ) : IRequest<Guid>;
