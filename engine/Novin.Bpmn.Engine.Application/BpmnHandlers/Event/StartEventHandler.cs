@@ -22,7 +22,7 @@ public sealed class StartEventHandler : BpmnElementHandlerBase
 
     public override bool CanHandle(BpmnFlowElement element) => element is BpmnStartEvent;
 
-    public override Task<ElementProcessResult> ProcessAsync(
+    public override Task<ElementProcessResult> NodeProcessAsync(
         Domain.Entities.Process process,
         Token token,
         NodeInstance node,
@@ -52,7 +52,7 @@ public sealed class StartEventHandler : BpmnElementHandlerBase
         }))
         {
             _logger.LogInformation(
-                "[START] ProcessAsync. TokenState={TokenState} NodeState={NodeState} Exec={Exec} Resume={Resume}",
+                "[START] NodeProcessAsync. TokenState={TokenState} NodeState={NodeState} Exec={Exec} Resume={Resume}",
                 token.State, node.State, token.IsExecutable, isResume);
 
             // Terminal safety
@@ -69,7 +69,7 @@ public sealed class StartEventHandler : BpmnElementHandlerBase
                 _logger.LogWarning("[START] No outgoing flow from StartEvent. Processing anyway.");
 
             // ✅ StartEvent: هیچ کاری ندارد، فقط "done" می‌شود
-            // TokenProcessedEvent => بعداً NavigateAsync اجرا می‌شود
+            // TokenProcessedEvent => بعداً TokenNavigateAsync اجرا می‌شود
             token.Processed();
             node.Complete();
 
@@ -77,13 +77,12 @@ public sealed class StartEventHandler : BpmnElementHandlerBase
         }
     }
 
-    public override Task NavigateAsync(
+    public override Task TokenNavigateAsync(
         Domain.Entities.Process process,
         Token token,
-        NodeInstance node,
         BpmnFlowElement element,
         BpmnRuntimeContext ctx,
         bool isResume,
         CancellationToken ct)
-        => base.NavigateAsync(process, token, node, element, ctx, isResume, ct);
+        => base.TokenNavigateAsync(process, token, element, ctx, isResume, ct);
 }

@@ -3,7 +3,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
-using Novin.Bpmn.Engine.Application.EventHandlers;
 using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
@@ -13,16 +12,19 @@ using NodeState = Novin.Bpmn.Engine.Domain.Entities.NodeState;
 namespace Novin.Bpmn.Engine.Application.ElementHandlers;
 
 /// <summary>
-/// BPMN ServiceTask handler (job-inside, NO mediator/commands).
+/// BPMN ServiceTask handler (job-inside, no mediator).
 ///
-/// ✅ Creates/checks Job inside handler
-/// ✅ Sets Token.Wait + Node.Wait directly
-/// ✅ Idempotent by (TokenId + ElementId)
-/// ✅ Resume path applies outputs + token.Processed()
-///
-/// IMPORTANT:
-/// - This handler assumes it runs inside a UnitOfWork transaction (outer dispatcher/command handler),
-///   so calling _workers.AddAsync(...) and token/node state changes are persisted together.
+/// قواعد استاندارد این پیاده‌سازی:
+/// - Trace/NonExecutable: هیچ Job نمی‌سازد، Node را Complete می‌کند، Token را Processed می‌کند.
+/// - First run (not resume):
+///     - Inputs را اعمال می‌کند
+///     - اگر Job موجود بود: بسته به Status تصمیم می‌گیرد (Waiting/Complete/Fail)
+///     - اگر نبود: Job می‌سازد و Token+Node را Waiting می‌کند
+/// - Resume:
+///     - حتماً Job را چک می‌کند (Succeeded => Outputs + Complete، Running/Pending => Waiting، Failed => Fail)
+/// - Idempotency:
+///     - کلید عملیاتی: (TokenId + ElementId) یا (NodeInstanceId) (ترجیحاً NodeInstanceId)
+///     - برای جلوگیری از Job دوباره، Repository باید Unique Constraint داشته باشد.
 /// </summary>
 public sealed class ServiceTaskHandler : BpmnElementHandlerBase
 {
@@ -43,7 +45,7 @@ public sealed class ServiceTaskHandler : BpmnElementHandlerBase
     public override bool CanHandle(BpmnFlowElement element)
         => element is BpmnServiceTask;
 
-    public override async Task<ElementProcessResult> ProcessAsync(
+    public override async Task<ElementProcessResult> NodeProcessAsync(
         Process process,
         Token token,
         NodeInstance node,
@@ -52,140 +54,180 @@ public sealed class ServiceTaskHandler : BpmnElementHandlerBase
         bool isResume,
         CancellationToken ct)
     {
-        var serviceTask = (BpmnServiceTask)element;
-        var elementId = serviceTask.id ?? node.ElementId;
+        if (process is null) throw new ArgumentNullException(nameof(process));
+        if (token is null) throw new ArgumentNullException(nameof(token));
+        if (node is null) throw new ArgumentNullException(nameof(node));
+        if (element is null) throw new ArgumentNullException(nameof(element));
+        if (ctx is null) throw new ArgumentNullException(nameof(ctx));
 
-        Logger.LogDebug(
-            "[SERVICE] Process. ProcessId={ProcessId} TokenId={TokenId} NodeId={NodeId} ElementId={ElementId} Exec={Exec} Resume={Resume} TokenState={TokenState} NodeState={NodeState}",
-            process.Id, token.Id, node.Id, elementId, token.IsExecutable, isResume, token.State, node.State);
+        var task = (BpmnServiceTask)element;
 
-        // Guard: terminal => no-op
+        var elementId = task.id ?? node.ElementId;
+        if (string.IsNullOrWhiteSpace(elementId))
+        {
+            node.Fail("ServiceTask id is missing.");
+            token.Fail("ServiceTask id is missing.");
+            return ElementProcessResult.Failed;
+        }
+
+        // Terminal guards
         if (token.State is TokenState.Terminated or TokenState.Failed)
-            return ElementProcessResult.NoOp;
+        {
+            // Mirror into node if needed (defensive)
+            if (token.State == TokenState.Failed && node.State != NodeState.Failed)
+                node.Fail("Token already failed.");
+            if (token.State == TokenState.Terminated && node.State != NodeState.Completed)
+                node.Complete();
 
-        // Trace token => pass-through
+            return ElementProcessResult.NoOp;
+        }
+
+        // Trace/non-executable: pass-through (no job)
         if (!token.IsExecutable)
         {
             token.Processed();
+            node.Complete();
             return ElementProcessResult.Completed;
         }
 
-        // Resume => outputs + processed
+        // Resume path MUST be job-driven (never blindly complete)
         if (isResume)
-        {
-            _mapping.ApplyOutputs(process, token, serviceTask, ctx);
-            token.Processed();
-            return ElementProcessResult.Completed;
-        }
+            return await ResumeAsync(process, token, node, task, elementId, ctx, ct);
 
-        // First-run: inputs (only once)
+        // First run:
+        // - Apply inputs once
+        // - Ensure a single Job exists
         token.ClearLocalVariables();
-        _mapping.ApplyInputs(process, token, serviceTask, ctx);
+        _mapping.ApplyInputs(process, token, task, ctx);
 
-        // Idempotency: keyed by (TokenId + ElementId)
-        var existing = await _workers.GetByTokenAndElementAsync(token.Id, elementId!, ct);
+        var existingJob = await FindJobAsync(token, node, elementId, ct);
 
-        if (existing is not null)
-        {
-            switch (existing.Status)
-            {
-                case JobStatus.Succeeded:
-                    _mapping.ApplyOutputs(process, token, serviceTask, ctx);
-                    token.Processed();
-                    return ElementProcessResult.Completed;
+        if (existingJob is not null)
+            return await DecideByJobStatusAsync(process, token, node, task, elementId, ctx, existingJob, ct);
 
-                case JobStatus.Pending:
-                case JobStatus.Running:
-                    EnsureWaiting(token, node, existing.Id, serviceTask);
-                    return ElementProcessResult.Waiting;
-
-                default:
-                    Logger.LogWarning(
-                        "[SERVICE] Existing job in {Status} => recreate. TokenId={TokenId} ElementId={ElementId} JobId={JobId}",
-                        existing.Status, token.Id, elementId, existing.Id);
-                    break;
-            }
-        }
-
-        // Create new job
-        var routing = ParseClientRouting(serviceTask);
-
+        // Create job (idempotent creation relies on DB uniqueness)
         var job = Job.Create(
             processId: process.Id,
             tokenId: token.Id,
-            nodeInstanceId:node.Id,
-            elementId: elementId!,
-            taskName: serviceTask.name ?? elementId!,
-            serviceTask.implementation);
+            nodeInstanceId: node.Id,
+            elementId: elementId,
+            taskName: task.name ?? elementId,
+            implementation: task.implementation);
 
-        await _workers.AddAsync(job, ct);
+        try
+        {
+            await _workers.AddAsync(job, ct);
+        }
+        catch
+        {
+            // Another concurrent execution may have created it. Re-read and decide.
+            var reread = await FindJobAsync(token, node, elementId, ct);
+            if (reread is not null)
+                return await DecideByJobStatusAsync(process, token, node, task, elementId, ctx, reread, ct);
 
-        // Put token+node to Waiting (NO mediator)
-        EnsureWaiting(token, node, job.Id, serviceTask);
+            // If still not found, treat as failure.
+            node.Fail("Failed to create job for service task.");
+            token.Fail("Failed to create job for service task.");
+            return ElementProcessResult.Failed;
+        }
 
-        Logger.LogInformation(
-            "[SERVICE] Job created & waiting. TokenId={TokenId} NodeId={NodeId} ElementId={ElementId} JobId={JobId}",
-            token.Id, node.Id, elementId, job.Id);
-
+        EnsureWaiting(token, node, job.Id, task);
         return ElementProcessResult.Waiting;
     }
 
-    private void EnsureWaiting(Token token, NodeInstance node, Guid workerId, BpmnServiceTask task)
+    // ------------------------- Resume -------------------------
+
+    private async Task<ElementProcessResult> ResumeAsync(
+        Process process,
+        Token token,
+        NodeInstance node,
+        BpmnServiceTask task,
+        string elementId,
+        BpmnRuntimeContext ctx,
+        CancellationToken ct)
     {
-        var reason = $"Waiting for service task: {task.name ?? task.id ?? node.ElementId}";
+        var job = await FindJobAsync(token, node, elementId, ct);
 
-        // Make idempotent: if already waiting for same worker, do nothing
-        if (token.State == TokenState.Waiting  &&
-            node.State == NodeState.Waiting && node.WorkerId == workerId)
-            return;
+        if (job is null)
+        {
+            // If resume requested but no job exists, safest is to go back to Waiting (or fail).
+            EnsureWaiting(token, node, workerId: Guid.Empty, task);
+            return ElementProcessResult.Waiting;
+        }
 
-
-        // Node.Wait should set:
-        // - State=Waiting
-        // - WorkerId=workerId
-        // - Reason=reason
-        node.WaitForWorker(workerId, reason);
+        return await DecideByJobStatusAsync(process, token, node, task, elementId, ctx, job, ct);
     }
 
-    private static ClientRoutingInfo ParseClientRouting(BpmnServiceTask serviceTask)
+    private async Task<ElementProcessResult> DecideByJobStatusAsync(
+        Process process,
+        Token token,
+        NodeInstance node,
+        BpmnServiceTask task,
+        string elementId,
+        BpmnRuntimeContext ctx,
+        Job job,
+        CancellationToken ct)
     {
-        var info = new ClientRoutingInfo();
-
-        var impl = serviceTask.implementation?.Trim();
-        if (string.IsNullOrEmpty(impl))
-            return info;
-
-        // client@handler:timeout
-        string? clientPart = null;
-        var handlerPart = impl;
-
-        var atIndex = impl.IndexOf('@');
-        if (atIndex >= 0)
+        switch (job.Status)
         {
-            clientPart = impl[..atIndex].Trim();
-            handlerPart = impl[(atIndex + 1)..].Trim();
+            case JobStatus.Succeeded:
+                // Apply outputs once and complete
+                _mapping.ApplyOutputs(process, token, task, ctx);
+                token.Processed();
+                node.Complete();
+                return ElementProcessResult.Completed;
+
+            case JobStatus.Pending:
+            case JobStatus.Running:
+                EnsureWaiting(token, node, job.Id, task);
+                return ElementProcessResult.Waiting;
+
+            case JobStatus.Failed:
+            case JobStatus.Canceled:
+            case JobStatus.TimedOut:
+                node.Fail($"Service task job ended with status '{job.Status}'. JobId={job.Id}");
+                token.Fail($"Service task job ended with status '{job.Status}'. JobId={job.Id}");
+                return ElementProcessResult.Failed;
+
+            default:
+                // Unknown status => conservative: wait (do not create another job)
+                EnsureWaiting(token, node, job.Id, task);
+                return ElementProcessResult.Waiting;
         }
+    }
 
-        if (!string.IsNullOrWhiteSpace(clientPart))
-            info.ClientId = clientPart;
+    // ------------------------- Job lookup -------------------------
 
-        var colonIndex = handlerPart.LastIndexOf(':');
-        if (colonIndex > 0 && colonIndex < handlerPart.Length - 1)
-        {
-            var handler = handlerPart[..colonIndex].Trim();
-            var timeoutRaw = handlerPart[(colonIndex + 1)..].Trim();
+    /// <summary>
+    /// Prefer NodeInstanceId-based lookup if available; fallback to (TokenId + ElementId).
+    /// Adjust repository to guarantee uniqueness for the chosen key.
+    /// </summary>
+    private async Task<Job?> FindJobAsync(Token token, NodeInstance node, string elementId, CancellationToken ct)
+    {
+        // If Node already tracks WorkerId, that is the most accurate idempotency key.
+            // If your repository doesn't have GetByIdAsync, add it.
+            if (node.WorkerId != null)
+            {
+                var byId = await _workers.GetByIdAsync(node.WorkerId.Value, ct);
+                if (byId is not null) return byId;
+            }
 
-            if (!string.IsNullOrWhiteSpace(handler))
-                info.CleanImplementation = handler;
+        // Fallback: TokenId + ElementId (may be unsafe for loops; prefer ActivityInstanceId/NodeId in DB key)
+        return await _workers.GetByTokenAndElementAsync(token.Id, elementId, ct);
+    }
 
-            if (int.TryParse(timeoutRaw, out var ms) && ms > 0)
-                info.TimeoutSeconds = ms / 1000;
-        }
-        else
-        {
-            info.CleanImplementation = handlerPart;
-        }
+    // ------------------------- Waiting -------------------------
 
-        return info;
+    private static void EnsureWaiting(Token token, NodeInstance node, Guid workerId, BpmnServiceTask task)
+    {
+        var display = task.name ?? task.id ?? node.ElementId ?? "serviceTask";
+        var reason = $"Waiting for service task: {display}";
+
+        // Token waiting state must be consistent with node waiting state
+        if (token.State != TokenState.Waiting)
+            token.Wait(reason);
+
+        // WorkerId might be Guid.Empty in some defensive paths; still set waiting.
+        node.WaitForWorker(workerId, reason);
     }
 }

@@ -57,6 +57,7 @@ public sealed class CreateTokenCommandHandler : IRequestHandler<CreateTokenComma
                 }
             }
 
+            token.Activate();
             await _uow.Tokens.AddAsync(token, cancellationToken);
             process.AddToken(token.Id);
 

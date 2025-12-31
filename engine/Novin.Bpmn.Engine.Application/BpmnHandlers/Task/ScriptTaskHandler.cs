@@ -48,7 +48,7 @@ public sealed class ScriptTaskHandler : BpmnElementHandlerBase
     public override bool CanHandle(BpmnFlowElement element)
         => element is BpmnScriptTask;
 
-    public override async Task<ElementProcessResult> ProcessAsync(
+    public override async Task<ElementProcessResult> NodeProcessAsync(
         Domain.Entities.Process process,
         Token token,
         NodeInstance node,
@@ -98,7 +98,7 @@ public sealed class ScriptTaskHandler : BpmnElementHandlerBase
         }
         catch (Exception ex)
         {
-            token.Fail(ex.Message);
+            node.Fail(ex.Message);
 
             Logger.LogError(
                 ex,
@@ -130,7 +130,7 @@ public sealed class ScriptTaskHandler : BpmnElementHandlerBase
         // 5) Done
         // --------------------------------------------------
         token.Processed();
-
+        node.Complete();
         Logger.LogDebug(
             "[SCRIPT] Completed successfully. TokenId={TokenId}",
             token.Id);
@@ -138,6 +138,6 @@ public sealed class ScriptTaskHandler : BpmnElementHandlerBase
         return ElementProcessResult.Completed;
     }
 
-    // NavigateAsync inherited from BpmnElementHandlerBase
+    // TokenNavigateAsync inherited from BpmnElementHandlerBase
     // → pure domain navigation (token.MoveTo / new Token)
 }

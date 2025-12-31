@@ -39,11 +39,12 @@ public sealed class BoundaryEventSubscription : BaseAggregateRoot
     public static BoundaryEventSubscription Create(
         Guid processId,
         Guid tokenId,
+        Guid nodeInstanceId ,
         string hostElementId,
         string boundaryElementId,
         BoundaryKind kind,
         bool isInterrupting,
-        Guid? nodeInstanceId = null,
+
         DateTimeOffset? dueAt = null,
         string? correlationKey = null,
         string? errorCode = null,
@@ -103,6 +104,7 @@ public sealed class BoundaryEventSubscription : BaseAggregateRoot
             SubscriptionId: Id,
             ProcessId: ProcessId,
             TokenId: TokenId,
+            ActivityInstanceId : ActivityInstanceId,
             ElementId: HostElementId,
             BoundaryElementId: BoundaryElementId,
             OccurredAtUtc: TriggeredAtUtc.Value,

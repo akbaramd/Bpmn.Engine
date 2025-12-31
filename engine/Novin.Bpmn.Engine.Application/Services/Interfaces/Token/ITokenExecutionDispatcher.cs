@@ -5,7 +5,7 @@ namespace Novin.Bpmn.Engine.Application.Services;
 
 public interface INodeExecutionDispatcher
 {
-    Task<ElementProcessResult> DispatchProcessAsync(
+    Task<ElementProcessResult> DispatchNodeProcessAsync(
         Process process,
         Token token,
         NodeInstance node,
@@ -13,11 +13,18 @@ public interface INodeExecutionDispatcher
         BpmnRuntimeContext ctx,
         bool isResume,
         CancellationToken ct);
-
-    Task DispatchNavigateAsync(
+    
+    Task<TokenProcessResult> DispatchTokenProcessAsync(
         Process process,
         Token token,
-        NodeInstance node,
+        BpmnFlowElement element,
+        BpmnRuntimeContext ctx,
+        bool isResume,
+        CancellationToken ct);
+    
+    Task DispatchTokenNavigateAsync(
+        Process process,
+        Token token,
         BpmnFlowElement element,
         BpmnRuntimeContext ctx,
         bool isResume,

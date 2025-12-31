@@ -53,4 +53,6 @@ public interface INodeInstanceRepository : IRepository<NodeInstance>
         Guid processId,
         string elementId,
         CancellationToken cancellationToken = default);
+
+    Task<IEnumerable<NodeInstance>> GetByActivityInstanceIdAsync(Guid processId, Guid activityInstanceId, CancellationToken trxCt);
 }

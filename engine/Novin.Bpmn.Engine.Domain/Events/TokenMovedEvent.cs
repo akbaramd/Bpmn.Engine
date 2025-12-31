@@ -192,6 +192,7 @@ public sealed record BoundarySubscriptionTriggeredEvent(
     Guid SubscriptionId,
     Guid ProcessId,
     Guid TokenId,
+   Guid? ActivityInstanceId, 
     string ElementId,
     string BoundaryElementId,
     DateTime OccurredAtUtc,

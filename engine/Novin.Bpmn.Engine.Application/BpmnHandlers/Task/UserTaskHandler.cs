@@ -6,20 +6,22 @@ using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 using Novin.Bpmn.Models.Models;
+using NodeState = Novin.Bpmn.Engine.Domain.Entities.NodeState;
 
 namespace Novin.Bpmn.Engine.Application.ElementHandlers;
 
 /// <summary>
-/// BPMN UserTask handler (production-ready, job/task INSIDE handler).
+/// BPMN UserTask handler (standard engine semantics, no mediator).
 ///
-/// ✅ Creates/checks UserTask inside handler (idempotent by TokenId+ElementId or NodeId)
-/// ✅ Sets Token.Wait + Node.Wait directly (NO Mediator/Commands)
-/// ✅ Does NOT call token.Processed() when returning Waiting (important!)
-///
-/// Resume semantics:
-/// - isResume=true means: UserTask was completed by external API, token/node already released.
-/// - Here we only mark token as processed so dispatcher can navigate.
-///   (Output mapping should be applied by "CompleteUserTask" application service/command.)
+/// قواعد:
+/// - NonExecutable/Trace: هیچ UserTask نمی‌سازد، Node را Complete می‌کند، Token را Processed می‌کند.
+/// - First run:
+///     - Inputs اعمال می‌شود
+///     - CreateOrGet (idempotent) ایجاد می‌شود
+///     - Token+Node به Waiting می‌روند (بدون token.Processed)
+/// - Resume:
+///     - فرض: completion بیرون از انجین انجام شده و outputs همانجا اعمال شده
+///     - اینجا فقط Node را Complete و Token را Processed می‌کنیم تا Navigation انجام شود
 /// </summary>
 public sealed class UserTaskHandler : BpmnElementHandlerBase
 {
@@ -39,7 +41,7 @@ public sealed class UserTaskHandler : BpmnElementHandlerBase
 
     public override bool CanHandle(BpmnFlowElement element) => element is BpmnUserTask;
 
-    public override async Task<ElementProcessResult> ProcessAsync(
+    public override async Task<ElementProcessResult> NodeProcessAsync(
         Process process,
         Token token,
         NodeInstance node,
@@ -57,51 +59,54 @@ public sealed class UserTaskHandler : BpmnElementHandlerBase
         var userTask = (BpmnUserTask)element;
         var elementId = userTask.id ?? node.ElementId;
 
+        if (string.IsNullOrWhiteSpace(elementId))
+        {
+            node.Fail("UserTask elementId is missing.");
+            token.Fail("UserTask elementId is missing.");
+            return ElementProcessResult.Failed;
+        }
+
         Logger.LogDebug(
             "[USER-TASK] Process. P={ProcessId} T={TokenId} N={NodeId} E={ElementId} Exec={Exec} Resume={Resume} TokenState={TokenState} NodeState={NodeState}",
             process.Id, token.Id, node.Id, elementId, token.IsExecutable, isResume, token.State, node.State);
 
-        // terminal safety
+        // Terminal safety
         if (token.State is TokenState.Terminated or TokenState.Failed)
-            return ElementProcessResult.NoOp;
+        {
+            if (token.State == TokenState.Failed && node.State != NodeState.Failed)
+                node.Fail("Token already failed.");
+            if (token.State == TokenState.Terminated && node.State != NodeState.Completed)
+                node.Complete();
 
-        // ------------------------------------------------------------------
-        // Trace token => do not create user task, just flow through.
-        // (You may still want to record node completed; that's dispatcher’s job.)
-        // ------------------------------------------------------------------
+            return ElementProcessResult.NoOp;
+        }
+
+        // Trace/non-executable => pass-through (no task created)
         if (!token.IsExecutable)
         {
-            token.Processed(); // ok: trace should navigate
+            token.Processed();
+            node.Complete();
             return ElementProcessResult.Completed;
         }
 
-        // ------------------------------------------------------------------
-        // Resume => UserTask already completed externally, outputs applied there.
-        // Just allow navigation.
-        // ------------------------------------------------------------------
+        // Resume => task completed externally; allow navigation
         if (isResume)
         {
             token.Processed();
+            node.Complete();
             return ElementProcessResult.Completed;
         }
 
-        // ------------------------------------------------------------------
-        // First execution:
-        // 1) Apply inputs
-        // 2) Create/Get user-task (idempotent)
-        // 3) Put token+node into Waiting (NO token.Processed!)
-        // ------------------------------------------------------------------
+        // If already waiting for a user task and correlation exists => keep waiting (idempotent)
+        if (token.State == TokenState.Waiting && node.State == NodeState.Waiting && node.UserTaskId != Guid.Empty)
+            return ElementProcessResult.Waiting;
+
+        // First run: inputs (only once)
         token.ClearLocalVariables();
         _mapping.ApplyInputs(process, token, userTask, ctx);
 
-        // IMPORTANT: your service MUST be idempotent:
-        // - If a task already exists for (TokenId + ElementId) or (NodeId), return same WorkerId/TaskId.
-        // - Otherwise create a new task.
-        //
-        // Recommended idempotency key:
-        //   (process.Id, token.Id, node.Id, elementId)
-        //
-        // Return value: workerId (or taskId) used for correlation/resume.
+        // Create/Get user-task (MUST be idempotent inside the service)
+        // Recommended correlation key: (process.Id, token.Id, node.Id, elementId)
         var userTaskId = await _userTaskService.CreateOrGetAsync(
             process: process,
             token: token,
@@ -111,57 +116,34 @@ public sealed class UserTaskHandler : BpmnElementHandlerBase
 
         if (userTaskId == Guid.Empty)
         {
-            Logger.LogWarning(
-                "[USER-TASK] CreateOrGetAsync returned empty userTaskId. P={ProcessId} T={TokenId} N={NodeId} E={ElementId}",
-                process.Id, token.Id, node.Id, elementId);
-
+            node.Fail("CreateOrGetAsync returned empty userTaskId.");
+            token.Fail("CreateOrGetAsync returned empty userTaskId.");
             return ElementProcessResult.Failed;
         }
 
-        EnsureWaiting(process, token, node, userTaskId, userTask);
-
-        Logger.LogInformation(
-            "[USER-TASK] Waiting. P={ProcessId} T={TokenId} N={NodeId} E={ElementId} UserTaskId={UserTaskId}",
-            process.Id, token.Id, node.Id, elementId, userTaskId);
-
+        EnsureWaiting(token, node, userTaskId, userTask);
         return ElementProcessResult.Waiting;
     }
 
-    /// <summary>
-    /// For UserTask, navigation must NOT run while waiting.
-    /// Base NavigateAsync already stops on Waiting, so we keep it.
-    /// </summary>
-    public override Task NavigateAsync(
-        Process process,
-        Token token,
-        NodeInstance nodeInstance,
-        BpmnFlowElement element,
-        BpmnRuntimeContext ctx,
-        bool isResume,
-        CancellationToken ct)
-        => base.NavigateAsync(process, token, nodeInstance, element, ctx, isResume, ct);
-
-    private void EnsureWaiting(
-        Process process,
-        Token token,
-        NodeInstance node,
-        Guid userTaskId,
-        BpmnUserTask task)
+    private static void EnsureWaiting(Token token, NodeInstance node, Guid userTaskId, BpmnUserTask task)
     {
-        var reason = $"Waiting for user task: {task.name ?? task.id ?? node.ElementId}";
+        var display = task.name ?? task.id ?? node.ElementId ?? "userTask";
+        var reason = $"Waiting for user task: {display}";
 
-        // If you don't have a separate "worker/job id" for user task, reuse userTaskId as workerId.
-        // This keeps correlation simple and still satisfies token.Wait(workerId, userTaskId, ...).
+        // Correlation: reuse userTaskId as workerId unless you have a separate worker/job id
         var workerId = userTaskId;
 
-        // Idempotent: already waiting on same correlation => no-op
+        // Idempotent guard
         if (token.State == TokenState.Waiting &&
-            node.State == Domain.Entities.NodeState.Waiting &&
+            node.State == NodeState.Waiting &&
             node.WorkerId == workerId &&
             node.UserTaskId == userTaskId)
             return;
 
-        // Put BOTH in waiting (do NOT call token.Processed here)
+        // Put BOTH in waiting (do NOT call token.Processed)
+        if (token.State != TokenState.Waiting)
+            token.Wait(reason);
+
         node.WaitForUserTask(userTaskId: userTaskId, workerId: workerId, reason: reason);
     }
 }

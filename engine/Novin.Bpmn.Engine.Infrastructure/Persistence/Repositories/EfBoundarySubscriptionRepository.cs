@@ -85,14 +85,15 @@ public sealed class EfBoundarySubscriptionRepository : IBoundarySubscriptionRepo
 
     public async Task<IEnumerable<BoundaryEventSubscription>> GetActiveErrorSubscriptionsByErrorCodeAsync(
         Guid processId,
-        string errorCode,
+        Guid nodeInstnaceId,
+        Guid activityInsanationId,
         CancellationToken ct = default)
     {
         return await _context.BoundaryEventSubscription
-            .Where(s => s.ProcessId == processId
+            .Where(s => s.ProcessId == processId && s.ActivityInstanceId == activityInsanationId && s.NodeInstanceId == nodeInstnaceId
                         && s.Kind == BoundaryKind.Error
                         && s.State == SubscriptionState.Active
-                        && (s.ErrorCode == errorCode || s.ErrorCode == null)) // null = catches all errors ("Any")
+                       ) // null = catches all errors ("Any")
             .ToListAsync(ct);
     }
 
@@ -130,4 +131,6 @@ public sealed class EfBoundarySubscriptionRepository : IBoundarySubscriptionRepo
             subscription.State);
         return Task.CompletedTask;
     }
+    
+    
 }

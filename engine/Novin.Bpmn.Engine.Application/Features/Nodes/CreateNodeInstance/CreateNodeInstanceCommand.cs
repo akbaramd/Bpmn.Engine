@@ -15,6 +15,7 @@ public sealed record CreateNodeInstanceCommand(
     Guid ProcessId,
     Guid TokenId,
     string ElementId,
+    bool IsExecutable,
     Guid? ScopeId,
     Guid? ActivityInstanceId,
     string? ArrivedViaFlowId
@@ -67,7 +68,7 @@ public sealed class CreateNodeInstanceCommandHandler : IRequestHandler<CreateNod
             _logger.LogDebug("Skip NodeInstance creation. Token {TokenId} is non-executable (trace token).", token.Id);
             return Guid.Empty; // explicit "no node created"
         }
-
+ 
         // Guard: element id must match current token position (prevents stale commands)
         var elementId = request.ElementId.Trim();
         if (!string.Equals(token.CurrentElementId, elementId, StringComparison.Ordinal))
@@ -86,8 +87,12 @@ public sealed class CreateNodeInstanceCommandHandler : IRequestHandler<CreateNod
             cancellationToken: cancellationToken);
 
         if (existing is not null)
+        {
             return existing.Id;
+        }
 
+        
+        token.SetActivityInstance(Guid.NewGuid());
         // ------------------------------------------------------------
         // 3) Create NodeInstance aggregate (raises NodeCreatedDomainEvent)
         // ------------------------------------------------------------
@@ -95,6 +100,7 @@ public sealed class CreateNodeInstanceCommandHandler : IRequestHandler<CreateNod
             processId: token.ProcessId,
             tokenId: token.Id,
             elementId: elementId,
+            isExecutable:request.IsExecutable,
             scopeId: token.ScopeId,
             activityInstanceId: token.ActivityInstanceId,
             arrivedViaFlowId: token.ArrivedViaFlowId);

@@ -171,6 +171,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         }
         public void Processed()
         {
+            ClearActivityInstance();
             EnsureState(TokenState.Active);
             AddDomainEvent(new TokenProcessedEvent(
                 TokenId: Id,

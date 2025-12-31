@@ -83,5 +83,62 @@ public class EfTokenRepository : ITokenRepository
             .Where(t => t.ParentTokenIds.Any(x=>x == parentTokenId) )
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IEnumerable<Token>> GetByActivityInstanceIdAsync(Guid processId, Guid activityInstanceId,
+        CancellationToken trxCt)
+    {
+      
+        return await _context.Tokens
+            .Where(t => t.ProcessId == processId && t.ActivityInstanceId == activityInstanceId )
+            .ToListAsync(trxCt);
+    }
+
+    public async Task<int> CountArrivedAtAsync(
+        Guid processId,
+        string elementId,
+        Guid scopeId,
+        bool executableOnly,
+        CancellationToken ct)
+    {
+        // ✅ Count only Active + Waiting tokens (arrived at join gateway)
+        // Completed tokens have moved to next element, so they shouldn't be counted
+        var q = _context.Tokens.AsNoTracking()
+            .Where(t =>
+                t.ProcessId == processId &&
+                t.CurrentElementId == elementId &&
+                t.ScopeId == scopeId &&
+                (t.State == TokenState.Active || t.State == TokenState.Waiting));
+
+        if (executableOnly)
+            q = q.Where(t => t.IsExecutable);
+
+        return await q.CountAsync(ct);
+    }
+
+    public async Task<List<Token>> GetArrivedAtAsync(
+        Guid processId,
+        string elementId,
+        Guid scopeId,
+        bool executableOnly,
+        CancellationToken ct)
+    {
+        if (processId == Guid.Empty) throw new ArgumentException("processId is empty.", nameof(processId));
+        if (string.IsNullOrWhiteSpace(elementId)) throw new ArgumentException("elementId is null/empty.", nameof(elementId));
+        if (scopeId == Guid.Empty) throw new ArgumentException("scopeId is empty.", nameof(scopeId));
+
+        var q = _context.Tokens.Where(t =>
+            t.ProcessId == processId &&
+            t.CurrentElementId == elementId &&
+            t.ScopeId == scopeId &&
+            (t.State == TokenState.Active || t.State == TokenState.Waiting));
+
+        if (executableOnly)
+            q = q.Where(t => t.IsExecutable);
+
+        // Tracking لازم است چون بعداً همین توکن‌ها را Terminate/Resume می‌کنی.
+        return await q
+            .OrderBy(t => t.Id) // deterministic
+            .ToListAsync(ct);
+    }
 }
 

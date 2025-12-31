@@ -5,6 +5,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Commands.NodeDispatch;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
+using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Domain.Entities;
 
 namespace Novin.Bpmn.Engine.Application.EventHandlers.NodeInstances;
@@ -20,16 +21,18 @@ public sealed class NodeCreatedDomainEventHandler : INotificationHandler<NodeCre
 {
     private readonly IMediator _mediator;
     private readonly INodeInstanceRepository _nodes;
+    private readonly IBoundaryEventSubscriptionService _subscriptionService;
     private readonly ILogger<NodeCreatedDomainEventHandler> _logger;
 
     public NodeCreatedDomainEventHandler(
         IMediator mediator,
         INodeInstanceRepository nodes,
-        ILogger<NodeCreatedDomainEventHandler> logger)
+        ILogger<NodeCreatedDomainEventHandler> logger, IBoundaryEventSubscriptionService subscriptionService)
     {
         _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
         _nodes = nodes ?? throw new ArgumentNullException(nameof(nodes));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _subscriptionService = subscriptionService;
     }
 
     public async Task Handle(NodeCreatedDomainEvent notification, CancellationToken cancellationToken)
@@ -46,10 +49,16 @@ public sealed class NodeCreatedDomainEventHandler : INotificationHandler<NodeCre
             return;
         }
 
+        
+        
         // If already started/completed/waiting, do nothing.
         if (node.State != NodeState.Created)
             return;
 
+
+        await _subscriptionService.SubscribeBoundaryEvents(node,cancellationToken);
+        
+        
         // Enqueue processing
         await _mediator.Send(new DispatchNodeProcessCommand(node.Id), cancellationToken);
 

@@ -5,7 +5,7 @@ public sealed class MultiLanguageScriptTaskExecutorOptions
     // If scriptFormat is null/empty => treat as C#
     public bool TreatNullFormatAsCSharp { get; init; } = true;
 
-    public TimeSpan CSharpTimeout { get; init; } = TimeSpan.FromSeconds(30);
+    public TimeSpan CSharpTimeout { get; init; } = TimeSpan.FromSeconds(60);
 
     public TimeSpan JavaScriptTimeout { get; init; } = TimeSpan.FromSeconds(30);
     public int JavaScriptMaxStatements { get; init; } = 10_000;

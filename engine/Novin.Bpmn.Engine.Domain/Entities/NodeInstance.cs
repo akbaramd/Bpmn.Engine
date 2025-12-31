@@ -20,6 +20,7 @@ public enum NodeState
 /// A single execution instance of a BPMN node (element) for a specific Token within a Process.
 /// Created ONLY when the token is executable (this rule should be enforced by application service).
 /// </summary>
+
 public sealed class NodeInstance : BaseAggregateRoot
 {
     public Guid ProcessId { get; private set; }
@@ -45,6 +46,12 @@ public sealed class NodeInstance : BaseAggregateRoot
     /// <summary>Failure detail (revealed to ops/UI if needed)</summary>
     public string? ErrorMessage { get; private set; }
 
+    /// <summary>
+    /// Execution flag (mirrors Token.IsExecutable intent).
+    /// If false => aggregate ignores all transitions/changes (no auto-skip).
+    /// </summary>
+    public bool IsExecutable { get; private set; }
+
     private readonly Dictionary<string, string> _variables = new(StringComparer.Ordinal);
     public IReadOnlyDictionary<string, string> Variables => _variables;
 
@@ -56,7 +63,8 @@ public sealed class NodeInstance : BaseAggregateRoot
         string elementId,
         Guid? scopeId,
         Guid? activityInstanceId,
-        string? arrivedViaFlowId)
+        string? arrivedViaFlowId,
+        bool isExecutable)
     {
         if (processId == Guid.Empty) throw new ArgumentException("ProcessId cannot be empty.", nameof(processId));
         if (tokenId == Guid.Empty) throw new ArgumentException("TokenId cannot be empty.", nameof(tokenId));
@@ -70,6 +78,8 @@ public sealed class NodeInstance : BaseAggregateRoot
         ActivityInstanceId = activityInstanceId;
         ArrivedViaFlowId = string.IsNullOrWhiteSpace(arrivedViaFlowId) ? null : arrivedViaFlowId.Trim();
 
+        IsExecutable = isExecutable;
+
         State = NodeState.Created;
         CreatedAtUtc = DateTime.UtcNow;
 
@@ -81,12 +91,29 @@ public sealed class NodeInstance : BaseAggregateRoot
             OccurredAtUtc: CreatedAtUtc,
             ScopeId: ScopeId,
             ActivityInstanceId: ActivityInstanceId,
-            ArrivedViaFlowId: ArrivedViaFlowId
+            ArrivedViaFlowId: ArrivedViaFlowId,
+            IsExecutable: IsExecutable
         ));
+    }
+
+    /// <summary>
+    /// Make this node non-executable. Does NOT auto-skip and does NOT change State.
+    /// After this, all operations become no-ops.
+    /// </summary>
+    public void MarkNonExecutable(string? reason = null)
+    {
+        if (!IsExecutable) return;
+
+        IsExecutable = false;
+
+        // Optional cleanup: avoid stale correlation
+        WorkerId = null;
+        UserTaskId = null;
     }
 
     public void Start()
     {
+        if (!IsExecutable) return;
         if (State != NodeState.Created) return;
 
         State = NodeState.Processing;
@@ -101,18 +128,15 @@ public sealed class NodeInstance : BaseAggregateRoot
         ));
     }
 
-// <summary>
-    /// Put node in waiting state, correlated to a worker/job.
-    /// </summary>
     public void WaitForWorker(Guid workerId, string? reason = null)
     {
+        if (!IsExecutable) return;
         if (workerId == Guid.Empty) throw new ArgumentException("WorkerId cannot be empty.", nameof(workerId));
         if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
 
         if (State == NodeState.Created)
             Start();
 
-        // Correlation
         WorkerId = workerId;
         UserTaskId = null;
 
@@ -130,19 +154,15 @@ public sealed class NodeInstance : BaseAggregateRoot
         ));
     }
 
-    /// <summary>
-    /// Put node in waiting state, correlated to a UserTaskInstance (human task).
-    /// Optionally also stores WorkerId if your engine treats UserTask as a kind of worker record.
-    /// </summary>
     public void WaitForUserTask(Guid userTaskId, Guid? workerId = null, string? reason = null)
     {
+        if (!IsExecutable) return;
         if (userTaskId == Guid.Empty) throw new ArgumentException("UserTaskId cannot be empty.", nameof(userTaskId));
         if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
 
         if (State == NodeState.Created)
             Start();
 
-        // Correlation
         UserTaskId = userTaskId;
         WorkerId = workerId is { } w && w != Guid.Empty ? w : null;
 
@@ -159,15 +179,15 @@ public sealed class NodeInstance : BaseAggregateRoot
             OccurredAtUtc: DateTime.UtcNow
         ));
     }
-    /// <summary>
-    /// Resume node from waiting back to processing.
-    /// </summary>
+
     public void ResumeFromWait(string? reason = null)
     {
+        if (!IsExecutable) return;
         if (State != NodeState.Waiting) return;
 
         var oldWorkerId = WorkerId;
         WorkerId = null;
+        UserTaskId = null;
         State = NodeState.Processing;
 
         AddDomainEvent(new NodeResumedDomainEvent(
@@ -185,7 +205,6 @@ public sealed class NodeInstance : BaseAggregateRoot
     {
         if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
 
-        // If Created (rare), treat as started then completed
         if (State == NodeState.Created)
             Start();
 
@@ -203,6 +222,7 @@ public sealed class NodeInstance : BaseAggregateRoot
 
     public void Fail(string errorMessage)
     {
+        if (!IsExecutable) return;
         if (string.IsNullOrWhiteSpace(errorMessage))
             throw new ArgumentException("ErrorMessage is required.", nameof(errorMessage));
 
@@ -224,6 +244,7 @@ public sealed class NodeInstance : BaseAggregateRoot
 
     public void Skip(string? reason = null)
     {
+        if (!IsExecutable) return; // <- important: non-executable does not even generate skipped
         if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
 
         State = NodeState.Skipped;
@@ -239,13 +260,10 @@ public sealed class NodeInstance : BaseAggregateRoot
         ));
     }
 
-    /// <summary>
-    /// Set or remove a variable on this node instance.
-    /// - null => removes key
-    /// - non-null => stores as string (string stays as-is; others serialized as JSON)
-    /// </summary>
     public void SetVariable(string key, object? value)
     {
+        if (!IsExecutable) return;
+
         if (string.IsNullOrWhiteSpace(key))
             throw new ArgumentException("Key is required.", nameof(key));
 
@@ -291,11 +309,15 @@ public sealed class NodeInstance : BaseAggregateRoot
     {
         if (value is string s) return s;
 
-        // numbers/bool/date => ToString with invariant? (keep simple: JSON is safest)
         return JsonSerializer.Serialize(value, new JsonSerializerOptions
         {
             WriteIndented = false
         });
+    }
+
+    public void WaitForJoin()
+    {
+        State = NodeState.Waiting;
     }
 }
 
@@ -312,7 +334,8 @@ public sealed record NodeCreatedDomainEvent(
     DateTime OccurredAtUtc,
     Guid? ScopeId,
     Guid? ActivityInstanceId,
-    string? ArrivedViaFlowId
+    string? ArrivedViaFlowId,
+    bool IsExecutable
 ) : IDomainEvent;
 
 public sealed record NodeStartedDomainEvent(

@@ -30,8 +30,8 @@ public static class DependencyInjection
         services.AddSingleton(new MultiLanguageScriptTaskExecutorOptions
         {
             TreatNullFormatAsCSharp = true,
-            CSharpTimeout = TimeSpan.FromSeconds(2),
-            JavaScriptTimeout = TimeSpan.FromSeconds(2),
+            CSharpTimeout = TimeSpan.FromSeconds(30),
+            JavaScriptTimeout = TimeSpan.FromSeconds(30),
             JavaScriptMaxStatements = 10_000,
             JavaScriptMaxMemoryBytes = 4_000_000
         });

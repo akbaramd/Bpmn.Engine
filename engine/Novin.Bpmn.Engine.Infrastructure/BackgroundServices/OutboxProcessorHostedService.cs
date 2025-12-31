@@ -68,26 +68,36 @@ public class OutboxProcessorHostedService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
 
         var claimer = scope.ServiceProvider.GetRequiredService<IOutboxBatchClaimer>();
-        var repository = scope.ServiceProvider.GetRequiredService<IOutboxMessageRepository>();
-        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
-        var jsonSerializer = scope.ServiceProvider.GetRequiredService<IJsonSerializer>();
 
-        // Claim a batch of messages
         var messages = await claimer.ClaimAsync(_batchSize, _batchClaimLease, ct);
+        if (messages.Count == 0) return;
 
-        if (!messages.Any())
+        // سقف همزمانی (پیشنهاد: از options/config بخوان)
+        var maxConcurrency = 8;
+        using var sem = new SemaphoreSlim(maxConcurrency);
+
+        var tasks = messages.Select(async msg =>
         {
-            _logger.LogTrace("No outbox messages to process");
-            return;
-        }
+            await sem.WaitAsync(ct);
+            try
+            {
+                // ✅ scope جدا برای هر پیام (DbContext جدا)
+                using var msgScope = _scopeFactory.CreateScope();
+                var mediator = msgScope.ServiceProvider.GetRequiredService<IMediator>();
+                var repository = msgScope.ServiceProvider.GetRequiredService<IOutboxMessageRepository>();
+                var jsonSerializer = msgScope.ServiceProvider.GetRequiredService<IJsonSerializer>();
 
-        _logger.LogDebug("Processing {Count} outbox messages", messages.Count);
+                await ProcessMessageAsync(msg, mediator, repository, jsonSerializer, ct);
+            }
+            finally
+            {
+                sem.Release();
+            }
+        });
 
-        foreach (var message in messages)
-        {
-            await ProcessMessageAsync(message, mediator, repository, jsonSerializer, ct);
-        }
+        await Task.WhenAll(tasks);
     }
+
 
     /// <summary>
     /// Processes a single outbox message

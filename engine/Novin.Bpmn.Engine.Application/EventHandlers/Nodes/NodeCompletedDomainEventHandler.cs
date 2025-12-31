@@ -24,7 +24,7 @@ public sealed class NodeCompletedDomainEventHandler
 
         // 👉 trigger NAVIGATION phase
         await _mediator.Send(
-            new DispatchNodeNavigateCommand(e.NodeId),
+            new DispatchTokenNavigateCommand(e.TokenId),
             ct);
     }
 }

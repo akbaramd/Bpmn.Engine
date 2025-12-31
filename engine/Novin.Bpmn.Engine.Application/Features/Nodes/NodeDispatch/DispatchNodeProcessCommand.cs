@@ -89,11 +89,6 @@ public sealed class DispatchNodeProcessCommandHandler
                 return;
             }
 
-            if (!token.IsExecutable)
-            {
-                _logger.LogDebug("[NODE-PROC] Skip non-executable token. TokenId={TokenId} NodeId={NodeId}", token.Id, node.Id);
-                return;
-            }
 
             // ------------------------------------------------------------
             // 4) Node → Processing
@@ -117,7 +112,7 @@ public sealed class DispatchNodeProcessCommandHandler
                 "[NODE-PROC] Dispatching PROCESS. NodeId={NodeId} ElementId={ElementId} TokenId={TokenId} Resume={Resume}",
                 node.Id, node.ElementId, token.Id, request.IsResume);
 
-            var result = await _dispatcher.DispatchProcessAsync(
+            var result = await _dispatcher.DispatchNodeProcessAsync(
                 process: process,
                 token: token,
                 node: node,

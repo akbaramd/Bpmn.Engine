@@ -1,13 +1,14 @@
-﻿using Novin.Bpmn.Engine.Application.Services;
+﻿using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 using Novin.Bpmn.Models.Models;
+
+namespace Novin.Bpmn.Engine.Application.Services;
 
 public abstract class BpmnElementHandlerBase : IBpmnElementHandler
 {
     protected readonly IFeelExpressionEvaluator Feel;
     protected readonly ILogger Logger;
-
     private readonly bool _includeProcessVars;
 
     protected BpmnElementHandlerBase(
@@ -22,10 +23,22 @@ public abstract class BpmnElementHandlerBase : IBpmnElementHandler
 
     public abstract bool CanHandle(BpmnFlowElement element);
 
-    // ------------------------------------------------------------
-    // PROCESS (must be implemented by each element)
-    // ------------------------------------------------------------
-    public abstract Task<ElementProcessResult> ProcessAsync(
+    // -----------------------------
+    // TOKEN PROCESS (default: let it continue)
+    // -----------------------------
+    public virtual Task<TokenProcessResult> TokenProcessAsync(
+        Process process,
+        Token token,
+        BpmnFlowElement element,
+        BpmnRuntimeContext ctx,
+        bool isResume,
+        CancellationToken ct)
+        => Task.FromResult(TokenProcessResult.Continue);
+
+    // -----------------------------
+    // NODE PROCESS (must be implemented)
+    // -----------------------------
+    public abstract Task<ElementProcessResult> NodeProcessAsync(
         Process process,
         Token token,
         NodeInstance node,
@@ -34,28 +47,22 @@ public abstract class BpmnElementHandlerBase : IBpmnElementHandler
         bool isResume,
         CancellationToken ct);
 
-    // ------------------------------------------------------------
-    // NAVIGATION (default BPMN behavior)
-    // ------------------------------------------------------------
-    public virtual Task NavigateAsync(
+    // -----------------------------
+    // TOKEN NAVIGATION (default BPMN navigation)
+    // -----------------------------
+    public virtual Task TokenNavigateAsync(
         Process process,
         Token token,
-        NodeInstance node,
         BpmnFlowElement element,
         BpmnRuntimeContext ctx,
         bool isResume,
         CancellationToken ct)
     {
-        // Terminal states → no navigation
-        if (token.State is TokenState.Waiting
-            or TokenState.Terminated
-            or TokenState.Failed)
+        // Terminal/no-move states
+        if (token.State is TokenState.Waiting or TokenState.Terminated or TokenState.Failed)
             return Task.CompletedTask;
 
-        var outgoing = ctx.Model.GetOutgoingSequenceFlows(
-            ctx.BpmnProcessId,
-            token.CurrentElementId);
-
+        var outgoing = ctx.Model.GetOutgoingSequenceFlows(ctx.BpmnProcessId, token.CurrentElementId);
         if (outgoing is null || outgoing.Count == 0)
             return Task.CompletedTask;
 
@@ -63,58 +70,47 @@ public abstract class BpmnElementHandlerBase : IBpmnElementHandler
             ? outgoing[0]
             : SelectFlow(process, token, element, outgoing);
 
-        if (selected?.targetRef is null)
+        if (string.IsNullOrWhiteSpace(selected?.targetRef))
         {
-            Logger.LogError(
-                "[NAV] No valid outgoing flow. Element={ElementId} Node={NodeId}",
-                token.CurrentElementId, node.Id);
+            Logger.LogError("[NAV] No valid outgoing flow. Element={ElementId}", token.CurrentElementId);
             return Task.CompletedTask;
         }
 
-        // --------------------------------------------------------
-        // Completed token → fan-out
-        // --------------------------------------------------------
+        // If your engine spawns a child token after Processed/Completed:
         if (token.State == TokenState.Completed)
         {
             var child = new Token(
                 processId: process.Id,
-                startElementId: selected.targetRef,
+                startElementId: selected.targetRef!,
                 parentTokenIds: new[] { token.Id });
 
             child.SetArrivedVia(selected.id);
             process.AddToken(child.Id);
 
-            Logger.LogDebug(
-                "[NAV] Child token created. Parent={Parent} Child={Child} Target={Target}",
+            Logger.LogDebug("[NAV] Child token created. Parent={Parent} Child={Child} Target={Target}",
                 token.Id, child.Id, selected.targetRef);
 
             return Task.CompletedTask;
         }
 
-        // --------------------------------------------------------
-        // Active token → move
-        // --------------------------------------------------------
-        token.MoveTo(selected.targetRef, selected.id);
+        // Otherwise move the token
+        token.MoveTo(selected.targetRef!, selected.id);
 
-        Logger.LogDebug(
-            "[NAV] Token moved. Token={TokenId} To={Target}",
-            token.Id, selected.targetRef);
-
+        Logger.LogDebug("[NAV] Token moved. Token={TokenId} To={Target}", token.Id, selected.targetRef);
         return Task.CompletedTask;
     }
 
-    // ------------------------------------------------------------
-    // FLOW SELECTION
-    // ------------------------------------------------------------
+    // -----------------------------
+    // FLOW SELECTION (default)
+    // -----------------------------
     protected virtual BpmnSequenceFlow? SelectFlow(
         Process process,
         Token token,
         BpmnFlowElement element,
         IReadOnlyList<BpmnSequenceFlow> outgoing)
     {
-        // Trace token → ignore conditions
         if (!token.IsExecutable)
-            return outgoing.First();
+            return outgoing[0];
 
         var vars = BuildEvalVars(process, token);
 
@@ -127,7 +123,6 @@ public abstract class BpmnElementHandlerBase : IBpmnElementHandler
                 return flow;
         }
 
-        // Gateway default
         if (element is BpmnGateway gw)
         {
             var def = GetGatewayDefaultFlowId(gw);
@@ -135,13 +130,10 @@ public abstract class BpmnElementHandlerBase : IBpmnElementHandler
             if (df != null) return df;
         }
 
-        // Fallback
-        return outgoing.First();
+        return outgoing[0];
     }
 
-    protected virtual IReadOnlyDictionary<string, string?> BuildEvalVars(
-        Process process,
-        Token token)
+    protected virtual IReadOnlyDictionary<string, string?> BuildEvalVars(Process process, Token token)
     {
         if (!_includeProcessVars)
             return new Dictionary<string, string?>(token.Variables);

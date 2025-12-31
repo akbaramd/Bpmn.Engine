@@ -1,6 +1,6 @@
 using Novin.Bpmn.Engine.Domain.Common;
 
-public enum JobStatus { Pending, Leased, Running, Succeeded, Failed, TimedOut, DeadLetter }
+public enum JobStatus { Pending, Leased, Running,Canceled, Succeeded, Failed, TimedOut, DeadLetter }
 
 public sealed class Job : BaseAggregateRoot
 {

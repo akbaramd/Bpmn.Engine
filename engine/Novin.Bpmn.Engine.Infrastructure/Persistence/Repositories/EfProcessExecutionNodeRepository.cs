@@ -144,4 +144,17 @@ public sealed class NodeInstanceRepository :   INodeInstanceRepository
        
         _db.NodeInstances.Remove(_db.NodeInstances.First(x=>x.Id == id));
     }
+
+    public async Task<IEnumerable<NodeInstance>> GetByActivityInstanceIdAsync(Guid processId, Guid activityInstanceId,
+        CancellationToken trxCt)
+    {
+        if (processId == Guid.Empty) throw new ArgumentException("processId cannot be empty.", nameof(processId));
+
+        // Prefer CompletedAtUtc if present, else CreatedAtUtc as fallback ordering.
+        return await _db.NodeInstances
+            .AsNoTracking()
+            .Where(x => x.ProcessId == processId && x.ActivityInstanceId == activityInstanceId)
+            .OrderByDescending(x => x.CompletedAtUtc ?? x.CreatedAtUtc)
+            .ThenByDescending(x => x.CreatedAtUtc).ToListAsync(trxCt);
+    }
 }

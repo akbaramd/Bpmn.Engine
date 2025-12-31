@@ -21,7 +21,7 @@ public sealed class EndEventHandler : BpmnElementHandlerBase
 
     public override bool CanHandle(BpmnFlowElement element) => element is BpmnEndEvent;
 
-    public override async Task<ElementProcessResult> ProcessAsync(
+    public override async Task<ElementProcessResult> NodeProcessAsync(
         Domain.Entities.Process process,
         Token token,
         NodeInstance node,
@@ -52,7 +52,7 @@ public sealed class EndEventHandler : BpmnElementHandlerBase
         }))
         {
             _logger.LogInformation(
-                "[END] ProcessAsync. Terminate={Terminate} TokenState={TokenState} NodeState={NodeState} Exec={Exec} Resume={Resume}",
+                "[END] NodeProcessAsync. Terminate={Terminate} TokenState={TokenState} NodeState={NodeState} Exec={Exec} Resume={Resume}",
                 isTerminate, token.State, node.State, token.IsExecutable, isResume);
 
             // Terminal safety + idempotency: اگر دوباره رسیدیم، Completed بده
@@ -66,9 +66,11 @@ public sealed class EndEventHandler : BpmnElementHandlerBase
                 return ElementProcessResult.Completed;
             }
 
+            node.Complete();
             // Normal End: only end this token
             if (token.IsExecutable)
             {
+                
                 token.Complete();
             }
             else
@@ -85,10 +87,9 @@ public sealed class EndEventHandler : BpmnElementHandlerBase
     }
 
     // EndEvent => no navigation
-    public override Task NavigateAsync(
+    public override Task TokenNavigateAsync(
         Domain.Entities.Process process,
         Token token,
-        NodeInstance node,
         BpmnFlowElement element,
         BpmnRuntimeContext ctx,
         bool isResume,

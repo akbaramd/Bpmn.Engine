@@ -56,7 +56,6 @@ public static class DependencyInjection
         // -------------------------
         services.AddScoped<ITokenForkService, TokenForkService>();
 
-        services.AddScoped<IGatewayJoinService, GatewayJoinService>();
         services.AddScoped<IGatewaySplitService, GatewaySplitService>();
 
         // اگر می‌خواهی شرط‌ها فقط روی Token.Variables اجرا شوند (پیشنهادی با IO Mapping)
@@ -91,6 +90,7 @@ public static class DependencyInjection
         services.AddScoped<IIncidentService, IncidentService>();
         services.AddScoped<IBpmnQuery, BpmnQuery>();
         services.AddScoped<IBpmnStartResolver, BpmnStartResolver>();
+        services.AddScoped<IBoundaryEventSubscriptionService, IBoundaryEventSubscriptionService.BoundaryEventSubscriptionService>();
         services.AddScoped<IProcessInstantiationService, ProcessInstantiationService>();
 
         // -------------------------

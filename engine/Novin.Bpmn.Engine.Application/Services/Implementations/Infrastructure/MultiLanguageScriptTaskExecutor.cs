@@ -1,9 +1,12 @@
 ﻿using System.Collections.Concurrent;
+using System.Collections.Immutable;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Jint;
 using Jint.Native;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
@@ -29,8 +32,10 @@ public sealed class MultiLanguageScriptTaskExecutor : IScriptTaskExecutor
     private readonly MultiLanguageScriptTaskExecutorOptions _options;
     private readonly IJsonSerializer _jsonSerializer;
 
-    private readonly ConcurrentDictionary<string, ScriptRunner<object?>> _csharpCache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Lazy<ScriptRunner<object>>> _csharpCache
+        = new(StringComparer.Ordinal);
 
+    private readonly ScriptOptions _csharpOptions;
     public MultiLanguageScriptTaskExecutor(
         ILogger<MultiLanguageScriptTaskExecutor> logger,
         MultiLanguageScriptTaskExecutorOptions options,
@@ -39,6 +44,14 @@ public sealed class MultiLanguageScriptTaskExecutor : IScriptTaskExecutor
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _jsonSerializer = jsonSerializer ?? throw new ArgumentNullException(nameof(jsonSerializer));
+
+        _csharpOptions = BuildScriptOptions(
+            typeof(ScriptGlobals).Assembly,
+            typeof(ScriptExecutionContext).Assembly,
+            typeof(Process).Assembly,
+            typeof(Token).Assembly,
+            typeof(BpmnErrorException).Assembly,
+            typeof(MultiLanguageScriptTaskExecutor).Assembly);
     }
 
     public async Task ExecuteAsync(Process process, Token token, BpmnScriptTask task, CancellationToken ct)
@@ -91,15 +104,15 @@ public sealed class MultiLanguageScriptTaskExecutor : IScriptTaskExecutor
     // -----------------------------
     // C# (Roslyn) - context is live (write-through)
     // -----------------------------
+ // -----------------------------
+    // C# (Roslyn) - compiled + cached + timeout only for execution
+    // -----------------------------
     private async Task ExecuteCSharpAsync(Process process, Token token, string taskId, string code, CancellationToken ct)
     {
         _logger.LogInformation(
             "[SCRIPT-EXEC] Starting C# script execution. TaskId={TaskId} ProcessId={ProcessId} TokenId={TokenId}",
-            taskId,
-            process.Id,
-            token.Id);
+            taskId, process.Id, token.Id);
 
-        // Log token variables before execution
         var tokenVarsBefore = token.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
         _logger.LogDebug(
             "[SCRIPT-EXEC] Token variables BEFORE execution. TaskId={TaskId} Count={Count} Variables={Variables}",
@@ -108,7 +121,31 @@ public sealed class MultiLanguageScriptTaskExecutor : IScriptTaskExecutor
             string.Join(", ", tokenVarsBefore.Select(kv => $"{kv.Key}={kv.Value}")));
 
         var cacheKey = $"{taskId}:{Sha256(code)}";
-        var runner = _csharpCache.GetOrAdd(cacheKey, _ => CompileCSharp(code));
+
+        ScriptRunner<object> runner;
+        try
+        {
+            // ✅ Compile + CreateDelegate cached (NO timeout here)
+            runner = _csharpCache.GetOrAdd(
+                cacheKey,
+                _ => new Lazy<ScriptRunner<object>>(
+                    () => CompileCSharp(code, _csharpOptions),
+                    LazyThreadSafetyMode.ExecutionAndPublication
+                )
+            ).Value;
+        }
+        catch (CompilationErrorException cex)
+        {
+            var errors = string.Join(Environment.NewLine, cex.Diagnostics.Select(d => d.ToString()));
+            _logger.LogError("C# ScriptTask compilation failed. TaskId={TaskId}\n{Errors}", taskId, errors);
+
+            throw new TokenExecutionException(
+                process.Id,
+                token.Id,
+                taskId,
+                $"C# ScriptTask '{taskId}' compilation failed.",
+                cex);
+        }
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(_options.CSharpTimeout);
@@ -118,96 +155,47 @@ public sealed class MultiLanguageScriptTaskExecutor : IScriptTaskExecutor
             var globals = new ScriptGlobals(process, token);
 
             _logger.LogDebug(
-                "[SCRIPT-EXEC] Executing script. TaskId={TaskId} CodeLength={CodeLength}",
-                taskId,
-                code.Length);
+                "[SCRIPT-EXEC] Executing C# script. TaskId={TaskId} CodeLength={CodeLength}",
+                taskId, code.Length);
 
-            // C# script can use:
-            // context.SystemVariables["amount"] = "120";
-            // context.SetInt("amount", 120);
-            // context.SetString("step", "x");
-            // context.SetBoolean("isActive", true);
-            // context.SetDecimal("price", 99.99m);
+            // ✅ Only runtime execution is time-boxed
             await runner(globals, timeoutCts.Token);
 
-            // Sync Variables back to token after script execution
+            // ✅ Sync variables back to token
             globals.SyncToToken(token);
 
-            // Log token variables after successful execution
             var tokenVarsAfter = token.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
-            _logger.LogInformation(
-                "[SCRIPT-EXEC] ✅ Script execution completed successfully. TaskId={TaskId}",
-                taskId);
+            _logger.LogInformation("[SCRIPT-EXEC] ✅ Script execution completed successfully. TaskId={TaskId}", taskId);
             _logger.LogDebug(
                 "[SCRIPT-EXEC] Token variables AFTER execution. TaskId={TaskId} Count={Count} Variables={Variables}",
                 taskId,
                 tokenVarsAfter.Count,
                 string.Join(", ", tokenVarsAfter.Select(kv => $"{kv.Key}={kv.Value}")));
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // upstream cancellation
+            throw;
+        }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
-            // Throw TokenExecutionException instead of calling token.Fail() directly
-            // This allows the orchestrator to handle it properly (create incident, fail token in separate transaction)
             throw new TokenExecutionException(
                 process.Id,
                 token.Id,
                 taskId,
                 $"C# ScriptTask '{taskId}' timed out after {_options.CSharpTimeout.TotalSeconds:0.#}s.");
         }
-        catch (CompilationErrorException cex)
+        catch (BpmnErrorException)
         {
-            var errors = string.Join(Environment.NewLine, cex.Diagnostics.Select(d => d.ToString()));
-            _logger.LogError("C# ScriptTask compilation failed. TaskId={TaskId}\n{Errors}", taskId, errors);
-            // Throw TokenExecutionException instead of calling token.Fail() directly
-            throw new TokenExecutionException(
-                process.Id,
-                token.Id,
-                taskId,
-                $"C# ScriptTask '{taskId}' compilation failed.",
-                cex);
-        }
-        catch (BpmnErrorException bex)
-        {
-            // BPMN Error: propagate directly without wrapping
-            _logger.LogWarning(
-                "[SCRIPT-EXEC] ⚠️ C# ScriptTask threw BPMN Error. TaskId={TaskId} ErrorCode={ErrorCode} Message={Message}",
-                taskId,
-                bex.Code,
-                bex.Message);
-            
-            // Log token variables when BPMN error occurs
-            var tokenVarsOnError = token.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
-            _logger.LogDebug(
-                "[SCRIPT-EXEC] Token variables when BPMN error thrown. TaskId={TaskId} Count={Count} Variables={Variables}",
-                taskId,
-                tokenVarsOnError.Count,
-                string.Join(", ", tokenVarsOnError.Select(kv => $"{kv.Key}={kv.Value}")));
-            
             throw;
         }
         catch (Exception ex)
         {
-            // Check if exception message indicates a BPMN Error
-            // Format: "BPMN Error {errorCode}: {message}"
             if (ex.Message.StartsWith("BPMN Error ", StringComparison.OrdinalIgnoreCase))
             {
                 var parts = ex.Message.Substring("BPMN Error ".Length).Split(new[] { ':' }, 2);
                 var errorCode = parts.Length > 0 ? parts[0].Trim() : "UNKNOWN_ERROR";
                 var errorMessage = parts.Length > 1 ? parts[1].Trim() : ex.Message;
-
-                _logger.LogWarning(
-                    "[SCRIPT-EXEC] ⚠️ C# ScriptTask threw exception with BPMN Error format. Converting to BpmnErrorException. TaskId={TaskId} ErrorCode={ErrorCode} Message={Message}",
-                    taskId,
-                    errorCode,
-                    errorMessage);
-                
-                // Log token variables when converting to BPMN error
-                var tokenVarsOnError = token.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
-                _logger.LogDebug(
-                    "[SCRIPT-EXEC] Token variables when converting to BPMN error. TaskId={TaskId} Count={Count} Variables={Variables}",
-                    taskId,
-                    tokenVarsOnError.Count,
-                    string.Join(", ", tokenVarsOnError.Select(kv => $"{kv.Key}={kv.Value}")));
 
                 throw new BpmnErrorException(errorCode, errorMessage, ex);
             }
@@ -215,18 +203,8 @@ public sealed class MultiLanguageScriptTaskExecutor : IScriptTaskExecutor
             _logger.LogError(
                 ex,
                 "[SCRIPT-EXEC] ❌ C# ScriptTask execution failed (technical error). TaskId={TaskId} Message={Message}",
-                taskId,
-                ex.Message);
-            
-            // Log token variables on technical error
-            var tokenVarsOnTechError = token.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
-            _logger.LogDebug(
-                "[SCRIPT-EXEC] Token variables when technical error occurred. TaskId={TaskId} Count={Count} Variables={Variables}",
-                taskId,
-                tokenVarsOnTechError.Count,
-                string.Join(", ", tokenVarsOnTechError.Select(kv => $"{kv.Key}={kv.Value}")));
-            
-            // Throw TokenExecutionException instead of calling token.Fail() directly
+                taskId, ex.Message);
+
             throw new TokenExecutionException(
                 process.Id,
                 token.Id,
@@ -236,37 +214,72 @@ public sealed class MultiLanguageScriptTaskExecutor : IScriptTaskExecutor
         }
     }
 
-    private static ScriptRunner<object?> CompileCSharp(string code)
+    private static ScriptRunner<object> CompileCSharp(string code, ScriptOptions options)
     {
-        var options = ScriptOptions.Default
-            .AddReferences(
-                typeof(object).Assembly,                    // System.Private.CoreLib
-                typeof(Console).Assembly,                   // System.Console
-                typeof(Enumerable).Assembly,                 // System.Linq
-                typeof(List<>).Assembly,                     // System.Collections
-                typeof(Dictionary<,>).Assembly,             // System.Collections.Generic
-                typeof(Convert).Assembly,                    // System.Runtime
-                typeof(string).Assembly,                     // System.Runtime
-                typeof(DateTime).Assembly,                  // System.Runtime
-                typeof(InvalidOperationException).Assembly,  // System.Runtime
-                typeof(Process).Assembly,                    // Domain entities
-                typeof(Token).Assembly,                      // Domain entities
-                typeof(ScriptGlobals).Assembly)             // Application services
-            .AddImports(
-                "System",
-                "System.Linq",
-                "System.Collections",
-                "System.Collections.Generic",
-                "System.Text",
-                "System.Globalization",
-                "Novin.Bpmn.Engine.Domain.Entities",
-                "Novin.Bpmn.Engine.Domain.Exceptions",
-                "Novin.Bpmn.Engine.Application.Services");
+        // ✅ IMPORTANT: globalsType must be provided
+        var script = CSharpScript.Create(
+            code,
+            options,
+            globalsType: typeof(ScriptGlobals));
 
-        var script = CSharpScript.Create(code, options, typeof(ScriptGlobals));
-        script.Compile();
+        // ✅ Compile now (fail fast). No cancellation token here.
+        var diags = script.Compile();
+        var errors = diags.Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
+        if (errors.Length > 0)
+            throw new CompilationErrorException("C# script compilation failed.", errors.ToImmutableArray());
+
+        // ✅ Create delegate => executor built now (not during Run)
         return script.CreateDelegate();
     }
+private static ScriptOptions BuildScriptOptions(params Assembly[] extraAssemblies)
+{
+    var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    // ✅ framework refs (System.Runtime, mscorlib, ...)
+    var tpa = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
+    if (!string.IsNullOrWhiteSpace(tpa))
+    {
+        foreach (var p in tpa.Split(Path.PathSeparator))
+            if (!string.IsNullOrWhiteSpace(p))
+                paths.Add(p);
+    }
+
+    // ✅ app refs (skip dynamic + empty location)
+    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies().Concat(extraAssemblies))
+    {
+        if (asm == null) continue;
+        if (asm.IsDynamic) continue;
+
+        string? loc = null;
+        try { loc = asm.Location; } catch { }
+
+        if (string.IsNullOrWhiteSpace(loc)) continue;
+        paths.Add(loc);
+    }
+
+    var refs = paths.Select(p => (MetadataReference)MetadataReference.CreateFromFile(p));
+
+    return ScriptOptions.Default
+        .WithReferences(refs)
+        .WithImports(
+            "System",
+            "System.Threading",
+            "System.Threading.Tasks",
+            "System.Linq",
+            "System.Collections",
+            "System.Collections.Generic",
+            "System.Text",
+            "System.Globalization",
+            "System.Text.RegularExpressions",
+
+            "Novin.Bpmn.Engine.Domain.Entities",
+            "Novin.Bpmn.Engine.Domain.Exceptions",
+            "Novin.Bpmn.Engine.Application.Services",
+            "Novin.Bpmn.Engine.Application.Common.Interfaces",
+            "Novin.Bpmn.Models.Models"
+        );
+}
+
 
     // -----------------------------
     // JavaScript (Jint)

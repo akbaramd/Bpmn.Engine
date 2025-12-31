@@ -8,9 +8,7 @@ namespace Novin.Bpmn.Engine.Application.Common.Interfaces;
 /// </summary>
 public interface IBoundarySubscriptionRepository
 {
-    Task<BoundaryEventSubscription?> GetByIdAsync(Guid subscriptionId, CancellationToken ct = default);
     Task<IEnumerable<BoundaryEventSubscription>> GetByTokenIdAsync(Guid tokenId, CancellationToken ct = default);
-    Task<IEnumerable<BoundaryEventSubscription>> GetByProcessIdAsync(Guid processId, CancellationToken ct = default);
     Task<IEnumerable<BoundaryEventSubscription>> GetActiveByAttachedElementAsync(
         Guid processId, 
         string attachedToElementId, 
@@ -30,7 +28,8 @@ public interface IBoundarySubscriptionRepository
     /// </summary>
     Task<IEnumerable<BoundaryEventSubscription>> GetActiveErrorSubscriptionsByErrorCodeAsync(
         Guid processId,
-        string errorCode,
+        Guid nodeInstanceId,
+        Guid activityInstanceId,
         CancellationToken ct = default);
 
     /// <summary>
@@ -44,4 +43,5 @@ public interface IBoundarySubscriptionRepository
         CancellationToken ct = default);
     Task AddAsync(BoundaryEventSubscription subscription, CancellationToken ct = default);
     Task UpdateAsync(BoundaryEventSubscription subscription, CancellationToken ct = default);
+    Task<BoundaryEventSubscription> GetByIdAsync(Guid eSubscriptionId, CancellationToken trxCt);
 }
