@@ -1,6 +1,5 @@
-using MediatR;
+using System.Linq;
 using Microsoft.Extensions.Logging;
-using Novin.Bpmn.Engine.Application.Commands.CreateMergedToken;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Domain.Entities;
@@ -17,7 +16,6 @@ public sealed class GatewayHandler : BpmnElementHandlerBase
     private readonly ITokenRepository _tokenRepository;
     private readonly INodeInstanceRepository _nodeRepository;
     private readonly IUnitOfWork _uow;
-    private readonly IMediator _mediator;
     private readonly ILogger<GatewayHandler> _logger;
 
     
@@ -28,8 +26,7 @@ public sealed class GatewayHandler : BpmnElementHandlerBase
         ILogger<GatewayHandler> logger,
         ITokenRepository tokenRepository,
         INodeInstanceRepository nodeRepository,
-        IUnitOfWork uow,
-        IMediator mediator)
+        IUnitOfWork uow)
         : base(feel, logger)
     {
         _split = split ?? throw new ArgumentNullException(nameof(split));
@@ -38,7 +35,6 @@ public sealed class GatewayHandler : BpmnElementHandlerBase
         _tokenRepository = tokenRepository ?? throw new ArgumentNullException(nameof(tokenRepository));
         _nodeRepository = nodeRepository ?? throw new ArgumentNullException(nameof(nodeRepository));
         _uow = uow ?? throw new ArgumentNullException(nameof(uow));
-        _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
     }
 
     public override bool CanHandle(BpmnFlowElement element) => element is BpmnGateway;
@@ -60,7 +56,7 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
     if (ctx is null) throw new ArgumentNullException(nameof(ctx));
 
     // terminal safety
-    if (token.State is TokenState.Terminated or TokenState.Failed)
+    if (token.State is TokenState.Terminated or TokenState.Failed or TokenState.Merged)
         return TokenProcessResult.NoOp;
 
     var gateway = (BpmnGateway)element;
@@ -107,311 +103,138 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
 
     var scopeId = token.ScopeId.Value;
 
-    // Join state keys (gateway+scope)
-    var closedKey   = GatewayScopeKeys.GwClosed(gwId, scopeId);
-    var consumedKey = GatewayScopeKeys.GwConsumed(gwId, scopeId);
-
-    // Expected executable branches (scope-only) - MUST be written by split
-    var expectedExecKey = GatewayScopeKeys.ScopeExpectedExec(scopeId);
-
-    // If already closed => late arrivals are consumed
-    if (GetBoolVar(process, closedKey))
+    // ✅ Find parent token - all children should have the same parent
+    if (token.ParentTokenIds.Count == 0)
     {
-        token.Terminate("Late arrival to closed join/merge.");
-        IncIntVar(process, consumedKey, 1);
-        await _uow.Tokens.UpdateAsync(token, ct);
-        await _uow.Processes.UpdateAsync(process, ct);
-        return TokenProcessResult.Consumed;
+        _logger.LogError(
+            "[JOIN] Token has no parent token. Gw={Gw} TokenId={TokenId} Scope={Scope}",
+            gwId, token.Id, scopeId);
+        token.Fail($"Join gateway '{gwId}' token has no parent token.");
+        return TokenProcessResult.Failed;
     }
 
+    // All children should have the same parent (first parent is used)
+    var parentTokenId = token.ParentTokenIds.First();
+    var parentToken = await _tokenRepository.GetByIdAsync(parentTokenId, ct);
+    
+    if (parentToken == null)
+    {
+        _logger.LogError(
+            "[JOIN] Parent token not found. Gw={Gw} TokenId={TokenId} ParentTokenId={ParentTokenId} Scope={Scope}",
+            gwId, token.Id, parentTokenId, scopeId);
+        token.Fail($"Join gateway '{gwId}' parent token not found. ParentTokenId={parentTokenId}");
+        return TokenProcessResult.Failed;
+    }
+
+    if (parentToken.State != TokenState.Forked)
+    {
+        _logger.LogWarning(
+            "[JOIN] Parent token is not in Forked state. Gw={Gw} TokenId={TokenId} ParentTokenId={ParentTokenId} ParentState={ParentState} Scope={Scope}",
+            gwId, token.Id, parentTokenId, parentToken.State, scopeId);
+        // Continue anyway - might be a race condition
+    }
+
+    // ✅ Mark current token as Merged
+    // Complete node for executable token when merged
+    if (token.IsExecutable)
+    {
+        var tokenNodes = await _nodeRepository.GetByTokenIdAsync(token.Id, ct);
+        foreach (var node in tokenNodes)
+        {
+            // Only complete nodes that are waiting or processing (not already completed/failed)
+            if (node.State == NodeState.Waiting || node.State == NodeState.Processing || node.State == NodeState.Created)
+            {
+                node.Complete();
+                await _nodeRepository.UpdateAsync(node, ct);
+                _logger.LogInformation(
+                    "[JOIN] Completed node for merged executable token. NodeId={NodeId} TokenId={TokenId} ElementId={ElementId}",
+                    node.Id, token.Id, node.ElementId);
+            }
+        }
+    }
+
+    token.Merge(parentTokenId, $"Merged at join gateway '{gwId}'.");
+    await _uow.Tokens.UpdateAsync(token, ct);
+
+    // ✅ Count merged tokens for the same parent at this gateway/scope
+    // Get all child tokens of the parent and count those that are at this gateway and merged
+    var childTokens = await _tokenRepository.GetChildTokensAsync(parentTokenId, ct);
+    var mergedCount = childTokens.Count(t => 
+        t.ProcessId == process.Id &&
+        t.CurrentElementId == gwId &&
+        t.ScopeId == scopeId &&
+        t.State == TokenState.Merged);
+
+    _logger.LogInformation(
+        "[JOIN] Token merged. Gw={Gw} Scope={Scope} TokenId={TokenId} ParentTokenId={ParentTokenId} MergedCount={MergedCount} IncomingCount={IncomingCount}",
+        gwId, scopeId, token.Id, parentTokenId, mergedCount, incoming.Count);
+
     // ------------------------------------------------------------
-    // XOR MERGE (Exclusive): first token creates merged token, others terminated
+    // XOR MERGE (Exclusive): first token reactivates parent
     // ------------------------------------------------------------
     if (gateway is BpmnExclusiveGateway)
     {
-        // Check if merge already completed (merged token exists)
-        var xorMergedTokenKey = GatewayScopeKeys.GwMergedToken(gwId, scopeId);
-        var xorExistingMergedTokenId = GetGuidVar(process, xorMergedTokenKey);
-        
-        if (xorExistingMergedTokenId is not null)
+        // XOR merge: only one token should arrive, so reactivate parent immediately
+        if (mergedCount >= 1)
         {
-            // Late arrival to closed XOR merge
-            token.Terminate("Late arrival to closed XOR merge.");
-            IncIntVar(process, consumedKey, 1);
-            await _uow.Tokens.UpdateAsync(token, ct);
-            await _uow.Processes.UpdateAsync(process, ct);
+            // Reactivate parent token
+            parentToken.ReactivateFromForked(mergedCount, $"XOR merge completed at gateway '{gwId}'.");
+            await _uow.Tokens.UpdateAsync(parentToken, ct);
+
+            // Move parent to next element
+            var nextFlow = outgoing[0];
+            if (string.IsNullOrWhiteSpace(nextFlow.targetRef))
+            {
+                parentToken.Fail($"XOR merge gateway '{gwId}' outgoing flow has no targetRef.");
+                await _uow.Tokens.UpdateAsync(parentToken, ct);
+                return TokenProcessResult.Failed;
+            }
+
+            parentToken.MoveTo(nextFlow.targetRef, nextFlow.id);
+            await _uow.Tokens.UpdateAsync(parentToken, ct);
+
+            _logger.LogInformation(
+                "[JOIN] XOR merge: parent reactivated. Gw={Gw} Scope={Scope} ParentTokenId={ParentTokenId} NextElement={NextElement}",
+                gwId, scopeId, parentTokenId, nextFlow.targetRef);
+
             return TokenProcessResult.Consumed;
         }
+    }
 
-        // First token to arrive: terminate it and create merged token
-        // ✅ Complete node for executable token when merged
-        if (token.IsExecutable)
-        {
-            var tokenNodes = await _nodeRepository.GetByTokenIdAsync(token.Id, ct);
-            foreach (var node in tokenNodes)
-            {
-                // Only complete nodes that are waiting or processing (not already completed/failed)
-                if (node.State == NodeState.Waiting || node.State == NodeState.Processing || node.State == NodeState.Created)
-                {
-                    node.Complete();
-                    await _nodeRepository.UpdateAsync(node, ct);
-                    _logger.LogInformation(
-                        "[JOIN] Completed node for XOR merged executable token. NodeId={NodeId} TokenId={TokenId} ElementId={ElementId}",
-                        node.Id, token.Id, node.ElementId);
-                }
-            }
-        }
-        
-        token.Terminate("Merged at XOR merge gateway.");
-        IncIntVar(process, consumedKey, 1);
-        
-        SetVar(process, closedKey, true);
-        
-        // ✅ CRITICAL: Save token termination and process changes
-        await _uow.Tokens.UpdateAsync(token, ct);
-        await _uow.Processes.UpdateAsync(process, ct);
+    // ------------------------------------------------------------
+    // AND/OR JOIN (Parallel/Inclusive): wait until all children merged
+    // ------------------------------------------------------------
+    // Check if all children have merged (mergedCount == incoming flows count)
+    if (mergedCount >= incoming.Count)
+    {
+        // All children have merged - reactivate parent token
+        parentToken.ReactivateFromForked(mergedCount, $"Join completed at gateway '{gwId}' - all {mergedCount} children merged.");
+        await _uow.Tokens.UpdateAsync(parentToken, ct);
 
-        // Get outgoing flow for merged token
-        var xorOutgoing = ctx.Model.GetOutgoingSequenceFlows(ctx.BpmnProcessId, gwId);
-        if (xorOutgoing.Count == 0)
+        // Move parent to next element
+        var nextFlow = outgoing[0];
+        if (string.IsNullOrWhiteSpace(nextFlow.targetRef))
         {
-            token.Fail($"XOR merge gateway '{gwId}' has no outgoing sequence flows.");
+            parentToken.Fail($"Join gateway '{gwId}' outgoing flow has no targetRef.");
+            await _uow.Tokens.UpdateAsync(parentToken, ct);
             return TokenProcessResult.Failed;
         }
 
-        var xorNextFlow = xorOutgoing[0];
-        if (string.IsNullOrWhiteSpace(xorNextFlow.targetRef))
-        {
-            token.Fail($"XOR merge gateway '{gwId}' outgoing flow has no targetRef.");
-            return TokenProcessResult.Failed;
-        }
-
-        // Create merged token via command
-        // Collect flow IDs ONLY from executable token and add the outgoing flow
-        var xorFlowIds = new List<string>();
-        if (!string.IsNullOrWhiteSpace(xorNextFlow.id))
-        {
-            xorFlowIds.Add(xorNextFlow.id);
-        }
-        // Only collect flow IDs from executable tokens (non-executable tokens don't create nodes)
-        if (token.IsExecutable)
-        {
-            foreach (var flowId in token.ArrivedViaFlowIds)
-            {
-                if (!string.IsNullOrWhiteSpace(flowId) && !xorFlowIds.Contains(flowId, StringComparer.Ordinal))
-                {
-                    xorFlowIds.Add(flowId);
-                }
-            }
-        }
-        
-        var xorMergedTokenId = await _mediator.Send(new CreateMergedTokenCommand(
-            ProcessId: process.Id,
-            GatewayId: gwId,
-            ScopeId: scopeId,
-            ParentTokenIds: new[] { token.Id }
-        ), ct);
+        parentToken.MoveTo(nextFlow.targetRef, nextFlow.id);
+        await _uow.Tokens.UpdateAsync(parentToken, ct);
 
         _logger.LogInformation(
-            "[JOIN] XOR merge: merged token created. Gw={Gw} Scope={Scope} MergedTokenId={MergedTokenId} ParentTokenId={ParentTokenId}",
-            gwId, scopeId, xorMergedTokenId, token.Id);
+            "[JOIN] All children merged: parent reactivated. Gw={Gw} Scope={Scope} ParentTokenId={ParentTokenId} MergedCount={MergedCount} NextElement={NextElement}",
+            gwId, scopeId, parentTokenId, mergedCount, nextFlow.targetRef);
 
         return TokenProcessResult.Consumed;
     }
 
-    // ------------------------------------------------------------
-    // AND/OR JOIN (Parallel/Inclusive): wait until expectedExec arrives
-    // ------------------------------------------------------------
-    var expectedExec = GetIntVar(process, expectedExecKey, defaultValue: 0);
-    if (expectedExec <= 0)
-    {
-        // FAIL-FAST: continuing here causes premature join (the bug you saw)
-        _logger.LogError(
-            "[JOIN] expectedExec missing/invalid. Gw={Gw} Scope={Scope} TokenId={TokenId}",
-            gwId, scopeId, token.Id);
-        token.Fail($"Join expectedExec missing/invalid. Gw={gwId} Scope={scopeId}");
-        return TokenProcessResult.Failed;
-    }
-
-    // Check if merge already completed (idempotency check)
-    var mergedTokenKey = GatewayScopeKeys.GwMergedToken(gwId, scopeId);
-    var existingMergedTokenId = GetGuidVar(process, mergedTokenKey);
-    
-    if (existingMergedTokenId is not null)
-    {
-        // Late arrival to closed join
-        var terminateReason = token.IsExecutable 
-            ? "Late arrival to closed join/merge." 
-            : "Trace token: late arrival to closed join/merge.";
-        token.Terminate(terminateReason);
-        IncIntVar(process, consumedKey, 1);
-        await _uow.Tokens.UpdateAsync(token, ct);
-        await _uow.Processes.UpdateAsync(process, ct);
-        return TokenProcessResult.Consumed;
-    }
-
-    // ✅ CRITICAL: Use gwId (not token.CurrentElementId) for counting arrived tokens
-    // Count arrived EXECUTABLE tokens at THIS gateway in THIS scope (Active+Waiting+Terminated)
-    // Terminated tokens are included because they are terminated at the gateway while waiting for join
-    var arrivedExecutable = await _tokenRepository.CountArrivedAtAsync(
-        processId: process.Id,
-        elementId: gwId,  // ✅ Use gateway.id, not token.CurrentElementId
-        scopeId: scopeId,
-        executableOnly: true,
-        ct: ct);
-
-    // ✅ Load-bearing log: helps diagnose if join is waiting or satisfied
+    // Not all children have merged yet - wait for more
     _logger.LogInformation(
-        "[JOIN] Gw={Gw} Scope={Scope} expectedExec={Expected} arrivedExecutable={ArrivedExec} TokenId={TokenId} IsExecutable={IsExec}",
-        gwId, scopeId, expectedExec, arrivedExecutable, token.Id, token.IsExecutable);
+        "[JOIN] Waiting for more children. Gw={Gw} Scope={Scope} MergedCount={MergedCount} IncomingCount={IncomingCount}",
+        gwId, scopeId, mergedCount, incoming.Count);
 
-    if (arrivedExecutable < expectedExec)
-    {
-        // ✅ Join not satisfied yet: terminate ALL tokens (executable and non-executable)
-        // NO WAITING: Tokens are terminated immediately and will be counted when merge happens
-        // The merge will be triggered by the last arriving token
-        var terminateReason = token.IsExecutable
-            ? $"Join not satisfied yet: arrivedExecutable={arrivedExecutable}, expected={expectedExec}. Token terminated, will be merged when join is satisfied."
-            : "Trace token merged at join gateway.";
-        
-        token.Terminate(terminateReason);
-        IncIntVar(process, consumedKey, 1);
-        await _uow.Tokens.UpdateAsync(token, ct);
-        await _uow.Processes.UpdateAsync(process, ct);
-        
-        _logger.LogInformation(
-            "[JOIN] Token terminated (not waiting). Gw={Gw} Scope={Scope} arrivedExec={ArrivedExec} expected={Expected} TokenId={TokenId} IsExecutable={IsExec}",
-            gwId, scopeId, arrivedExecutable, expectedExec, token.Id, token.IsExecutable);
-        
-        return TokenProcessResult.Consumed;
-    }
-
-    // ------------------------------------------------------------
-    // JOIN SATISFIED:
-    // - Terminate ALL arrived tokens (executable and non-executable)
-    // - Create new merged token via command
-    // ------------------------------------------------------------
-
-    // Load all arrived executable tokens (must include Active + Waiting + Terminated)
-    // Terminated tokens are included because they are terminated at the gateway while waiting for join
-    // ✅ CRITICAL: Use gwId (not token.CurrentElementId) for loading arrived tokens
-    var arrivedExecutableTokens = await _tokenRepository.GetArrivedAtAsync(
-        processId: process.Id,
-        elementId: gwId,  // ✅ Use gateway.id, not token.CurrentElementId
-        scopeId: scopeId,
-        executableOnly: true,
-        ct: ct);
-
-    // Also load non-executable tokens at this gateway/scope to terminate them
-    var allArrivedTokens = await _tokenRepository.GetArrivedAtAsync(
-        processId: process.Id,
-        elementId: gwId,
-        scopeId: scopeId,
-        executableOnly: false,
-        ct: ct);
-
-    if (arrivedExecutableTokens.Count == 0)
-    {
-        token.Fail($"Join satisfied but no executable arrived tokens loaded. Gw={gwId} Scope={scopeId}");
-        return TokenProcessResult.Failed;
-    }
-
-    // ✅ CRITICAL: Mark join as closed BEFORE terminating tokens and creating merged token
-    // This prevents late arrivals from triggering another merge attempt
-    // Must be set in the same transaction as token termination and merged token creation
-    SetVar(process, closedKey, true);
-
-    // ✅ Policy: Terminate ALL arrived tokens (executable and non-executable)
-    // No winner concept - all tokens are consumed by the merge
-    // ✅ IMPORTANT: Complete nodes for executable tokens, skip nodes for non-executable tokens
-    var parentTokenIds = new List<Guid>(arrivedExecutableTokens.Count);
-    
-    for (var i = 0; i < allArrivedTokens.Count; i++)
-    {
-        var t = allArrivedTokens[i];
-
-        // ✅ Skip only Failed tokens (Terminated tokens are included in merge)
-        if (t.State == TokenState.Failed)
-            continue;
-
-        // Collect parent token IDs (only executable tokens for parent tracking)
-        if (t.IsExecutable)
-        {
-            parentTokenIds.Add(t.Id);
-            
-            // ✅ Complete nodes for executable tokens when merged
-            var tokenNodes = await _nodeRepository.GetByTokenIdAsync(t.Id, ct);
-            foreach (var node in tokenNodes)
-            {
-                // Only complete nodes that are waiting or processing (not already completed/failed)
-                if (node.State == NodeState.Waiting || node.State == NodeState.Processing || node.State == NodeState.Created)
-                {
-                    node.Complete();
-                    await _nodeRepository.UpdateAsync(node, ct);
-                    _logger.LogInformation(
-                        "[JOIN] Completed node for merged executable token. NodeId={NodeId} TokenId={TokenId} ElementId={ElementId}",
-                        node.Id, t.Id, node.ElementId);
-                }
-            }
-            
-            // ✅ Only terminate if not already terminated (tokens may be terminated while waiting for join)
-            if (t.State != TokenState.Terminated)
-            {
-                t.Terminate("Merged at join gateway - executable token consumed.");
-            }
-        }
-        else
-        {
-            // Non-executable tokens shouldn't have nodes, but if they do, skip them
-            // ✅ Only terminate if not already terminated
-            if (t.State != TokenState.Terminated)
-            {
-                t.Terminate("Trace merged at join gateway.");
-            }
-        }
-        
-        // ✅ CRITICAL: Save token state to database (even if already terminated, may need to update other fields)
-        await _uow.Tokens.UpdateAsync(t, ct);
-        
-        IncIntVar(process, consumedKey, 1);
-    }
-    
-    // ✅ CRITICAL: Save process variable changes (including closedKey) BEFORE creating merged token
-    // This ensures that if another token arrives concurrently, it will see closedKey=true
-    // and will be terminated as a late arrival instead of triggering another merge
-    await _uow.Processes.UpdateAsync(process, ct);
-
-    // ✅ Create new merged token via Command (with idempotency support)
-    // The command handler will check again for existing merged token inside its transaction
-    var joinOutgoing = ctx.Model.GetOutgoingSequenceFlows(ctx.BpmnProcessId, gwId);
-    if (joinOutgoing.Count == 0)
-    {
-        token.Fail($"Join gateway '{gwId}' has no outgoing sequence flows.");
-        return TokenProcessResult.Failed;
-    }
-
-    // Get the single outgoing flow (join has exactly one outgoing)
-    var nextFlow = joinOutgoing[0];
-    if (string.IsNullOrWhiteSpace(nextFlow.targetRef))
-    {
-        token.Fail($"Join gateway '{gwId}' outgoing flow has no targetRef.");
-        return TokenProcessResult.Failed;
-    }
-
-    
-    var mergedTokenId = await _mediator.Send(new CreateMergedTokenCommand(
-        ProcessId: process.Id,
-        GatewayId: gwId,
-        ScopeId: scopeId,
-        ParentTokenIds: parentTokenIds
-    ), ct);
-
-    _logger.LogInformation(
-        "[JOIN] Merged token created and activated. Gw={Gw} Scope={Scope} MergedTokenId={MergedTokenId} ParentCount={ParentCount} NextElement={NextElement}",
-        gwId, scopeId, mergedTokenId, parentTokenIds.Count, nextFlow.targetRef);
-
-    // Current token is now terminated (if it was in arrivedTokens)
-    // Return Consumed for all tokens that participated in join
     return TokenProcessResult.Consumed;
 }
 

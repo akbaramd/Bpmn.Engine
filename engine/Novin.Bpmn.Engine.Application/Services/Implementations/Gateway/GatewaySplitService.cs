@@ -107,18 +107,13 @@ public sealed class GatewaySplitService : IGatewaySplitService
 
         var scopeId = Guid.NewGuid();
 
-        // Persist expected counts (MUST match join logic keys)
-        process.SetVariable(GatewayScopeKeys.ScopeExpectedTotal(scopeId), outgoingAll.Count.ToString());
-        process.SetVariable(GatewayScopeKeys.ScopeExpectedExec(scopeId), expectedExec.ToString());
-
         _logger.LogInformation(
             "[SPLIT] Gw={Gw} Type={Type} TokenId={TokenId} ScopeId={ScopeId} Total={Total} ExecExpected={ExecExpected}",
             gateway.id, gateway.GetType().Name, token.Id, scopeId, outgoingAll.Count, expectedExec);
 
-        // ✅ Policy: Parent token is Terminated (not Completed) - it was consumed by split
-        // This ensures it doesn't count toward process completion
-        token.Terminate($"Split gateway '{gateway.id}' forked {outgoingAll.Count} branch token(s).");
-        process.RemoveToken(token.Id);
+        // ✅ Policy: Parent token is Forked (not Terminated) - it will be reactivated when children merge
+        // Parent token remains in process and will be reactivated after all children merge
+        token.Fork(scopeId, outgoingAll.Count, $"Split gateway '{gateway.id}' forked {outgoingAll.Count} branch token(s).");
 
         // Fork children: MUST set child.ScopeId = scopeId and set IsExecutable per flow
         await _fork.ForkChildrenAsync(

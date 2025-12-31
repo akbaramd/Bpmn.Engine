@@ -258,6 +258,73 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         }
 
         /// <summary>
+        /// Mark token as Forked when it creates child tokens at a split gateway
+        /// </summary>
+        public void Fork(Guid scopeId, int childCount, string? reason = null)
+        {
+            EnsureState(TokenState.Active);
+
+            if (scopeId == Guid.Empty)
+                throw new ArgumentException("ScopeId cannot be empty", nameof(scopeId));
+
+            State = TokenState.Forked;
+            SetScope(scopeId);
+
+            AddDomainEvent(new TokenForkedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                ScopeId: scopeId,
+                ChildCount: childCount,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable));
+        }
+
+        /// <summary>
+        /// Mark token as Merged when it arrives at a join gateway
+        /// </summary>
+        public void Merge(Guid parentTokenId, string? reason = null)
+        {
+            if (State is TokenState.Completed or TokenState.Failed)
+                throw new InvalidOperationException($"Cannot merge token in {State} state.");
+
+            if (parentTokenId == Guid.Empty)
+                throw new ArgumentException("ParentTokenId cannot be empty", nameof(parentTokenId));
+
+            State = TokenState.Merged;
+
+            AddDomainEvent(new TokenMergedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                ScopeId: ScopeId ?? Guid.Empty,
+                ParentTokenId: parentTokenId,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable));
+        }
+
+        /// <summary>
+        /// Reactivate token from Forked state when all children have merged
+        /// </summary>
+        public void ReactivateFromForked(int mergedChildCount, string? reason = null)
+        {
+            EnsureState(TokenState.Forked);
+
+            var scopeId = ScopeId ?? Guid.Empty;
+            State = TokenState.Active;
+            ClearScope();
+
+            AddDomainEvent(new TokenReactivatedFromForkedEvent(
+                TokenId: Id,
+                ProcessId: ProcessId,
+                ElementId: CurrentElementId,
+                ScopeId: scopeId,
+                MergedChildCount: mergedChildCount,
+                OccurredAtUtc: DateTime.UtcNow,
+                IsExecutable: IsExecutable));
+        }
+
+        /// <summary>
         /// Reports that BPMN error occurred during token processing
         /// </summary>
         public void ReportBpmnError(string errorCode, string errorMessage)

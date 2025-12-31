@@ -100,15 +100,15 @@ public class EfTokenRepository : ITokenRepository
         bool executableOnly,
         CancellationToken ct)
     {
-        // ✅ Count Active, Waiting, and Terminated tokens (arrived at join gateway)
-        // Terminated tokens are included because they are terminated at the gateway while waiting for join
+        // ✅ Count Active, Waiting, Terminated, and Merged tokens (arrived at join gateway)
+        // Merged tokens are child tokens that have merged at the join gateway
         // Completed tokens have moved to next element, so they shouldn't be counted
         var q = _context.Tokens.AsNoTracking()
             .Where(t =>
                 t.ProcessId == processId &&
                 t.CurrentElementId == elementId &&
                 t.ScopeId == scopeId &&
-                (t.State == TokenState.Active || t.State == TokenState.Waiting || t.State == TokenState.Terminated));
+                (t.State == TokenState.Active || t.State == TokenState.Waiting || t.State == TokenState.Terminated || t.State == TokenState.Merged));
 
         if (executableOnly)
             q = q.Where(t => t.IsExecutable);
@@ -127,18 +127,18 @@ public class EfTokenRepository : ITokenRepository
         if (string.IsNullOrWhiteSpace(elementId)) throw new ArgumentException("elementId is null/empty.", nameof(elementId));
         if (scopeId == Guid.Empty) throw new ArgumentException("scopeId is empty.", nameof(scopeId));
 
-        // ✅ Include Active, Waiting, and Terminated tokens (arrived at join gateway)
-        // Terminated tokens are included because they are terminated at the gateway while waiting for join
+        // ✅ Include Active, Waiting, Terminated, and Merged tokens (arrived at join gateway)
+        // Merged tokens are child tokens that have merged at the join gateway
         var q = _context.Tokens.Where(t =>
             t.ProcessId == processId &&
             t.CurrentElementId == elementId &&
             t.ScopeId == scopeId &&
-            (t.State == TokenState.Active || t.State == TokenState.Waiting || t.State == TokenState.Terminated));
+            (t.State == TokenState.Active || t.State == TokenState.Waiting || t.State == TokenState.Terminated || t.State == TokenState.Merged));
 
         if (executableOnly)
             q = q.Where(t => t.IsExecutable);
 
-        // Tracking لازم است چون بعداً همین توکن‌ها را Terminate/Resume می‌کنی.
+        // Tracking لازم است چون بعداً همین توکن‌ها را Merge/Reactivate می‌کنی.
         return await q
             .OrderBy(t => t.Id) // deterministic
             .ToListAsync(ct);

@@ -11,5 +11,7 @@ public enum TokenState
     Completed,
     Terminated,
     Failed,
+    Forked,  // Parent token that has forked children
+    Merged,   // Child token that has merged at join gateway
 }
 

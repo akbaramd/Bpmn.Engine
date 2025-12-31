@@ -111,6 +111,36 @@ public sealed record TokenRetriedEvent(
     Guid? ScopeId
 ) : IDomainEvent;
 
+public sealed record TokenForkedEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string ElementId,
+    Guid ScopeId,
+    int ChildCount,
+    DateTime OccurredAtUtc,
+    bool IsExecutable
+) : IDomainEvent;
+
+public sealed record TokenMergedEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string ElementId,
+    Guid ScopeId,
+    Guid ParentTokenId,
+    DateTime OccurredAtUtc,
+    bool IsExecutable
+) : IDomainEvent;
+
+public sealed record TokenReactivatedFromForkedEvent(
+    Guid TokenId,
+    Guid ProcessId,
+    string ElementId,
+    Guid ScopeId,
+    int MergedChildCount,
+    DateTime OccurredAtUtc,
+    bool IsExecutable
+) : IDomainEvent;
+
 // Optional observability events (nice to have)
 public sealed record TokenBecameNonExecutableEvent(
     Guid TokenId,
