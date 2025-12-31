@@ -251,7 +251,8 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
     }
 
     // ✅ CRITICAL: Use gwId (not token.CurrentElementId) for counting arrived tokens
-    // Count arrived EXECUTABLE tokens at THIS gateway in THIS scope (Active+Waiting)
+    // Count arrived EXECUTABLE tokens at THIS gateway in THIS scope (Active+Waiting+Terminated)
+    // Terminated tokens are included because they are terminated at the gateway while waiting for join
     var arrivedExecutable = await _tokenRepository.CountArrivedAtAsync(
         processId: process.Id,
         elementId: gwId,  // ✅ Use gateway.id, not token.CurrentElementId
@@ -266,23 +267,23 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
 
     if (arrivedExecutable < expectedExec)
     {
-        // Join not satisfied yet: wait if executable, terminate if non-executable (trace)
-        if (!token.IsExecutable)
-        {
-            // Non-executable tokens don't wait - they are terminated immediately
-            token.Terminate("Trace token merged at join gateway.");
-            IncIntVar(process, consumedKey, 1);
-            await _uow.Tokens.UpdateAsync(token, ct);
-            await _uow.Processes.UpdateAsync(process, ct);
-            return TokenProcessResult.Consumed;
-        }
-
-        _logger.LogInformation(
-            "[JOIN] Waiting. Gw={Gw} Scope={Scope} arrivedExec={ArrivedExec} expected={Expected} TokenId={TokenId}",
-            gwId, scopeId, arrivedExecutable, expectedExec, token.Id);
-        token.Wait($"Join waiting: arrivedExecutable={arrivedExecutable}, expected={expectedExec}");
+        // ✅ Join not satisfied yet: terminate ALL tokens (executable and non-executable)
+        // NO WAITING: Tokens are terminated immediately and will be counted when merge happens
+        // The merge will be triggered by the last arriving token
+        var terminateReason = token.IsExecutable
+            ? $"Join not satisfied yet: arrivedExecutable={arrivedExecutable}, expected={expectedExec}. Token terminated, will be merged when join is satisfied."
+            : "Trace token merged at join gateway.";
+        
+        token.Terminate(terminateReason);
+        IncIntVar(process, consumedKey, 1);
         await _uow.Tokens.UpdateAsync(token, ct);
-        return TokenProcessResult.Waiting;
+        await _uow.Processes.UpdateAsync(process, ct);
+        
+        _logger.LogInformation(
+            "[JOIN] Token terminated (not waiting). Gw={Gw} Scope={Scope} arrivedExec={ArrivedExec} expected={Expected} TokenId={TokenId} IsExecutable={IsExec}",
+            gwId, scopeId, arrivedExecutable, expectedExec, token.Id, token.IsExecutable);
+        
+        return TokenProcessResult.Consumed;
     }
 
     // ------------------------------------------------------------
@@ -291,7 +292,8 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
     // - Create new merged token via command
     // ------------------------------------------------------------
 
-    // Load all arrived executable tokens (must include Active + Waiting)
+    // Load all arrived executable tokens (must include Active + Waiting + Terminated)
+    // Terminated tokens are included because they are terminated at the gateway while waiting for join
     // ✅ CRITICAL: Use gwId (not token.CurrentElementId) for loading arrived tokens
     var arrivedExecutableTokens = await _tokenRepository.GetArrivedAtAsync(
         processId: process.Id,
@@ -328,7 +330,8 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
     {
         var t = allArrivedTokens[i];
 
-        if (t.State is TokenState.Terminated or TokenState.Failed)
+        // ✅ Skip only Failed tokens (Terminated tokens are included in merge)
+        if (t.State == TokenState.Failed)
             continue;
 
         // Collect parent token IDs (only executable tokens for parent tracking)
@@ -351,15 +354,23 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
                 }
             }
             
-            t.Terminate("Merged at join gateway - executable token consumed.");
+            // ✅ Only terminate if not already terminated (tokens may be terminated while waiting for join)
+            if (t.State != TokenState.Terminated)
+            {
+                t.Terminate("Merged at join gateway - executable token consumed.");
+            }
         }
         else
         {
             // Non-executable tokens shouldn't have nodes, but if they do, skip them
-            t.Terminate("Trace merged at join gateway.");
+            // ✅ Only terminate if not already terminated
+            if (t.State != TokenState.Terminated)
+            {
+                t.Terminate("Trace merged at join gateway.");
+            }
         }
         
-        // ✅ CRITICAL: Save token termination to database
+        // ✅ CRITICAL: Save token state to database (even if already terminated, may need to update other fields)
         await _uow.Tokens.UpdateAsync(t, ct);
         
         IncIntVar(process, consumedKey, 1);

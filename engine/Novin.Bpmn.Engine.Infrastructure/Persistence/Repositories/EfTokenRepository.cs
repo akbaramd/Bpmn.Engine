@@ -100,14 +100,15 @@ public class EfTokenRepository : ITokenRepository
         bool executableOnly,
         CancellationToken ct)
     {
-        // ✅ Count only Active + Waiting tokens (arrived at join gateway)
+        // ✅ Count Active, Waiting, and Terminated tokens (arrived at join gateway)
+        // Terminated tokens are included because they are terminated at the gateway while waiting for join
         // Completed tokens have moved to next element, so they shouldn't be counted
         var q = _context.Tokens.AsNoTracking()
             .Where(t =>
                 t.ProcessId == processId &&
                 t.CurrentElementId == elementId &&
                 t.ScopeId == scopeId &&
-                (t.State == TokenState.Active || t.State == TokenState.Waiting));
+                (t.State == TokenState.Active || t.State == TokenState.Waiting || t.State == TokenState.Terminated));
 
         if (executableOnly)
             q = q.Where(t => t.IsExecutable);
@@ -126,11 +127,13 @@ public class EfTokenRepository : ITokenRepository
         if (string.IsNullOrWhiteSpace(elementId)) throw new ArgumentException("elementId is null/empty.", nameof(elementId));
         if (scopeId == Guid.Empty) throw new ArgumentException("scopeId is empty.", nameof(scopeId));
 
+        // ✅ Include Active, Waiting, and Terminated tokens (arrived at join gateway)
+        // Terminated tokens are included because they are terminated at the gateway while waiting for join
         var q = _context.Tokens.Where(t =>
             t.ProcessId == processId &&
             t.CurrentElementId == elementId &&
             t.ScopeId == scopeId &&
-            (t.State == TokenState.Active || t.State == TokenState.Waiting));
+            (t.State == TokenState.Active || t.State == TokenState.Waiting || t.State == TokenState.Terminated));
 
         if (executableOnly)
             q = q.Where(t => t.IsExecutable);
