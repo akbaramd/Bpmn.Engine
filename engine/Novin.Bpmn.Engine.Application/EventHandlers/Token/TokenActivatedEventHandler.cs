@@ -100,10 +100,9 @@ public sealed class TokenActivatedEventHandler : INotificationHandler<TokenActiv
         }
 
         // Create NodeInstance (NodeCreatedDomainEventHandler enqueues DispatchNodeProcessCommand)
-        // Convert Token's single ArrivedViaFlowId to array
-        var arrivedViaFlowIds = string.IsNullOrWhiteSpace(token.ArrivedViaFlowId)
-            ? null
-            : new[] { token.ArrivedViaFlowId };
+        var arrivedViaFlowIds = token.ArrivedViaFlowIds.Count > 0 
+            ? token.ArrivedViaFlowIds 
+            : null;
         
         await _mediator.Send(new CreateNodeInstanceCommand(
             ProcessId: token.ProcessId,

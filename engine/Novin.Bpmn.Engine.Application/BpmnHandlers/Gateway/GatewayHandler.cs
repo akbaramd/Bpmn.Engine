@@ -165,12 +165,26 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
         }
 
         // Create merged token via command
+        // Collect flow IDs from parent token and add the outgoing flow
+        var xorFlowIds = new List<string>();
+        if (!string.IsNullOrWhiteSpace(xorNextFlow.id))
+        {
+            xorFlowIds.Add(xorNextFlow.id);
+        }
+        foreach (var flowId in token.ArrivedViaFlowIds)
+        {
+            if (!string.IsNullOrWhiteSpace(flowId) && !xorFlowIds.Contains(flowId, StringComparer.Ordinal))
+            {
+                xorFlowIds.Add(flowId);
+            }
+        }
+        
         var xorMergedTokenId = await _mediator.Send(new CreateMergedTokenCommand(
             ProcessId: process.Id,
             GatewayId: gwId,
             ScopeId: scopeId,
             ParentTokenIds: new[] { token.Id },
-            ArrivedViaFlowId: xorNextFlow.id
+            ArrivedViaFlowIds: xorFlowIds
         ), ct);
 
         _logger.LogInformation(
@@ -331,12 +345,33 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
     }
 
     // Create merged token via command (idempotent)
+    // Collect flow IDs from all parent tokens and add the outgoing flow
+    var allFlowIds = new HashSet<string>(StringComparer.Ordinal);
+    
+    // Add flow IDs from all parent tokens
+    foreach (var parentToken in arrivedExecutableTokens)
+    {
+        foreach (var flowId in parentToken.ArrivedViaFlowIds)
+        {
+            if (!string.IsNullOrWhiteSpace(flowId))
+            {
+                allFlowIds.Add(flowId);
+            }
+        }
+    }
+    
+    // Add the outgoing flow ID
+    if (!string.IsNullOrWhiteSpace(nextFlow.id))
+    {
+        allFlowIds.Add(nextFlow.id);
+    }
+    
     var mergedTokenId = await _mediator.Send(new CreateMergedTokenCommand(
         ProcessId: process.Id,
         GatewayId: gwId,
         ScopeId: scopeId,
         ParentTokenIds: parentTokenIds,
-        ArrivedViaFlowId: nextFlow.id
+        ArrivedViaFlowIds: allFlowIds
     ), ct);
 
     _logger.LogInformation(

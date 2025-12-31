@@ -56,7 +56,9 @@ public sealed class FeelSequenceFlowSelector : ISequenceFlowSelector
             ["GatewayType"] = gateway.GetType().Name,
             ["ElementId"] = token.CurrentElementId,
             ["ScopeId"] = token.ScopeId.ToString(),
-            ["ArrivedVia"] = token.ArrivedViaFlowId,
+            ["ArrivedVia"] = token.ArrivedViaFlowIds.Count > 0 
+                ? string.Join(",", token.ArrivedViaFlowIds) 
+                : null,
             ["Executable"] = token.IsExecutable.ToString(),
             ["IncludeProcessVars"] = _includeProcessVars.ToString(),
         }))
@@ -154,7 +156,9 @@ public sealed class FeelSequenceFlowSelector : ISequenceFlowSelector
             ["GatewayType"] = gateway.GetType().Name,
             ["ElementId"] = token.CurrentElementId,
             ["ScopeId"] = token.ScopeId.ToString(),
-            ["ArrivedVia"] = token.ArrivedViaFlowId,
+            ["ArrivedVia"] = token.ArrivedViaFlowIds.Count > 0 
+                ? string.Join(",", token.ArrivedViaFlowIds) 
+                : null,
             ["Executable"] = token.IsExecutable.ToString(),
             ["IncludeProcessVars"] = _includeProcessVars.ToString(),
         }))

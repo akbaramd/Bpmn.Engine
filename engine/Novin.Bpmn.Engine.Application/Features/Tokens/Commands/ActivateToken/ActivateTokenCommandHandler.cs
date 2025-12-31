@@ -24,7 +24,7 @@ public class ActivateTokenCommandHandler : IRequestHandler<ActivateTokenCommand,
             "[ACTIVATE-TOKEN] Activating token. ProcessId={ProcessId} TokenId={TokenId} ArrivedViaFlowId={ArrivedViaFlowId}",
             request.ProcessId,
             request.TokenId,
-            request.ArrivedViaFlowId);
+            request.ArrivedViaFlowId ?? "null");
 
         await _uow.BeginTransactionAsync(ct);
 

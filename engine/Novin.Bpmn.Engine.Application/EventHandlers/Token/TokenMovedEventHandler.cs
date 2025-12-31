@@ -111,10 +111,9 @@ public sealed class TokenMovedEventHandler : INotificationHandler<TokenMovedEven
 
         // ✅ Only create NodeInstance if token is Active and Continue was returned
         // Create node for the new element (NodeCreatedDomainEventHandler enqueues node processing)
-        // Convert Token's single ArrivedViaFlowId to array
-        var arrivedViaFlowIds = string.IsNullOrWhiteSpace(token.ArrivedViaFlowId)
-            ? null
-            : new[] { token.ArrivedViaFlowId };
+        var arrivedViaFlowIds = token.ArrivedViaFlowIds.Count > 0 
+            ? token.ArrivedViaFlowIds 
+            : null;
         
         await _mediator.Send(new CreateNodeInstanceCommand(
             ProcessId: token.ProcessId,

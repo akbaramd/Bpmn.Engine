@@ -101,10 +101,44 @@ public sealed class CreateMergedTokenCommandHandler : IRequestHandler<CreateMerg
                         startElementId: cmd.GatewayId,
                         parentTokenIds: parentIds);
 
-                    // Set arrived via flow if provided
-                    if (!string.IsNullOrWhiteSpace(cmd.ArrivedViaFlowId))
+                    // Collect all ArrivedViaFlowIds from parent tokens and merge with provided flow IDs
+                    var allFlowIds = new HashSet<string>(StringComparer.Ordinal);
+                    
+                    // Add flow IDs from parent tokens
+                    if (parentIds.Count > 0)
                     {
-                        mergedToken.SetArrivedVia(cmd.ArrivedViaFlowId);
+                        foreach (var parentId in parentIds)
+                        {
+                            var parentToken = await _uow.Tokens.GetByIdAsync(parentId, trxCt);
+                            if (parentToken != null)
+                            {
+                                foreach (var flowId in parentToken.ArrivedViaFlowIds)
+                                {
+                                    if (!string.IsNullOrWhiteSpace(flowId))
+                                    {
+                                        allFlowIds.Add(flowId);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Add provided flow IDs
+                    if (cmd.ArrivedViaFlowIds != null)
+                    {
+                        foreach (var flowId in cmd.ArrivedViaFlowIds)
+                        {
+                            if (!string.IsNullOrWhiteSpace(flowId))
+                            {
+                                allFlowIds.Add(flowId);
+                            }
+                        }
+                    }
+                    
+                    // Set all collected flow IDs
+                    if (allFlowIds.Count > 0)
+                    {
+                        mergedToken.SetArrivedViaFlowIds(allFlowIds);
                     }
 
                     // Set executability: merged token inherits executability from parent tokens

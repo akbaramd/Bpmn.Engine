@@ -70,9 +70,11 @@ public sealed class MoveTokenCommandHandler : IRequestHandler<MoveTokenCommand, 
                 return new MoveTokenResult(request.TokenId, false, $"Token is {token.State}, expected Active");
             }
 
-            // capture BEFORE move (because MoveTo will change CurrentElementId/ArrivedViaFlowId)
+            // capture BEFORE move (because MoveTo will change CurrentElementId/ArrivedViaFlowIds)
             fromElementId = token.CurrentElementId;
-            arrivedViaToCurrent = token.ArrivedViaFlowId;
+            arrivedViaToCurrent = token.ArrivedViaFlowIds.Count > 0 
+                ? string.Join(",", token.ArrivedViaFlowIds) 
+                : null;
 
             // 4) Move (domain emits TokenMovedEvent internally if you have it)
             token.MoveTo(request.NextElementId, request.ViaFlowId);

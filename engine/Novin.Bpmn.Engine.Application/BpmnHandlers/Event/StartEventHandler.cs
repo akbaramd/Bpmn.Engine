@@ -48,7 +48,9 @@ public sealed class StartEventHandler : BpmnElementHandlerBase
             ["NodeState"] = node.State.ToString(),
             ["Executable"] = token.IsExecutable.ToString(),
             ["ScopeId"] = token.ScopeId?.ToString(),
-            ["ArrivedVia"] = token.ArrivedViaFlowId
+            ["ArrivedVia"] = token.ArrivedViaFlowIds.Count > 0 
+                ? string.Join(",", token.ArrivedViaFlowIds) 
+                : null
         }))
         {
             _logger.LogInformation(

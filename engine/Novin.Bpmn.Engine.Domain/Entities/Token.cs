@@ -21,7 +21,9 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         public bool IsExecutable { get; private set; } = true;
 
         public Guid? ScopeId { get; private set; }
-        public string? ArrivedViaFlowId { get; private set; }
+        
+        private readonly List<string> _arrivedViaFlowIds = new();
+        public IReadOnlyList<string> ArrivedViaFlowIds => _arrivedViaFlowIds.AsReadOnly();
         
         /// <summary>
         /// Activity Instance ID - برای cancel کردن activity instance در interrupting boundary events
@@ -106,7 +108,10 @@ namespace Novin.Bpmn.Engine.Domain.Entities
             if (string.IsNullOrWhiteSpace(flowId))
                 throw new ArgumentException("FlowId cannot be empty or null", nameof(flowId));
 
-            ArrivedViaFlowId = flowId;
+            if (!_arrivedViaFlowIds.Contains(flowId, StringComparer.Ordinal))
+            {
+                _arrivedViaFlowIds.Add(flowId);
+            }
 
             // ایجاد رویداد برای ثبت رسیدن توکن از طریق جریان مشخص
             AddDomainEvent(new TokenArrivedViaFlowEvent(
@@ -117,6 +122,21 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 OccurredAtUtc: DateTime.UtcNow,
                 IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
+        }
+
+        public void SetArrivedViaFlowIds(IEnumerable<string>? flowIds)
+        {
+            _arrivedViaFlowIds.Clear();
+            if (flowIds != null)
+            {
+                foreach (var flowId in flowIds)
+                {
+                    if (!string.IsNullOrWhiteSpace(flowId) && !_arrivedViaFlowIds.Contains(flowId, StringComparer.Ordinal))
+                    {
+                        _arrivedViaFlowIds.Add(flowId);
+                    }
+                }
+            }
         }
         public void Resume()
         {
@@ -298,7 +318,13 @@ namespace Novin.Bpmn.Engine.Domain.Entities
             var activityInstanceId = ActivityInstanceId; // 🔴 snapshot قبل از تغییر
 
             CurrentElementId = nextElementId;
-            ArrivedViaFlowId = viaFlowId;
+            if (!string.IsNullOrWhiteSpace(viaFlowId))
+            {
+                if (!_arrivedViaFlowIds.Contains(viaFlowId, StringComparer.Ordinal))
+                {
+                    _arrivedViaFlowIds.Add(viaFlowId);
+                }
+            }
 
             AddDomainEvent(new TokenMovedEvent(
                 TokenId: Id,
@@ -362,7 +388,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
 
         public void ClearScope() => ScopeId = null;
 
-        public void ClearArrivedVia() => ArrivedViaFlowId = null;
+        public void ClearArrivedVia() => _arrivedViaFlowIds.Clear();
         
         /// <summary>
         /// Set Activity Instance ID - وقتی token وارد یک activity می‌شود که scope جدید ایجاد می‌کند

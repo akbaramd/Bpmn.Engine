@@ -114,10 +114,9 @@ public sealed class TokenResumedEventHandler : INotificationHandler<TokenResumed
 
         // Find existing node or create new one
         // Resume semantics: process the node again with isResume=true
-        // Convert Token's single ArrivedViaFlowId to array
-        var arrivedViaFlowIds = string.IsNullOrWhiteSpace(token.ArrivedViaFlowId)
-            ? null
-            : new[] { token.ArrivedViaFlowId };
+        var arrivedViaFlowIds = token.ArrivedViaFlowIds.Count > 0 
+            ? token.ArrivedViaFlowIds 
+            : null;
         
         var existingNode = await _uow.NodeInstances.TryFindOpenAsync(
             processId: token.ProcessId,

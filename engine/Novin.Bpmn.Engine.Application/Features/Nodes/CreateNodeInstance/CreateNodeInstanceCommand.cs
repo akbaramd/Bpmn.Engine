@@ -77,11 +77,11 @@ public sealed class CreateNodeInstanceCommandHandler : IRequestHandler<CreateNod
         // ------------------------------------------------------------
         // 2) Idempotency: if an open NodeInstance already exists for this correlation, reuse it
         // ------------------------------------------------------------
-        // Convert Token's single ArrivedViaFlowId to array for comparison
+        // Use Token's ArrivedViaFlowIds or provided flow IDs
         var arrivedViaFlowIds = request.ArrivedViaFlowIds ?? 
-            (string.IsNullOrWhiteSpace(token.ArrivedViaFlowId) 
-                ? null 
-                : new[] { token.ArrivedViaFlowId });
+            (token.ArrivedViaFlowIds.Count > 0 
+                ? token.ArrivedViaFlowIds 
+                : null);
         
         var existing = await _nodes.TryFindOpenAsync(
             processId: token.ProcessId,
