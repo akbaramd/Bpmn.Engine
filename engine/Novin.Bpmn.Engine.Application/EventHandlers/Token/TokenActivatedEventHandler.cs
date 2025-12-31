@@ -100,6 +100,11 @@ public sealed class TokenActivatedEventHandler : INotificationHandler<TokenActiv
         }
 
         // Create NodeInstance (NodeCreatedDomainEventHandler enqueues DispatchNodeProcessCommand)
+        // Convert Token's single ArrivedViaFlowId to array
+        var arrivedViaFlowIds = string.IsNullOrWhiteSpace(token.ArrivedViaFlowId)
+            ? null
+            : new[] { token.ArrivedViaFlowId };
+        
         await _mediator.Send(new CreateNodeInstanceCommand(
             ProcessId: token.ProcessId,
             TokenId: token.Id,
@@ -107,7 +112,7 @@ public sealed class TokenActivatedEventHandler : INotificationHandler<TokenActiv
             IsExecutable: token.IsExecutable,
             ScopeId: token.ScopeId,
             ActivityInstanceId: token.ActivityInstanceId,
-            ArrivedViaFlowId: token.ArrivedViaFlowId
+            ArrivedViaFlowIds: arrivedViaFlowIds
         ), ct);
     }
 }

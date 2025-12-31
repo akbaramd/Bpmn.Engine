@@ -37,7 +37,9 @@ public sealed class NodeInstance : BaseAggregateRoot
 
     public Guid? ScopeId { get; private set; }
     public Guid? ActivityInstanceId { get; private set; }
-    public string? ArrivedViaFlowId { get; private set; }
+    
+    private readonly List<string> _arrivedViaFlowIds = new();
+    public IReadOnlyList<string> ArrivedViaFlowIds => _arrivedViaFlowIds.AsReadOnly();
 
     /// <summary>Job correlation if this node waits for external/user completion</summary>
     public Guid? WorkerId { get; private set; }
@@ -63,7 +65,7 @@ public sealed class NodeInstance : BaseAggregateRoot
         string elementId,
         Guid? scopeId,
         Guid? activityInstanceId,
-        string? arrivedViaFlowId,
+        IEnumerable<string>? arrivedViaFlowIds,
         bool isExecutable)
     {
         if (processId == Guid.Empty) throw new ArgumentException("ProcessId cannot be empty.", nameof(processId));
@@ -76,7 +78,17 @@ public sealed class NodeInstance : BaseAggregateRoot
 
         ScopeId = scopeId;
         ActivityInstanceId = activityInstanceId;
-        ArrivedViaFlowId = string.IsNullOrWhiteSpace(arrivedViaFlowId) ? null : arrivedViaFlowId.Trim();
+        
+        if (arrivedViaFlowIds != null)
+        {
+            foreach (var flowId in arrivedViaFlowIds)
+            {
+                if (!string.IsNullOrWhiteSpace(flowId))
+                {
+                    _arrivedViaFlowIds.Add(flowId.Trim());
+                }
+            }
+        }
 
         IsExecutable = isExecutable;
 
@@ -91,7 +103,7 @@ public sealed class NodeInstance : BaseAggregateRoot
             OccurredAtUtc: CreatedAtUtc,
             ScopeId: ScopeId,
             ActivityInstanceId: ActivityInstanceId,
-            ArrivedViaFlowId: ArrivedViaFlowId,
+            ArrivedViaFlowIds: _arrivedViaFlowIds.ToArray(),
             IsExecutable: IsExecutable
         ));
     }
@@ -334,7 +346,7 @@ public sealed record NodeCreatedDomainEvent(
     DateTime OccurredAtUtc,
     Guid? ScopeId,
     Guid? ActivityInstanceId,
-    string? ArrivedViaFlowId,
+    string[] ArrivedViaFlowIds,
     bool IsExecutable
 ) : IDomainEvent;
 

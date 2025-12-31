@@ -91,4 +91,29 @@ internal static class EfComparers
 
     public static List<Guid> GuidListSnapshot(List<Guid>? v)
         => v is null ? new List<Guid>() : new List<Guid>(v);
+
+    // -----------------------------
+    // List<string> (NodeInstance._arrivedViaFlowIds)
+    // -----------------------------
+    public static bool ListEqual(List<string>? a, List<string>? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+        if (a.Count != b.Count) return false;
+        return a.SequenceEqual(b, StringComparer.Ordinal);
+    }
+
+    public static int ListHash(List<string>? v)
+    {
+        if (v is null || v.Count == 0) return 0;
+
+        var hash = 0;
+        foreach (var s in v)
+            hash = HashCode.Combine(hash, s?.GetHashCode() ?? 0);
+
+        return hash;
+    }
+
+    public static List<string> ListSnapshot(List<string>? v)
+        => v is null ? new List<string>() : new List<string>(v);
 }

@@ -86,7 +86,7 @@ public sealed class NodeInstanceRepository :   INodeInstanceRepository
         string elementId,
         Guid? scopeId,
         Guid? activityInstanceId,
-        string? arrivedViaFlowId,
+        IEnumerable<string>? arrivedViaFlowIds,
         CancellationToken cancellationToken = default)
     {
         if (processId == Guid.Empty) throw new ArgumentException("processId cannot be empty.", nameof(processId));
@@ -94,22 +94,38 @@ public sealed class NodeInstanceRepository :   INodeInstanceRepository
         if (string.IsNullOrWhiteSpace(elementId)) throw new ArgumentException("elementId is required.", nameof(elementId));
 
         elementId = elementId.Trim();
-        arrivedViaFlowId = string.IsNullOrWhiteSpace(arrivedViaFlowId) ? null : arrivedViaFlowId.Trim();
+        
+        // Normalize arrivedViaFlowIds: convert to sorted list for comparison
+        var normalizedFlowIds = arrivedViaFlowIds?
+            .Where(f => !string.IsNullOrWhiteSpace(f))
+            .Select(f => f.Trim())
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .ToList() ?? new List<string>();
 
         // "Open" = not terminal (Created/Processing/Waiting). Terminal: Completed/Failed/Skipped.
         // If you want "only Waiting", change predicate accordingly.
-        return await _db.NodeInstances
-            .SingleOrDefaultAsync(x =>
+        // Compare ArrivedViaFlowIds by checking if they contain the same flow IDs
+        // Note: EF Core cannot translate ArrivedViaFlowIds comparison directly, so we filter in memory
+        var candidates = await _db.NodeInstances
+            .Where(x =>
                     x.ProcessId == processId &&
                     x.TokenId == tokenId &&
                     x.ElementId == elementId &&
                     x.ScopeId == scopeId &&
                     x.ActivityInstanceId == activityInstanceId &&
-                    x.ArrivedViaFlowId == arrivedViaFlowId &&
                     x.State != NodeState.Completed &&
                     x.State != NodeState.Failed &&
-                    x.State != NodeState.Skipped,
-                cancellationToken);
+                    x.State != NodeState.Skipped)
+            .ToListAsync(cancellationToken);
+
+        // Compare ArrivedViaFlowIds in memory (EF Core limitation with JSON collections)
+        return candidates.FirstOrDefault(node =>
+        {
+            var nodeFlowIds = node.ArrivedViaFlowIds
+                .OrderBy(f => f, StringComparer.Ordinal)
+                .ToList();
+            return nodeFlowIds.SequenceEqual(normalizedFlowIds, StringComparer.Ordinal);
+        });
     }
 
     public async Task<NodeInstance?> GetLastAsync(Guid processId, CancellationToken cancellationToken = default)
@@ -137,12 +153,16 @@ public sealed class NodeInstanceRepository :   INodeInstanceRepository
             .AnyAsync(x => x.ProcessId == processId && x.ElementId == elementId, cancellationToken);
     }
 
-    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         if (id == Guid.Empty) throw new ArgumentException("id cannot be empty.", nameof(id));
 
-       
-        _db.NodeInstances.Remove(_db.NodeInstances.First(x=>x.Id == id));
+        var entity = _db.NodeInstances.FirstOrDefault(x => x.Id == id);
+        if (entity != null)
+        {
+            _db.NodeInstances.Remove(entity);
+        }
+        return Task.CompletedTask;
     }
 
     public async Task<IEnumerable<NodeInstance>> GetByActivityInstanceIdAsync(Guid processId, Guid activityInstanceId,

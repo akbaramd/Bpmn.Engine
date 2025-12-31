@@ -34,8 +34,21 @@ public sealed class NodeInstanceConfiguration : IEntityTypeConfiguration<NodeIns
         entity.Property(x => x.ScopeId);
         entity.Property(x => x.ActivityInstanceId);
 
-        entity.Property(x => x.ArrivedViaFlowId)
-            .HasMaxLength(500);
+        // ArrivedViaFlowIds (private _arrivedViaFlowIds) - stored as JSON
+        entity.Ignore(x => x.ArrivedViaFlowIds);
+
+        var flowIdsComparer = new ValueComparer<List<string>>(
+            (a, b) => EfComparers.ListEqual(a, b),
+            v => EfComparers.ListHash(v),
+            v => EfComparers.ListSnapshot(v));
+
+        entity.Property<List<string>>("_arrivedViaFlowIds")
+            .HasColumnName("ArrivedViaFlowIds")
+            .HasColumnType("text")
+            .HasConversion(
+                v => JsonHelper.SerializeObject(v ?? new List<string>()),
+                v => JsonHelper.DeserializeObject<List<string>>(v) ?? new List<string>())
+            .Metadata.SetValueComparer(flowIdsComparer);
 
         entity.Property(x => x.WorkerId);
         entity.Property(x => x.ErrorMessage).HasMaxLength(4000);

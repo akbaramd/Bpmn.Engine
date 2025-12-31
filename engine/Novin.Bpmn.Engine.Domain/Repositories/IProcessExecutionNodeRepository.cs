@@ -35,7 +35,7 @@ public interface INodeInstanceRepository : IRepository<NodeInstance>
         string elementId,
         Guid? scopeId,
         Guid? activityInstanceId,
-        string? arrivedViaFlowId,
+        IEnumerable<string>? arrivedViaFlowIds,
         CancellationToken cancellationToken = default);
 
     /// <summary>

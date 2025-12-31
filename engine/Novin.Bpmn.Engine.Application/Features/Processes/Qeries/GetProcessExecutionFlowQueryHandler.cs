@@ -106,7 +106,7 @@ public sealed class GetProcessExecutionFlowQueryHandler
 
                 var firstExecutedAt = g.Min(NodeTime);
 
-                // ✅ latest node instance decides Status
+                // ✅ latest node instance decides Status and provides all node details
                 var latestNode = g
                     .OrderByDescending(n => n.CompletedAtUtc ?? n.StartedAtUtc ?? n.CreatedAtUtc)
                     .First();
@@ -134,6 +134,19 @@ public sealed class GetProcessExecutionFlowQueryHandler
                     .OrderBy(x => x.FirstExecutedAt)
                     .ToList();
 
+                // Merge variables from all node instances (latest wins for same key)
+                var allVariables = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var node in g.OrderByDescending(n => n.CompletedAtUtc ?? n.StartedAtUtc ?? n.CreatedAtUtc))
+                {
+                    foreach (var kvp in node.Variables)
+                    {
+                        if (!allVariables.ContainsKey(kvp.Key))
+                        {
+                            allVariables[kvp.Key] = kvp.Value;
+                        }
+                    }
+                }
+
                 return new ExecutedElementDto
                 {
                     ElementId = elementId,
@@ -147,6 +160,16 @@ public sealed class GetProcessExecutionFlowQueryHandler
                     // ✅ single status
                     Status = status.ToString(),
 
+                    // Node instance fields from latest node
+                    NodeInstanceId = latestNode.Id,
+                    ScopeId = latestNode.ScopeId,
+                    ActivityInstanceId = latestNode.ActivityInstanceId,
+                    ArrivedViaFlowIds = latestNode.ArrivedViaFlowIds.ToList(),
+                    StartedAtUtc = latestNode.StartedAtUtc,
+                    CompletedAtUtc = latestNode.CompletedAtUtc,
+                    ErrorMessage = latestNode.ErrorMessage,
+                    Variables = allVariables,
+
                     TokenExecutions = tokenExecutions
                 };
             })
@@ -154,15 +177,18 @@ public sealed class GetProcessExecutionFlowQueryHandler
             .ToList();
 
         // ----------------------------
-        // ExecutedFlows (فقط با ArrivedViaFlowId از NodeInstances)
-        // هر NodeInstance مقصد یک flow هست => ArrivedViaFlowId همان flow اجرا شده است
+        // ExecutedFlows (فقط با ArrivedViaFlowIds از NodeInstances)
+        // هر NodeInstance مقصد یک flow هست => ArrivedViaFlowIds همان flowهای اجرا شده است
         // ----------------------------
+        // Flatten all ArrivedViaFlowIds from all nodes
         var executedFlows = nodes
-            .Where(n => !string.IsNullOrWhiteSpace(n.ArrivedViaFlowId))
-            .GroupBy(n => n.ArrivedViaFlowId!, StringComparer.Ordinal)
+            .SelectMany(n => n.ArrivedViaFlowIds.Select(flowId => new { Node = n, FlowId = flowId }))
+            .Where(x => !string.IsNullOrWhiteSpace(x.FlowId))
+            .GroupBy(x => x.FlowId!, StringComparer.Ordinal)
             .Select(g =>
             {
                 var flowId = g.Key;
+                var nodeGroup = g.Select(x => x.Node).ToList();
 
                 string source = "";
                 string target = "";
@@ -177,9 +203,9 @@ public sealed class GetProcessExecutionFlowQueryHandler
                     condition = ReadConditionExpression(f);
                 }
 
-                var firstAt = g.Min(NodeTime);
+                var firstAt = nodeGroup.Min(NodeTime);
 
-                var tokenExecutions = g
+                var tokenExecutions = nodeGroup
                     .GroupBy(x => x.TokenId)
                     .Select(tg => new TokenExecutionDto
                     {
@@ -199,7 +225,7 @@ public sealed class GetProcessExecutionFlowQueryHandler
                     FlowName = name,
                     ConditionExpression = condition,
                     FirstExecutedAt = firstAt,
-                    ExecutionCount = g.Count(),
+                    ExecutionCount = nodeGroup.Count,
                     TokenExecutions = tokenExecutions
                 };
             })

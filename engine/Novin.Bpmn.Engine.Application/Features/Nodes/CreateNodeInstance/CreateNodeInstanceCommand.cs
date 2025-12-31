@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -18,7 +18,7 @@ public sealed record CreateNodeInstanceCommand(
     bool IsExecutable,
     Guid? ScopeId,
     Guid? ActivityInstanceId,
-    string? ArrivedViaFlowId
+    IEnumerable<string>? ArrivedViaFlowIds = null
 ) : IRequest<Guid>;
 
 // ======================================================
@@ -77,13 +77,19 @@ public sealed class CreateNodeInstanceCommandHandler : IRequestHandler<CreateNod
         // ------------------------------------------------------------
         // 2) Idempotency: if an open NodeInstance already exists for this correlation, reuse it
         // ------------------------------------------------------------
+        // Convert Token's single ArrivedViaFlowId to array for comparison
+        var arrivedViaFlowIds = request.ArrivedViaFlowIds ?? 
+            (string.IsNullOrWhiteSpace(token.ArrivedViaFlowId) 
+                ? null 
+                : new[] { token.ArrivedViaFlowId });
+        
         var existing = await _nodes.TryFindOpenAsync(
             processId: token.ProcessId,
             tokenId: token.Id,
             elementId: elementId,
             scopeId: token.ScopeId,
             activityInstanceId: token.ActivityInstanceId,
-            arrivedViaFlowId: token.ArrivedViaFlowId,
+            arrivedViaFlowIds: arrivedViaFlowIds,
             cancellationToken: cancellationToken);
 
         if (existing is not null)
@@ -103,7 +109,7 @@ public sealed class CreateNodeInstanceCommandHandler : IRequestHandler<CreateNod
             isExecutable:request.IsExecutable,
             scopeId: token.ScopeId,
             activityInstanceId: token.ActivityInstanceId,
-            arrivedViaFlowId: token.ArrivedViaFlowId);
+            arrivedViaFlowIds: arrivedViaFlowIds);
 
         await _nodes.AddAsync(node, cancellationToken);
 

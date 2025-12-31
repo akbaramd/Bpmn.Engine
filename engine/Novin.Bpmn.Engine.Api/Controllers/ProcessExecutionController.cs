@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using MediatR;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Application.Queries.GetProcessExecutionFlow;
+using Novin.Bpmn.Engine.Application.Queries.GetIncidents;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 using System.Linq;
@@ -250,6 +251,88 @@ public sealed class ProcessExecutionController : ControllerBase
     }
 
     // ----------------------------------------------------------------------
+    // NEW: Incidents endpoint
+    // ----------------------------------------------------------------------
+
+    /// <summary>
+    /// Returns all incidents for a specific process
+    /// </summary>
+    [HttpGet("{processId:guid}/incidents")]
+    [ProducesResponseType(typeof(IReadOnlyList<IncidentDto>), 200)]
+    [ProducesResponseType(404)]
+    public async Task<ActionResult<IReadOnlyList<IncidentDto>>> GetIncidents(Guid processId, CancellationToken ct = default)
+    {
+        var process = await _uow.Processes.GetByIdAsync(processId, ct);
+        if (process == null) return NotFound(new { error = $"Process not found: {processId}" });
+
+        var incidents = await _mediator.Send(new GetIncidentsQuery(processId), ct);
+        return Ok(incidents.ToList());
+    }
+
+    // ----------------------------------------------------------------------
+    // NEW: Node instance details endpoint
+    // ----------------------------------------------------------------------
+
+    /// <summary>
+    /// Returns detailed information about a specific node instance
+    /// </summary>
+    [HttpGet("{processId:guid}/nodes/{nodeId:guid}")]
+    [ProducesResponseType(typeof(NodeInstanceDetailDto), 200)]
+    [ProducesResponseType(404)]
+    public async Task<ActionResult<NodeInstanceDetailDto>> GetNodeDetails(Guid processId, Guid nodeId, CancellationToken ct = default)
+    {
+        var process = await _uow.Processes.GetByIdAsync(processId, ct);
+        if (process == null) return NotFound(new { error = $"Process not found: {processId}" });
+
+        var node = await _uow.NodeInstances.GetByIdAsync(nodeId, ct);
+        if (node == null) return NotFound(new { error = $"Node instance not found: {nodeId}" });
+
+        if (node.ProcessId != processId)
+            return BadRequest(new { error = $"Node instance {nodeId} does not belong to process {processId}" });
+
+        // Get associated token
+        var token = node.TokenId != Guid.Empty 
+            ? await _uow.Tokens.GetByIdAsync(node.TokenId, ct)
+            : null;
+
+        var dto = new NodeInstanceDetailDto(
+            NodeId: node.Id,
+            ProcessId: node.ProcessId,
+            TokenId: node.TokenId,
+            ElementId: node.ElementId,
+            State: node.State.ToString(),
+            IsExecutable: node.IsExecutable,
+            ScopeId: node.ScopeId,
+            ActivityInstanceId: node.ActivityInstanceId,
+            ArrivedViaFlowIds: node.ArrivedViaFlowIds.ToList(),
+            WorkerId: node.WorkerId,
+            UserTaskId: node.UserTaskId,
+            ErrorMessage: node.ErrorMessage,
+            CreatedAtUtc: node.CreatedAtUtc,
+            StartedAtUtc: node.StartedAtUtc,
+            CompletedAtUtc: node.CompletedAtUtc,
+            Variables: node.Variables.ToDictionary(k => k.Key, v => v.Value),
+            Token: token != null ? new TokenDetailDto(
+                TokenId: token.Id,
+                ProcessId: token.ProcessId,
+                CurrentElementId: token.CurrentElementId,
+                State: token.State.ToString(),
+                IsExecutable: token.IsExecutable,
+                ScopeId: token.ScopeId,
+                ArrivedViaFlowId: token.ArrivedViaFlowId,
+                ActivityInstanceId: token.ActivityInstanceId,
+                ParentTokenIds: token.ParentTokenIds.ToList(),
+                CreatedAtUtc: token.CreatedAt,
+                ActivatedAtUtc: token.ActivatedAt,
+                CompletedAtUtc: token.CompletedAt,
+                Variables: token.Variables.ToDictionary(k => k.Key, v => v.Value)
+            ) : null
+        );
+
+        return Ok(dto);
+    }
+
+    // ----------------------------------------------------------------------
     // DTOs (keep here or move to Application.Contracts)
     // ----------------------------------------------------------------------
 
@@ -305,6 +388,42 @@ public sealed class ProcessExecutionController : ControllerBase
         BpmnModelDto Model,
         ProcessExecutionFlowDto? ExecutionFlow,
         IReadOnlyList<TokenDashboardDto> Tokens
+    );
+
+    public sealed record NodeInstanceDetailDto(
+        Guid NodeId,
+        Guid ProcessId,
+        Guid TokenId,
+        string ElementId,
+        string State,
+        bool IsExecutable,
+        Guid? ScopeId,
+        Guid? ActivityInstanceId,
+        IReadOnlyList<string> ArrivedViaFlowIds,
+        Guid? WorkerId,
+        Guid? UserTaskId,
+        string? ErrorMessage,
+        DateTime CreatedAtUtc,
+        DateTime? StartedAtUtc,
+        DateTime? CompletedAtUtc,
+        IReadOnlyDictionary<string, string> Variables,
+        TokenDetailDto? Token
+    );
+
+    public sealed record TokenDetailDto(
+        Guid TokenId,
+        Guid ProcessId,
+        string CurrentElementId,
+        string State,
+        bool IsExecutable,
+        Guid? ScopeId,
+        string? ArrivedViaFlowId,
+        Guid? ActivityInstanceId,
+        IReadOnlyList<Guid> ParentTokenIds,
+        DateTime CreatedAtUtc,
+        DateTime? ActivatedAtUtc,
+        DateTime? CompletedAtUtc,
+        IReadOnlyDictionary<string, string> Variables
     );
     
     // ----------------------------------------------------------------------

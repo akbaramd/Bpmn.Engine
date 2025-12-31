@@ -114,13 +114,18 @@ public sealed class TokenResumedEventHandler : INotificationHandler<TokenResumed
 
         // Find existing node or create new one
         // Resume semantics: process the node again with isResume=true
+        // Convert Token's single ArrivedViaFlowId to array
+        var arrivedViaFlowIds = string.IsNullOrWhiteSpace(token.ArrivedViaFlowId)
+            ? null
+            : new[] { token.ArrivedViaFlowId };
+        
         var existingNode = await _uow.NodeInstances.TryFindOpenAsync(
             processId: token.ProcessId,
             tokenId: token.Id,
             elementId: token.CurrentElementId,
             scopeId: token.ScopeId,
             activityInstanceId: token.ActivityInstanceId,
-            arrivedViaFlowId: token.ArrivedViaFlowId,
+            arrivedViaFlowIds: arrivedViaFlowIds,
             cancellationToken: ct);
         
         if (existingNode != null && existingNode.State == NodeState.Waiting)
@@ -138,7 +143,7 @@ public sealed class TokenResumedEventHandler : INotificationHandler<TokenResumed
                 IsExecutable: token.IsExecutable,
                 ScopeId: token.ScopeId,
                 ActivityInstanceId: token.ActivityInstanceId,
-                ArrivedViaFlowId: token.ArrivedViaFlowId
+                ArrivedViaFlowIds: arrivedViaFlowIds
             ), ct);
         }
     }
