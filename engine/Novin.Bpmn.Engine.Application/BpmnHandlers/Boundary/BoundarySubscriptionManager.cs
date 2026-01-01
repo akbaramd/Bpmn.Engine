@@ -210,13 +210,13 @@
 //             {
 //                 scopeHierarchy.Add(notification.ScopeId.Value);
 //                 
-//                 // Find parent scopes by following ParentTokenIds
+//                 // Find parent scopes by following ParentTokenId
 //                 var currentToken = token;
 //                 var visitedScopes = new HashSet<Guid> { notification.ScopeId.Value };
 //                 
-//                 while (currentToken != null && currentToken.ParentTokenIds.Any())
+//                 while (currentToken != null && currentToken.ParentTokenId.HasValue)
 //                 {
-//                     var parentToken = processTokens.FirstOrDefault(t => currentToken.ParentTokenIds.Contains(t.Id));
+//                     var parentToken = processTokens.FirstOrDefault(t => t.Id == currentToken.ParentTokenId.Value);
 //                     if (parentToken == null) break;
 //                     
 //                     if (parentToken.ScopeId.HasValue && !visitedScopes.Contains(parentToken.ScopeId.Value))

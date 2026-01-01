@@ -75,50 +75,36 @@ public sealed class CreateMergedTokenCommandHandler : IRequestHandler<CreateMerg
                     // by the database isolation level (Repeatable Read or Serializable)
 
                     // Create new merged token
-                    var parentIds = cmd.ParentTokenIds?.Where(id => id != Guid.Empty).Distinct().ToList() 
-                                  ?? new List<Guid>();
-
-                    // Determine executability: merged token is executable only if at least one parent was executable
-                    // If all parent tokens are non-executable (or no parent tokens), merged token is non-executable
+                    // Determine executability: merged token is executable only if parent was executable
                     var mergedIsExecutable = false;
-                    if (parentIds.Count > 0)
+                    if (cmd.ParentTokenId.HasValue && cmd.ParentTokenId.Value != Guid.Empty)
                     {
-                        // Load parent tokens to check their executability
-                        foreach (var parentId in parentIds)
+                        var parentToken = await _uow.Tokens.GetByIdAsync(cmd.ParentTokenId.Value, trxCt);
+                        if (parentToken?.IsExecutable == true)
                         {
-                            var parentToken = await _uow.Tokens.GetByIdAsync(parentId, trxCt);
-                            if (parentToken?.IsExecutable == true)
-                            {
-                                mergedIsExecutable = true;
-                                break; // At least one parent is executable
-                            }
+                            mergedIsExecutable = true;
                         }
                     }
-                    // If no parent tokens or all are non-executable, mergedIsExecutable remains false
 
                     var mergedToken = new Token(
                         processId: cmd.ProcessId,
                         startElementId: cmd.GatewayId,
-                        parentTokenIds: parentIds);
+                        parentTokenId: cmd.ParentTokenId);
 
-                    // Collect all ArrivedViaFlowIds from EXECUTABLE parent tokens and merge with provided flow IDs
+                    // Collect ArrivedViaFlowIds from parent token if executable
                     var allFlowIds = new HashSet<string>(StringComparer.Ordinal);
                     
-                    // Add flow IDs ONLY from executable parent tokens (non-executable tokens don't create nodes)
-                    if (parentIds.Count > 0)
+                    if (cmd.ParentTokenId.HasValue && cmd.ParentTokenId.Value != Guid.Empty)
                     {
-                        foreach (var parentId in parentIds)
+                        var parentToken = await _uow.Tokens.GetByIdAsync(cmd.ParentTokenId.Value, trxCt);
+                        // Only collect flow IDs from executable tokens
+                        if (parentToken != null && parentToken.IsExecutable)
                         {
-                            var parentToken = await _uow.Tokens.GetByIdAsync(parentId, trxCt);
-                            // Only collect flow IDs from executable tokens
-                            if (parentToken != null && parentToken.IsExecutable)
+                            foreach (var flowId in parentToken.ArrivedViaFlowIds)
                             {
-                                foreach (var flowId in parentToken.ArrivedViaFlowIds)
+                                if (!string.IsNullOrWhiteSpace(flowId))
                                 {
-                                    if (!string.IsNullOrWhiteSpace(flowId))
-                                    {
-                                        allFlowIds.Add(flowId);
-                                    }
+                                    allFlowIds.Add(flowId);
                                 }
                             }
                         }
@@ -157,8 +143,8 @@ public sealed class CreateMergedTokenCommandHandler : IRequestHandler<CreateMerg
                     _logger.LogInformation(
                         "[CREATE-MERGED-TOKEN] Merged token created and activated. " +
                         "ProcessId={ProcessId} GatewayId={GatewayId} ScopeId={ScopeId} MergedTokenId={MergedTokenId} " +
-                        "ParentCount={ParentCount} IsExecutable={IsExecutable}",
-                        cmd.ProcessId, cmd.GatewayId, cmd.ScopeId, mergedToken.Id, parentIds.Count, mergedToken.IsExecutable);
+                        "ParentTokenId={ParentTokenId} IsExecutable={IsExecutable}",
+                        cmd.ProcessId, cmd.GatewayId, cmd.ScopeId, mergedToken.Id, cmd.ParentTokenId, mergedToken.IsExecutable);
 
                     result = mergedToken.Id;
                 }, ct);

@@ -80,7 +80,7 @@ public class EfTokenRepository : ITokenRepository
     public async Task<IEnumerable<Token>> GetChildTokensAsync(Guid parentTokenId, CancellationToken cancellationToken = default)
     {
         return await _context.Tokens
-            .Where(t => t.ParentTokenIds.Any(x=>x == parentTokenId) )
+            .Where(t => t.ParentTokenId == parentTokenId)
             .ToListAsync(cancellationToken);
     }
 

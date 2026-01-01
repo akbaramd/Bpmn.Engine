@@ -82,7 +82,7 @@ public abstract class BpmnElementHandlerBase : IBpmnElementHandler
             var child = new Token(
                 processId: process.Id,
                 startElementId: selected.targetRef!,
-                parentTokenIds: new[] { token.Id });
+                parentTokenId: token.Id);
 
             child.SetArrivedVia(selected.id);
             process.AddToken(child.Id);
@@ -94,7 +94,7 @@ public abstract class BpmnElementHandlerBase : IBpmnElementHandler
         }
 
         // Otherwise move the token
-        token.MoveTo(selected.targetRef!, selected.id);
+        token.MoveTo(selected.targetRef!,false, selected.id);
 
         Logger.LogDebug("[NAV] Token moved. Token={TokenId} To={Target}", token.Id, selected.targetRef);
         return Task.CompletedTask;

@@ -41,49 +41,43 @@ public sealed class TokenMovedEventHandler : INotificationHandler<TokenMovedEven
             "[TOKEN-MOVED] TokenId={TokenId} ProcessId={ProcessId} From={From} To={To} Executable={Executable}",
             e.TokenId, e.ProcessId, e.FromElementId, e.ToElementId, e.IsExecutable);
 
-        // Non-executable => NAV only (no node)
-        if (!e.IsExecutable)
+
+        if (!e.SkipProcess)
         {
-            _logger.LogDebug(
-                "[TOKEN-MOVED] Non-executable token. NAV only. TokenId={TokenId} To={To}",
-                e.TokenId, e.ToElementId);
+            
+            // TOKEN-PROC gate (join/merge/guards) BEFORE creating node
+            // ⚠️ Join gateway: if result is Waiting, token will be Waiting and NO NodeInstance is created
+            var result = await _mediator.Send(new DispatchTokenProcessCommand(e.TokenId), ct);
 
-            await _mediator.Send(new DispatchTokenNavigateCommand(e.TokenId), ct);
-            return;
+            switch (result)
+            {
+                case TokenProcessResult.Waiting:
+                    // ✅ Join waiting: token is Waiting, NO NodeInstance created (token-driven join)
+                    _logger.LogInformation(
+                        "[TOKEN-MOVED] TOKEN-PROC returned Waiting (join gateway). TokenId={TokenId} ElementId={ElementId} - NO NodeInstance created",
+                        e.TokenId, e.ToElementId);
+                    return;
+
+                case TokenProcessResult.Consumed:
+                case TokenProcessResult.Failed:
+                case TokenProcessResult.Terminated:
+                    _logger.LogInformation(
+                        "[TOKEN-MOVED] TOKEN-PROC returned {Result}. Stop. TokenId={TokenId} ElementId={ElementId}",
+                        result, e.TokenId, e.ToElementId);
+                    return;
+
+                case TokenProcessResult.NoOp:
+                case TokenProcessResult.Continue:
+                    break;
+
+                default:
+                    _logger.LogDebug(
+                        "[TOKEN-MOVED] TOKEN-PROC returned {Result}. Stop. TokenId={TokenId} ElementId={ElementId}",
+                        result, e.TokenId, e.ToElementId);
+                    return;
+            }
+
         }
-
-        // TOKEN-PROC gate (join/merge/guards) BEFORE creating node
-        // ⚠️ Join gateway: if result is Waiting, token will be Waiting and NO NodeInstance is created
-        var result = await _mediator.Send(new DispatchTokenProcessCommand(e.TokenId), ct);
-
-        switch (result)
-        {
-            case TokenProcessResult.Waiting:
-                // ✅ Join waiting: token is Waiting, NO NodeInstance created (token-driven join)
-                _logger.LogInformation(
-                    "[TOKEN-MOVED] TOKEN-PROC returned Waiting (join gateway). TokenId={TokenId} ElementId={ElementId} - NO NodeInstance created",
-                    e.TokenId, e.ToElementId);
-                return;
-
-            case TokenProcessResult.Consumed:
-            case TokenProcessResult.Failed:
-            case TokenProcessResult.Terminated:
-                _logger.LogInformation(
-                    "[TOKEN-MOVED] TOKEN-PROC returned {Result}. Stop. TokenId={TokenId} ElementId={ElementId}",
-                    result, e.TokenId, e.ToElementId);
-                return;
-
-            case TokenProcessResult.NoOp:
-            case TokenProcessResult.Continue:
-                break;
-
-            default:
-                _logger.LogDebug(
-                    "[TOKEN-MOVED] TOKEN-PROC returned {Result}. Stop. TokenId={TokenId} ElementId={ElementId}",
-                    result, e.TokenId, e.ToElementId);
-                return;
-        }
-
         // Reload token (TOKEN-PROC may have mutated token state/element in its own tx)
         var token = await _uow.Tokens.GetByIdAsync(e.TokenId, ct);
         if (token is null)
@@ -94,7 +88,7 @@ public sealed class TokenMovedEventHandler : INotificationHandler<TokenMovedEven
 
         // If token no longer Active, do not create node
         // (e.g., if join satisfied and token was consumed, or if it became Waiting)
-        if (token.State != TokenState.Active)
+        if (token.State != TokenState.Active && token.State != TokenState.Merged)
         {
             _logger.LogDebug(
                 "[TOKEN-MOVED] Skip node creation (TokenState={State}). TokenId={TokenId} ElementId={ElementId}",

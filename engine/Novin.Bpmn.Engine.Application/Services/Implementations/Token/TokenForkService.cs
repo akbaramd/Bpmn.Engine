@@ -57,7 +57,7 @@ public sealed class TokenForkService : ITokenForkService
             var createResult = await _mediator.Send(new CreateTokenCommand(
                 ProcessId: process.Id,
                 StartElementId: flow.targetRef,
-                ParentTokenIds: new[] { parent.Id },
+                ParentTokenId: parent.Id,
                 ArrivedViaFlowId: FlowKey(flow),
                 IsExecutable: isExecutable,
                 ScopeId: scopeId,

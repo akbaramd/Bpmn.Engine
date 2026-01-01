@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Novin.Bpmn.Engine.Domain.Common;
 using Novin.Bpmn.Engine.Domain.Entities;
 
@@ -7,7 +8,7 @@ public sealed record TokenCreatedEvent(
     Guid TokenId,
     Guid ProcessId,
     string StartElementId,
-    IReadOnlyCollection<Guid> ParentTokenIds,
+    Guid? ParentTokenId,
     DateTime OccurredAtUtc
 ) : IDomainEvent;
 
@@ -25,12 +26,12 @@ public sealed record TokenMovedEvent(
     Guid ProcessId,
     string FromElementId,
     string ToElementId,
-    string? ViaFlowId,
+    List<string> ViaFlowIds,
     DateTime OccurredAtUtc,
     bool IsExecutable,
     Guid? ScopeId,
-    Guid? ActivityInstanceId
-) : IDomainEvent;
+    bool SkipProcess,
+    Guid? ActivityInstanceId) : IDomainEvent;
 
 
 public sealed record TokenWaitingEvent(

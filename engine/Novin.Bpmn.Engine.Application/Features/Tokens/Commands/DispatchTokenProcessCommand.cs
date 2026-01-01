@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -79,26 +79,26 @@ public sealed class DispatchTokenProcessCommandHandler : IRequestHandler<Dispatc
             await _uow.Tokens.UpdateAsync(token, ct);
             await _uow.Processes.UpdateAsync(process, ct);
 
-
-            return tokenResult;
             await _uow.CommitTransactionAsync(ct);
+            return tokenResult;
+            
         }
         catch (OperationCanceledException)
         {
-            return TokenProcessResult.Failed;
             // cancellation => rollback & rethrow
             await SafeRollbackAsync(ct);
             throw;
         }
         catch (Exception ex)
         {
-            return TokenProcessResult.Failed;
             await SafeRollbackAsync(ct);
 
             _logger.LogError(ex, "[TOKEN:PROC] Failed. TokenId={TokenId}", request.TokenId);
 
             // ✅ best-effort fail token در تراکنش جدا
             await MarkTokenFailedBestEffortAsync(request.TokenId, ex, ct);
+            
+            return TokenProcessResult.Failed;
         }
 
        

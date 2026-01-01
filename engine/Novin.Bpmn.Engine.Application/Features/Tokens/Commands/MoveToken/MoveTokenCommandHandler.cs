@@ -77,7 +77,7 @@ public sealed class MoveTokenCommandHandler : IRequestHandler<MoveTokenCommand, 
                 : null;
 
             // 4) Move (domain emits TokenMovedEvent internally if you have it)
-            token.MoveTo(request.NextElementId, request.ViaFlowId);
+            token.MoveTo(request.NextElementId,false, request.ViaFlowId);
 
             // 5) Commit movement
             await _uow.CommitTransactionAsync(ct);

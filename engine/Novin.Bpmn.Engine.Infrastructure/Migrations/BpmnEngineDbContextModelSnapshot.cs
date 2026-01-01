@@ -353,10 +353,6 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                     b.Property<Guid?>("ActivityInstanceId")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("ArrivedViaFlowId")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime?>("CompletedAtUtc")
                         .HasColumnType("TEXT");
 
@@ -397,6 +393,11 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
 
                     b.Property<Guid?>("WorkerId")
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("_arrivedViaFlowIds")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ArrivedViaFlowIds");
 
                     b.Property<string>("_variables")
                         .IsRequired()
@@ -639,10 +640,6 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                     b.Property<Guid?>("ActivityInstanceId")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("ArrivedViaFlowId")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("TEXT");
 
@@ -657,6 +654,9 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                     b.Property<bool>("IsExecutable")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("ParentTokenId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("ProcessId")
                         .HasColumnType("TEXT");
 
@@ -668,10 +668,10 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("_parentTokenIds")
+                    b.Property<string>("_arrivedViaFlowIds")
                         .IsRequired()
                         .HasColumnType("text")
-                        .HasColumnName("ParentTokenIds");
+                        .HasColumnName("ArrivedViaFlowIds");
 
                     b.Property<string>("_variables")
                         .IsRequired()
@@ -679,6 +679,9 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                         .HasColumnName("Variables");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ParentTokenId")
+                        .HasFilter("[ParentTokenId] IS NOT NULL");
 
                     b.HasIndex("ProcessId");
 

@@ -119,8 +119,9 @@ public sealed class BoundarySubscriptionTriggeredEventHandler
             //    Boundary flow is outside the host activity => clear ActivityInstanceId
             var boundaryToken = new Token(
                 processId: process.Id,
+                
                 startElementId: e.BoundaryElementId,
-                parentTokenIds: new[] { triggeringToken.Id });
+                parentTokenId: triggeringToken.Id);
 
             // inherit correlation scope if you need (optional)
             if (triggeringToken.ScopeId is Guid scope && scope != Guid.Empty)

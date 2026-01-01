@@ -113,7 +113,7 @@ public sealed class GatewaySplitService : IGatewaySplitService
 
         // ✅ Policy: Parent token is Forked (not Terminated) - it will be reactivated when children merge
         // Parent token remains in process and will be reactivated after all children merge
-        token.Fork(scopeId, outgoingAll.Count, $"Split gateway '{gateway.id}' forked {outgoingAll.Count} branch token(s).");
+        token.Fork(outgoingAll.Count, $"Split gateway '{gateway.id}' forked {outgoingAll.Count} branch token(s).");
 
         // Fork children: MUST set child.ScopeId = scopeId and set IsExecutable per flow
         await _fork.ForkChildrenAsync(

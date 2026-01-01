@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Novin.Bpmn.Engine.Domain.Entities;
@@ -32,6 +32,7 @@ public sealed class TokenConfiguration : IEntityTypeConfiguration<Token>
 
         entity.Property(x => x.ScopeId);
         entity.Property(x => x.ActivityInstanceId);
+        entity.Property(x => x.ParentTokenId);
 
         // ArrivedViaFlowIds (private _arrivedViaFlowIds) - stored as JSON
         entity.Ignore(x => x.ArrivedViaFlowIds);
@@ -48,22 +49,6 @@ public sealed class TokenConfiguration : IEntityTypeConfiguration<Token>
                 v => JsonHelper.SerializeObject(v ?? new List<string>()),
                 v => JsonHelper.DeserializeObject<List<string>>(v) ?? new List<string>())
             .Metadata.SetValueComparer(flowIdsComparer);
-
-        // -------- ParentTokenIds (private List<Guid> _parentTokenIds -> JSON) --------
-        entity.Ignore(x => x.ParentTokenIds);
-
-        var parentComparer = new ValueComparer<List<Guid>>(
-            (a, b) => EfComparers.GuidListEqual(a, b),
-            v => EfComparers.GuidListHash(v),
-            v => EfComparers.GuidListSnapshot(v));
-
-        entity.Property<List<Guid>>("_parentTokenIds")
-            .HasColumnName("ParentTokenIds")
-            .HasColumnType("text")
-            .HasConversion(
-                v => JsonHelper.SerializeObject(v ?? new List<Guid>()),
-                v => JsonHelper.DeserializeObject<List<Guid>>(v) ?? new List<Guid>())
-            .Metadata.SetValueComparer(parentComparer);
 
         // -------- Local Variables (private Dictionary<string,string> _variables -> JSON) --------
         entity.Ignore(x => x.Variables);
@@ -100,6 +85,10 @@ public sealed class TokenConfiguration : IEntityTypeConfiguration<Token>
         // Activity instance correlation (boundary cancel, subprocess)
         entity.HasIndex(x => new { x.ProcessId, x.ActivityInstanceId })
             .HasFilter("[ActivityInstanceId] IS NOT NULL");
+
+        // Parent token correlation (for GetChildTokensAsync query)
+        entity.HasIndex(x => x.ParentTokenId)
+            .HasFilter("[ParentTokenId] IS NOT NULL");
 
         // -------- Domain events --------
         entity.Ignore("DomainEvents");

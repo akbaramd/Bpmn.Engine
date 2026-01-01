@@ -28,8 +28,7 @@ public sealed class CreateTokenCommandHandler : IRequestHandler<CreateTokenComma
                 return new CreateTokenResult(Guid.Empty, request.ProcessId, false, "Process not found");
             }
 
-            var parentIds = request.ParentTokenIds?.Where(id => id != Guid.Empty).Distinct() ?? Enumerable.Empty<Guid>();
-            var token = new Token(request.ProcessId, request.StartElementId, parentIds);
+            var token = new Token(request.ProcessId, request.StartElementId, request.ParentTokenId);
 
             if (!string.IsNullOrWhiteSpace(request.ArrivedViaFlowId))
             {

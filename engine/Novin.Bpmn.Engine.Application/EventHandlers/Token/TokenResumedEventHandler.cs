@@ -52,16 +52,6 @@ public sealed class TokenResumedEventHandler : INotificationHandler<TokenResumed
             return;
         }
 
-        // Non-executable => NAV only (no node)
-        if (!token.IsExecutable)
-        {
-            _logger.LogInformation(
-                "[TOKEN-RESUMED] Non-executable token. NAV only. TokenId={TokenId} ElementId={ElementId}",
-                token.Id, token.CurrentElementId);
-
-            await _mediator.Send(new DispatchTokenNavigateCommand(token.Id), ct);
-            return;
-        }
 
         // TOKEN-PROC gate (join/merge/guards)
         var result = await _mediator.Send(new DispatchTokenProcessCommand(token.Id), ct);
@@ -97,10 +87,11 @@ public sealed class TokenResumedEventHandler : INotificationHandler<TokenResumed
         }
 
         // If token no longer Active, do not create node
-        if (token.State != TokenState.Active)
+        // (e.g., if join satisfied and token was consumed, or if it became Waiting)
+        if (token.State != TokenState.Active && token.State != TokenState.Merged)
         {
             _logger.LogDebug(
-                "[TOKEN-RESUMED] Skip node creation (TokenState={State}). TokenId={TokenId} ElementId={ElementId}",
+                "[TOKEN-MOVED] Skip node creation (TokenState={State}). TokenId={TokenId} ElementId={ElementId}",
                 token.State, token.Id, token.CurrentElementId);
             return;
         }

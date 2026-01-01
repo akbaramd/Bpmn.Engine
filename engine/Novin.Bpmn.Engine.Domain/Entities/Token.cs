@@ -32,8 +32,11 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         /// </summary>
         public Guid? ActivityInstanceId { get; private set; }
 
-        private readonly List<Guid> _parentTokenIds = new();
-        public IReadOnlyCollection<Guid> ParentTokenIds => _parentTokenIds.AsReadOnly();
+        /// <summary>
+        /// Parent Token ID - برای Fork/Join correlation
+        /// هر child token فقط یک parent دارد
+        /// </summary>
+        public Guid? ParentTokenId { get; private set; }
 
         private readonly Dictionary<string, string> _variables = new();
         public IReadOnlyDictionary<string, string> Variables => _variables;
@@ -48,7 +51,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
             CreatedAt = DateTime.UtcNow;
         }
 
-        public Token(Guid processId, string startElementId, IEnumerable<Guid>? parentTokenIds = null)
+        public Token(Guid processId, string startElementId, Guid? parentTokenId = null)
             : this()
         {
             if (processId == Guid.Empty)
@@ -60,14 +63,14 @@ namespace Novin.Bpmn.Engine.Domain.Entities
             ProcessId = processId;
             CurrentElementId = startElementId;
 
-            if (parentTokenIds != null)
-                _parentTokenIds.AddRange(parentTokenIds.Where(x => x != Guid.Empty).Distinct());
+            if (parentTokenId.HasValue && parentTokenId.Value != Guid.Empty)
+                ParentTokenId = parentTokenId.Value;
 
             AddDomainEvent(new TokenCreatedEvent(
                 TokenId: Id,
                 ProcessId: ProcessId,
                 StartElementId: startElementId,
-                ParentTokenIds: _parentTokenIds.AsReadOnly(),
+                ParentTokenId: ParentTokenId,
                 OccurredAtUtc: CreatedAt));
         }
 
@@ -260,21 +263,18 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         /// <summary>
         /// Mark token as Forked when it creates child tokens at a split gateway
         /// </summary>
-        public void Fork(Guid scopeId, int childCount, string? reason = null)
+        public void Fork( int childCount, string? reason = null)
         {
             EnsureState(TokenState.Active);
 
-            if (scopeId == Guid.Empty)
-                throw new ArgumentException("ScopeId cannot be empty", nameof(scopeId));
 
             State = TokenState.Forked;
-            SetScope(scopeId);
 
             AddDomainEvent(new TokenForkedEvent(
                 TokenId: Id,
                 ProcessId: ProcessId,
                 ElementId: CurrentElementId,
-                ScopeId: scopeId,
+                ScopeId: ScopeId ?? Guid.Empty,
                 ChildCount: childCount,
                 OccurredAtUtc: DateTime.UtcNow,
                 IsExecutable: IsExecutable));
@@ -312,7 +312,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
 
             var scopeId = ScopeId ?? Guid.Empty;
             State = TokenState.Active;
-            ClearScope();
 
             AddDomainEvent(new TokenReactivatedFromForkedEvent(
                 TokenId: Id,
@@ -374,7 +373,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 DateTime.UtcNow));
         }
         // -------------------- Movement --------------------
-        public void MoveTo(string nextElementId, string? viaFlowId)
+        public void MoveTo(string nextElementId,bool skipProcess = false, params string?[] viaFlowId)
         {
             EnsureState(TokenState.Active);
 
@@ -388,9 +387,9 @@ namespace Novin.Bpmn.Engine.Domain.Entities
             
             // Clear previous flow IDs and set only the current flow ID for this move
             _arrivedViaFlowIds.Clear();
-            if (!string.IsNullOrWhiteSpace(viaFlowId))
+            if (viaFlowId.Any())
             {
-                _arrivedViaFlowIds.Add(viaFlowId);
+                _arrivedViaFlowIds.AddRange(viaFlowId!);
             }
 
             AddDomainEvent(new TokenMovedEvent(
@@ -398,10 +397,11 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ProcessId: ProcessId,
                 FromElementId: from,
                 ToElementId: nextElementId,
-                ViaFlowId: viaFlowId,
+                ViaFlowIds: _arrivedViaFlowIds,
                 OccurredAtUtc: DateTime.UtcNow,
                 IsExecutable: IsExecutable,
                 ScopeId: ScopeId,
+                SkipProcess: skipProcess,
                 ActivityInstanceId: activityInstanceId
             ));
         }
@@ -412,15 +412,12 @@ namespace Novin.Bpmn.Engine.Domain.Entities
 
             State = TokenState.Active;
 
-            AddDomainEvent(new TokenResumedEvent(
-                TokenId: Id,
-                ProcessId: ProcessId,
-                ElementId: CurrentElementId,
-                OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable,
-                ScopeId: ScopeId));
-
             // ❌ عمداً RequestProcessing نمی‌زنیم
+        }
+
+        public void ReActivate()
+        {
+            State = TokenState.Active;
         }
     
 

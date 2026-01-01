@@ -104,7 +104,7 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
     var scopeId = token.ScopeId.Value;
 
     // ✅ Find parent token - all children should have the same parent
-    if (token.ParentTokenIds.Count == 0)
+    if (token.ParentTokenId == null || token.ParentTokenId == Guid.Empty)
     {
         _logger.LogError(
             "[JOIN] Token has no parent token. Gw={Gw} TokenId={TokenId} Scope={Scope}",
@@ -113,8 +113,8 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
         return TokenProcessResult.Failed;
     }
 
-    // All children should have the same parent (first parent is used)
-    var parentTokenId = token.ParentTokenIds.First();
+    // All children should have the same parent
+    var parentTokenId = token.ParentTokenId.Value;
     var parentToken = await _tokenRepository.GetByIdAsync(parentTokenId, ct);
     
     if (parentToken == null)
@@ -156,18 +156,30 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
     token.Merge(parentTokenId, $"Merged at join gateway '{gwId}'.");
     await _uow.Tokens.UpdateAsync(token, ct);
 
-    // ✅ Count merged tokens for the same parent at this gateway/scope
-    // Get all child tokens of the parent and count those that are at this gateway and merged
+    // ✅ Get all child tokens for the parent to count merged tokens
     var childTokens = await _tokenRepository.GetChildTokensAsync(parentTokenId, ct);
+    
+    // ✅ Count merged tokens at this gateway/scope (both executable and non-executable)
     var mergedCount = childTokens.Count(t => 
         t.ProcessId == process.Id &&
         t.CurrentElementId == gwId &&
         t.ScopeId == scopeId &&
         t.State == TokenState.Merged);
 
+    // ✅ For InclusiveGateway: count ALL child tokens that should arrive at this gateway
+    // (both executable and non-executable tokens created during fork)
+    var totalChildCount = childTokens.Count(t => 
+        t.ProcessId == process.Id &&
+        t.ScopeId == scopeId);
+    // ✅ For InclusiveGateway: count ALL child tokens that should arrive at this gateway
+    // (both executable and non-executable tokens created during fork)
+    var excuatable = childTokens.Where(t =>
+        t.ProcessId == process.Id &&
+        t.CurrentElementId == gwId &&
+        t.ScopeId == scopeId && t.IsExecutable).SelectMany(x=>x.ArrivedViaFlowIds).ToArray();
     _logger.LogInformation(
-        "[JOIN] Token merged. Gw={Gw} Scope={Scope} TokenId={TokenId} ParentTokenId={ParentTokenId} MergedCount={MergedCount} IncomingCount={IncomingCount}",
-        gwId, scopeId, token.Id, parentTokenId, mergedCount, incoming.Count);
+        "[JOIN] Token merged. Gw={Gw} Scope={Scope} TokenId={TokenId} ParentTokenId={ParentTokenId} MergedCount={MergedCount} TotalChildCount={TotalChildCount} IncomingCount={IncomingCount} GatewayType={GatewayType}",
+        gwId, scopeId, token.Id, parentTokenId, mergedCount, totalChildCount, incoming.Count, gateway.GetType().Name);
 
     // ------------------------------------------------------------
     // XOR MERGE (Exclusive): first token reactivates parent
@@ -181,51 +193,61 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
             parentToken.ReactivateFromForked(mergedCount, $"XOR merge completed at gateway '{gwId}'.");
             await _uow.Tokens.UpdateAsync(parentToken, ct);
 
-            // Move parent to next element
-            var nextFlow = outgoing[0];
-            if (string.IsNullOrWhiteSpace(nextFlow.targetRef))
-            {
-                parentToken.Fail($"XOR merge gateway '{gwId}' outgoing flow has no targetRef.");
-                await _uow.Tokens.UpdateAsync(parentToken, ct);
-                return TokenProcessResult.Failed;
-            }
-
-            parentToken.MoveTo(nextFlow.targetRef, nextFlow.id);
+           
+            parentToken.MoveTo(gateway.id, true,excuatable);
             await _uow.Tokens.UpdateAsync(parentToken, ct);
 
-            _logger.LogInformation(
-                "[JOIN] XOR merge: parent reactivated. Gw={Gw} Scope={Scope} ParentTokenId={ParentTokenId} NextElement={NextElement}",
-                gwId, scopeId, parentTokenId, nextFlow.targetRef);
+       
 
             return TokenProcessResult.Consumed;
         }
     }
 
     // ------------------------------------------------------------
-    // AND/OR JOIN (Parallel/Inclusive): wait until all children merged
+    // INCLUSIVE JOIN: wait until ALL child tokens merged (executable + non-executable)
+    // ------------------------------------------------------------
+    if (gateway is BpmnInclusiveGateway)
+    {
+        // ✅ For InclusiveGateway: wait until ALL child tokens have merged
+        // (both executable and non-executable tokens must merge)
+        // Don't allow merge until mergedCount equals totalChildCount in this scope
+        if (mergedCount >= totalChildCount && totalChildCount > 0)
+        {
+            // All children have merged - reactivate parent token
+            parentToken.ReactivateFromForked(mergedCount, $"Inclusive join completed at gateway '{gwId}' - all {mergedCount} children merged.");
+            await _uow.Tokens.UpdateAsync(parentToken, ct);
+
+            parentToken.MoveTo(gateway.id, true,excuatable);
+            await _uow.Tokens.UpdateAsync(parentToken, ct);
+
+
+
+            return TokenProcessResult.Consumed;
+        }
+
+        // Not all children have merged yet - wait for more
+        _logger.LogInformation(
+            "[JOIN] Inclusive join: waiting for more children. Gw={Gw} Scope={Scope} MergedCount={MergedCount} TotalChildCount={TotalChildCount}",
+            gwId, scopeId, mergedCount, totalChildCount);
+
+        return TokenProcessResult.Consumed;
+    }
+
+    // ------------------------------------------------------------
+    // AND JOIN (Parallel): wait until all incoming flows have tokens merged
     // ------------------------------------------------------------
     // Check if all children have merged (mergedCount == incoming flows count)
     if (mergedCount >= incoming.Count)
     {
         // All children have merged - reactivate parent token
-        parentToken.ReactivateFromForked(mergedCount, $"Join completed at gateway '{gwId}' - all {mergedCount} children merged.");
+        parentToken.ReactivateFromForked(mergedCount, $"Parallel join completed at gateway '{gwId}' - all {mergedCount} children merged.");
+        await _uow.Tokens.UpdateAsync(parentToken, ct);
+        
+        
+        parentToken.MoveTo(gateway.id, true,excuatable);
+     
         await _uow.Tokens.UpdateAsync(parentToken, ct);
 
-        // Move parent to next element
-        var nextFlow = outgoing[0];
-        if (string.IsNullOrWhiteSpace(nextFlow.targetRef))
-        {
-            parentToken.Fail($"Join gateway '{gwId}' outgoing flow has no targetRef.");
-            await _uow.Tokens.UpdateAsync(parentToken, ct);
-            return TokenProcessResult.Failed;
-        }
-
-        parentToken.MoveTo(nextFlow.targetRef, nextFlow.id);
-        await _uow.Tokens.UpdateAsync(parentToken, ct);
-
-        _logger.LogInformation(
-            "[JOIN] All children merged: parent reactivated. Gw={Gw} Scope={Scope} ParentTokenId={ParentTokenId} MergedCount={MergedCount} NextElement={NextElement}",
-            gwId, scopeId, parentTokenId, mergedCount, nextFlow.targetRef);
 
         return TokenProcessResult.Consumed;
     }

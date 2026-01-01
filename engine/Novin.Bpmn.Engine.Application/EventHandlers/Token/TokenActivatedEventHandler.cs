@@ -39,16 +39,7 @@ public sealed class TokenActivatedEventHandler : INotificationHandler<TokenActiv
             return;
         }
 
-        // Non-executable => NAV only (no node)
-        if (!token.IsExecutable)
-        {
-            _logger.LogInformation(
-                "[TOKEN-ACTIVATED] Non-executable token. NAV only. TokenId={TokenId} ElementId={ElementId}",
-                token.Id, token.CurrentElementId);
-
-            await _mediator.Send(new DispatchTokenNavigateCommand(token.Id), ct);
-            return;
-        }
+       
 
         // TOKEN-PROC gate (join/merge/guards)
         var result = await _mediator.Send(new DispatchTokenProcessCommand(token.Id), ct);
@@ -74,6 +65,7 @@ public sealed class TokenActivatedEventHandler : INotificationHandler<TokenActiv
                     result, token.Id, token.CurrentElementId);
                 return;
         }
+    
 
         // Reload (TOKEN-PROC may have mutated token state/element in its own tx)
         token = await _uow.Tokens.GetByIdAsync(notification.TokenId, ct);
@@ -84,10 +76,11 @@ public sealed class TokenActivatedEventHandler : INotificationHandler<TokenActiv
         }
 
         // If token no longer Active, do not create node
-        if (token.State != TokenState.Active)
+        // (e.g., if join satisfied and token was consumed, or if it became Waiting)
+        if (token.State != TokenState.Active && token.State != TokenState.Merged)
         {
             _logger.LogDebug(
-                "[TOKEN-ACTIVATED] Skip node creation (TokenState={State}). TokenId={TokenId} ElementId={ElementId}",
+                "[TOKEN-MOVED] Skip node creation (TokenState={State}). TokenId={TokenId} ElementId={ElementId}",
                 token.State, token.Id, token.CurrentElementId);
             return;
         }
