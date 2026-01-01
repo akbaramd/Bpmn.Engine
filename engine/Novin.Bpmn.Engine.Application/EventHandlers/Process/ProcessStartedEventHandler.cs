@@ -9,19 +9,26 @@ using Novin.Bpmn.Engine.Domain.ValueObjects;
 
 namespace Novin.Bpmn.Engine.Application.EventHandlers;
 
+/// <summary>
+/// Handler for ProcessStartedEvent: Creates start tokens for all start events.
+/// ✅ Uses IExecutableDefinitionCatalog instead of direct Deployment repository access.
+/// </summary>
 public sealed class ProcessStartedEventHandler : INotificationHandler<ProcessStartedEvent>
 {
     private readonly IUnitOfWork _uow;
     private readonly IMediator _mediator;
+    private readonly IExecutableDefinitionCatalog _catalog;
     private readonly ILogger<ProcessStartedEventHandler> _logger;
 
     public ProcessStartedEventHandler(
         IUnitOfWork uow,
         IMediator mediator,
+        IExecutableDefinitionCatalog catalog,
         ILogger<ProcessStartedEventHandler> logger)
     {
         _uow = uow ?? throw new ArgumentNullException(nameof(uow));
         _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
+        _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -59,8 +66,10 @@ public sealed class ProcessStartedEventHandler : INotificationHandler<ProcessSta
                 return;
             }
 
-            var defs = deployment.GetDefinitions();
-            var defsService = new BpmnDefinitionsService(defs);
+            // ✅ Use catalog (memory-first)
+            var defRef = ProcessDefinitionRef.From(process, deployment);
+            var compiled = await _catalog.GetAsync(defRef, txCt);
+            var defsService = new BpmnDefinitionsService(compiled.Definitions);
 
             var bpmnProcessId = process.ProcessBpmnId;
 

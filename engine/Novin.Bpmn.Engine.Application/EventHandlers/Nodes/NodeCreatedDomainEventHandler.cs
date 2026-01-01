@@ -56,7 +56,7 @@ public sealed class NodeCreatedDomainEventHandler : INotificationHandler<NodeCre
             return;
 
 
-        await _subscriptionService.SubscribeBoundaryEvents(node,cancellationToken);
+        await _subscriptionService.SubscribeBoundaryEventsAsync(node,cancellationToken);
         
         
         // Enqueue processing

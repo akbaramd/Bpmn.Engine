@@ -70,13 +70,7 @@ public sealed class DispatchNodeProcessCommandHandler
                 return;
             }
 
-            var deployment = await _uow.Deployments.GetByIdAsync(process.DeploymentId, trxCt);
-            if (deployment is null)
-            {
-                _logger.LogWarning("[NODE-PROC] Deployment not found. DeploymentId={DeploymentId} ProcessId={ProcessId}",
-                    process.DeploymentId, process.Id);
-                return;
-            }
+            // Note: Deployment is loaded by BpmnRuntimeContextFactory via catalog (memory-first)
 
             // ------------------------------------------------------------
             // 3) Guards

@@ -44,4 +44,5 @@ public interface IBoundarySubscriptionRepository
     Task AddAsync(BoundaryEventSubscription subscription, CancellationToken ct = default);
     Task UpdateAsync(BoundaryEventSubscription subscription, CancellationToken ct = default);
     Task<BoundaryEventSubscription> GetByIdAsync(Guid eSubscriptionId, CancellationToken trxCt);
+    Task<bool> ExistsActiveAsync(Guid processId, Guid nodeInstanceId, string boundaryElementId, CancellationToken ct);
 }

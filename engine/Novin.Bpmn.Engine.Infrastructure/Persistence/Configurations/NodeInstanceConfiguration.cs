@@ -69,19 +69,46 @@ public sealed class NodeInstanceConfiguration : IEntityTypeConfiguration<NodeIns
                 v => JsonHelper.DeserializeObject<Dictionary<string, string>>(v) ?? new Dictionary<string, string>(StringComparer.Ordinal))
             .Metadata.SetValueComparer(varsComparer);
 
-        // Indexes
-        entity.HasIndex(x => x.ProcessId);
-        entity.HasIndex(x => x.TokenId);
-        entity.HasIndex(x => new { x.ProcessId, x.ElementId });
-        entity.HasIndex(x => new { x.ProcessId, x.State, x.CreatedAtUtc });
+        // -------- Indexes --------
+        // Hot Query: GetActiveNodeInstances(processId) - Dashboard
+        entity.HasIndex(x => new { x.ProcessId, x.State })
+            .HasDatabaseName("IX_NodeInstance_Process_State");
 
+        // Hot Query: GetActiveNodeInstances(processId) with ordering
+        entity.HasIndex(x => new { x.ProcessId, x.State, x.CreatedAtUtc })
+            .HasDatabaseName("IX_NodeInstance_Process_State_Created");
+
+        // Hot Query: GetNodeInstancesForElement(processId, elementId) - Visualization/Trace
+        entity.HasIndex(x => new { x.ProcessId, x.ElementId })
+            .HasDatabaseName("IX_NodeInstance_Process_Element");
+
+        // Hot Query: GetNodeInstancesForElement with ordering
+        entity.HasIndex(x => new { x.ProcessId, x.ElementId, x.CreatedAtUtc })
+            .HasDatabaseName("IX_NodeInstance_Process_Element_Created");
+
+        // Hot Query: GetByTokenId(tokenId) - Trace
+        entity.HasIndex(x => x.TokenId)
+            .HasDatabaseName("IX_NodeInstance_TokenId");
+
+        // Hot Query: GetByTokenId with state filter
+        entity.HasIndex(x => new { x.TokenId, x.State })
+            .HasDatabaseName("IX_NodeInstance_TokenId_State");
+
+        // Correlation for scope
         entity.HasIndex(x => new { x.ProcessId, x.ScopeId })
+            .HasDatabaseName("IX_NodeInstance_Process_Scope")
             .HasFilter("[ScopeId] IS NOT NULL");
 
+        // Activity instance correlation (boundary cancel, subprocess)
         entity.HasIndex(x => new { x.ProcessId, x.ActivityInstanceId })
+            .HasDatabaseName("IX_NodeInstance_Process_ActivityInstance")
             .HasFilter("[ActivityInstanceId] IS NOT NULL");
 
-        entity.HasIndex(x => x.WorkerId)
+        // Tasklist: GetUserTasks(assignee, state) - "My Tasks"
+        // Note: If UserTaskInstance table exists separately, these indexes should be there
+        // For now, assuming WorkerId can be used for assignee
+        entity.HasIndex(x => new { x.WorkerId, x.State })
+            .HasDatabaseName("IX_NodeInstance_WorkerId_State")
             .HasFilter("[WorkerId] IS NOT NULL");
 
         entity.Ignore("DomainEvents");

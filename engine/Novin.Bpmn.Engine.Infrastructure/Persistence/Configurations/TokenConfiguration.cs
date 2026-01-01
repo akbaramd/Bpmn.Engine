@@ -72,23 +72,39 @@ public sealed class TokenConfiguration : IEntityTypeConfiguration<Token>
         entity.Property(x => x.CompletedAt);
 
         // -------- Indexes --------
-        entity.HasIndex(x => x.ProcessId);
+        // Hot Query: GetTokenById - Primary Key covers this
+        
+        // Hot Query: GetTokensForJoin(scopeId, elementId, state)
+        // Critical for join gateway performance
+        entity.HasIndex(x => new { x.ScopeId, x.CurrentElementId, x.State })
+            .HasDatabaseName("IX_Token_Scope_Element_State")
+            .HasFilter("[ScopeId] IS NOT NULL");
 
-        // Useful for engine polling / visualization
-        entity.HasIndex(x => new { x.ProcessId, x.State });
-        entity.HasIndex(x => new { x.ProcessId, x.CurrentElementId });
+        // Hot Query: GetActiveTokens(processId, state)
+        // For runtime scheduling and dashboard
+        entity.HasIndex(x => new { x.ProcessId, x.State })
+            .HasDatabaseName("IX_Token_Process_State");
 
-        // Correlation for fork/join
+        // Hot Query: Trace/element view (ProcessId, CurrentElementId, State)
+        // For visualization and debugging
+        entity.HasIndex(x => new { x.ProcessId, x.CurrentElementId, x.State })
+            .HasDatabaseName("IX_Token_Process_Element_State");
+
+        // Hot Query: GetChildren(parentTokenId)
+        // For terminate cascade
+        entity.HasIndex(x => x.ParentTokenId)
+            .HasDatabaseName("IX_Token_ParentTokenId")
+            .HasFilter("[ParentTokenId] IS NOT NULL");
+
+        // Correlation for fork/join (alternative query pattern)
         entity.HasIndex(x => new { x.ProcessId, x.ScopeId })
+            .HasDatabaseName("IX_Token_Process_Scope")
             .HasFilter("[ScopeId] IS NOT NULL");
 
         // Activity instance correlation (boundary cancel, subprocess)
         entity.HasIndex(x => new { x.ProcessId, x.ActivityInstanceId })
+            .HasDatabaseName("IX_Token_Process_ActivityInstance")
             .HasFilter("[ActivityInstanceId] IS NOT NULL");
-
-        // Parent token correlation (for GetChildTokensAsync query)
-        entity.HasIndex(x => x.ParentTokenId)
-            .HasFilter("[ParentTokenId] IS NOT NULL");
 
         // -------- Domain events --------
         entity.Ignore("DomainEvents");

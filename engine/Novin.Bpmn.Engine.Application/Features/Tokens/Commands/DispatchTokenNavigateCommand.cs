@@ -50,11 +50,7 @@ public sealed class DispatchNodeNavigateCommandHandler
                 var process = await _uow.Processes.GetByIdAsync(token.ProcessId, ct)
                               ?? throw new InvalidOperationException($"Process '{token.ProcessId}' not found.");
 
-                _ = await _uow.Deployments.GetByIdAsync(process.DeploymentId, ct)
-                    ?? throw new InvalidOperationException($"Deployment '{process.DeploymentId}' not found.");
-
-     
-
+                // ✅ Deployment is loaded by BpmnRuntimeContextFactory via catalog (memory-first)
                 var ctx = await _ctxFactory.CreateAsync(process, ct);
 
                 var element = ctx.Model.GetElementById(process.ProcessBpmnId, token.CurrentElementId);

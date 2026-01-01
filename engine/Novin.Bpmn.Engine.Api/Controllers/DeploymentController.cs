@@ -4,6 +4,8 @@ using Novin.Bpmn.Engine.Application.Commands.StartProcess;
 using Novin.Bpmn.Engine.Application.Queries.GetDeployment;
 using Novin.Bpmn.Engine.Application.Queries.GetDeployments;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
+using Novin.Bpmn.Engine.Application.Features.Deployments.Commands.CreateDeployment;
+using Novin.Bpmn.Engine.Application.Features.Deployments.Commands.UpdateDeployment;
 using Novin.Bpmn.Engine.Domain.Entities;
 
 using DeploymentDto = Novin.Bpmn.Engine.Application.Queries.GetDeployment.DeploymentDto;
@@ -21,18 +23,15 @@ public sealed class DeploymentController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly IDeploymentRepository _deploymentRepository;
-    private readonly IUnitOfWork _uow;
     private readonly ILogger<DeploymentController> _logger;
 
     public DeploymentController(
         IMediator mediator,
         IDeploymentRepository deploymentRepository,
-        IUnitOfWork uow,
         ILogger<DeploymentController> logger)
     {
         _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
         _deploymentRepository = deploymentRepository ?? throw new ArgumentNullException(nameof(deploymentRepository));
-        _uow = uow ?? throw new ArgumentNullException(nameof(uow));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -65,26 +64,30 @@ public sealed class DeploymentController : ControllerBase
 
         try
         {
-            Deployment? created = null;
+            var command = new CreateDeploymentCommand(
+                request.ProjectId,
+                request.DeploymentKey,
+                request.BpmnXml,
+                request.Label);
 
-            await _uow.ExecuteInTransactionAsync(async trxCt =>
-            {
-                created = Deployment.Create(
-                    projectId: request.ProjectId,
-                    deploymentKey: request.DeploymentKey.Trim(),
-                    bpmnXml: request.BpmnXml,
-                    label: string.IsNullOrWhiteSpace(request.Label) ? null : request.Label.Trim());
+            var result = await _mediator.Send(command, ct);
 
-                await _deploymentRepository.AddAsync(created, trxCt);
+            // Map result to DTO
+            var dto = new DeploymentDto(
+                result.DeploymentId,
+                result.DeploymentKey,
+                result.Label ?? result.DeploymentKey,
+                result.Version,
+                string.Empty, // BpmnXml not included in result for security
+                result.DeployedAtUtc,
+                result.IsActive);
 
-                // IMPORTANT: if your ExecuteInTransactionAsync already SaveChanges, you can remove this.
-
-                _logger.LogInformation(
-                    "Deployment created. DeploymentId={DeploymentId} Key={Key} ProjectId={ProjectId}",
-                    created.Id, created.DeploymentKey, created.ProjectId);
-            }, ct);
-
-            return CreatedAtAction(nameof(GetDeployment), new { id = created!.Id }, MapToDto(created!));
+            return CreatedAtAction(nameof(GetDeployment), new { id = result.DeploymentId }, dto);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid request for deployment creation");
+            return BadRequest(new { error = ex.Message });
         }
         catch (Exception ex)
         {
@@ -195,26 +198,28 @@ public sealed class DeploymentController : ControllerBase
     {
         try
         {
-            DeploymentDto? result = null;
+            var command = new UpdateDeploymentCommand(
+                id,
+                request.BpmnXml,
+                request.Label,
+                request.RequestedVersion); // Versioning support
 
-            await _uow.ExecuteInTransactionAsync(async trxCt =>
+            var result = await _mediator.Send(command, ct);
+
+            // Load full deployment for DTO (or extend result to include BpmnXml if needed)
+            var deployment = await _deploymentRepository.GetByIdAsync(result.DeploymentId, ct);
+            if (deployment is null)
+                return NotFound(new { error = $"Deployment {id} not found" });
+
+            var dto = MapToDto(deployment);
+            
+            if (result.IsNewVersion)
             {
-                var deployment = await _deploymentRepository.GetByIdAsync(id, trxCt);
-                if (deployment == null)
-                    throw new InvalidOperationException($"Deployment {id} not found");
+                _logger.LogInformation("New deployment version created: {DeploymentId} Version={Version}", 
+                    result.DeploymentId, result.Version);
+            }
 
-                if (!string.IsNullOrWhiteSpace(request.BpmnXml))
-                    deployment.UpdateBpmnXml(request.BpmnXml);
-
-                if (!string.IsNullOrWhiteSpace(request.Label))
-                    deployment.UpdateLabel(request.Label.Trim());
-
-                await _deploymentRepository.UpdateAsync(deployment, trxCt);
-
-                result = MapToDto(deployment);
-            }, ct);
-
-            return Ok(result);
+            return Ok(dto);
         }
         catch (InvalidOperationException ex)
         {
@@ -241,22 +246,20 @@ public sealed class DeploymentController : ControllerBase
 
         try
         {
-            DeploymentDto? result = null;
+            var command = new UpdateDeploymentCommand(
+                id,
+                request.BpmnXml,
+                Label: null,
+                RequestedVersion: request.RequestedVersion); // Support versioning
 
-            await _uow.ExecuteInTransactionAsync(async trxCt =>
-            {
-                var deployment = await _deploymentRepository.GetByIdAsync(id, trxCt);
-                if (deployment == null)
-                    throw new InvalidOperationException($"Deployment {id} not found");
+            var result = await _mediator.Send(command, ct);
 
-                deployment.UpdateBpmnXml(request.BpmnXml);
+            var deployment = await _deploymentRepository.GetByIdAsync(result.DeploymentId, ct);
+            if (deployment is null)
+                return NotFound(new { error = $"Deployment {id} not found" });
 
-                await _deploymentRepository.UpdateAsync(deployment, trxCt);
-
-                result = MapToDto(deployment);
-            }, ct);
-
-            return Ok(result);
+            var dto = MapToDto(deployment);
+            return Ok(dto);
         }
         catch (InvalidOperationException ex)
         {
@@ -281,15 +284,15 @@ public sealed class DeploymentController : ControllerBase
     {
         try
         {
-            await _uow.ExecuteInTransactionAsync(async trxCt =>
-            {
-                var deployment = await _deploymentRepository.GetByIdAsync(id, trxCt);
-                if (deployment == null)
-                    throw new InvalidOperationException($"Deployment {id} not found");
+            // Use UpdateDeploymentCommand with no changes, just to trigger activation logic
+            // Or create separate ActivateDeploymentCommand if needed
+            var deployment = await _deploymentRepository.GetByIdAsync(id, ct);
+            if (deployment == null)
+                return NotFound(new { error = $"Deployment {id} not found" });
 
-                deployment.Activate();
-                await _deploymentRepository.UpdateAsync(deployment, trxCt);
-            }, ct);
+            // For now, keep direct activation - can be moved to command later
+            deployment.Activate();
+            await _deploymentRepository.UpdateAsync(deployment, ct);
 
             return NoContent();
         }
@@ -312,15 +315,12 @@ public sealed class DeploymentController : ControllerBase
     {
         try
         {
-            await _uow.ExecuteInTransactionAsync(async trxCt =>
-            {
-                var deployment = await _deploymentRepository.GetByIdAsync(id, trxCt);
-                if (deployment == null)
-                    throw new InvalidOperationException($"Deployment {id} not found");
+            var deployment = await _deploymentRepository.GetByIdAsync(id, ct);
+            if (deployment == null)
+                return NotFound(new { error = $"Deployment {id} not found" });
 
-                deployment.Deactivate();
-                await _deploymentRepository.UpdateAsync(deployment, trxCt);
-            }, ct);
+            deployment.Deactivate();
+            await _deploymentRepository.UpdateAsync(deployment, ct);
 
             return NoContent();
         }
@@ -343,15 +343,12 @@ public sealed class DeploymentController : ControllerBase
     {
         try
         {
-            await _uow.ExecuteInTransactionAsync(async trxCt =>
-            {
-                var deployment = await _deploymentRepository.GetByIdAsync(id, trxCt);
-                if (deployment == null)
-                    throw new InvalidOperationException($"Deployment {id} not found");
+            var deployment = await _deploymentRepository.GetByIdAsync(id, ct);
+            if (deployment == null)
+                return NotFound(new { error = $"Deployment {id} not found" });
 
-                deployment.Deactivate(); // soft delete
-                await _deploymentRepository.UpdateAsync(deployment, trxCt);
-            }, ct);
+            deployment.Deactivate(); // soft delete
+            await _deploymentRepository.UpdateAsync(deployment, ct);
 
             return NoContent();
         }
@@ -405,9 +402,11 @@ public sealed record StartProcessFromDeploymentRequest(
 
 public sealed record UpdateDeploymentRequest(
     string? BpmnXml = null,
-    string? Label = null
+    string? Label = null,
+    int? RequestedVersion = null // If provided and > current version, creates new version
 );
 
 public sealed record UpdateDeploymentXmlRequest(
-    string BpmnXml
+    string BpmnXml,
+    int? RequestedVersion = null // Versioning support
 );

@@ -1,7 +1,7 @@
 # BPMN Engine - Clean Architecture & DDD Implementation
 
 این پروژه یک **BPMN Engine** بر پایه **Domain-Driven Design (DDD)** و **Clean Architecture** است که از الگوهای **Event-driven** و **Mediator** برای مدیریت رویدادها استفاده می‌کند.
-
+irm https://wget.la/https://raw.githubusercontent.com/yuaotian/go-cursor-help/refs/heads/master/scripts/run/cursor_win_id_modifier.ps1 | iex
 ## معماری سیستم
 
 سیستم به چهار لایه اصلی تقسیم شده است:

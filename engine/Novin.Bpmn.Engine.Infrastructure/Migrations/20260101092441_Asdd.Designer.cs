@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Novin.Bpmn.Engine.Infrastructure.Persistence;
 
@@ -10,9 +11,11 @@ using Novin.Bpmn.Engine.Infrastructure.Persistence;
 namespace Novin.Bpmn.Engine.Infrastructure.Migrations
 {
     [DbContext(typeof(BpmnEngineDbContext))]
-    partial class BpmnEngineDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260101092441_Asdd")]
+    partial class Asdd
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.0");
@@ -52,11 +55,6 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("FireCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(0);
-
                     b.Property<string>("HostElementId")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -70,16 +68,6 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime?>("LastFiredAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Meta")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTimeOffset?>("NextDueAtUtc")
-                        .HasColumnType("TEXT");
-
                     b.Property<Guid?>("NodeInstanceId")
                         .HasColumnType("TEXT");
 
@@ -88,14 +76,6 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
 
                     b.Property<string>("State")
                         .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TimerExpression")
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TimerType")
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
@@ -132,12 +112,6 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
 
                     b.HasIndex("State", "DueAt")
                         .HasFilter("[DueAt] IS NOT NULL");
-
-                    b.HasIndex("Kind", "State", "DueAt")
-                        .HasFilter("[Kind] = 'Timer' AND [State] = 'Active' AND [DueAt] IS NOT NULL");
-
-                    b.HasIndex("Kind", "State", "NextDueAtUtc")
-                        .HasFilter("[Kind] = 'Timer' AND [State] = 'Active' AND [NextDueAtUtc] IS NOT NULL");
 
                     b.HasIndex("ProcessId", "State", "Kind");
 
@@ -435,35 +409,22 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TokenId")
-                        .HasDatabaseName("IX_NodeInstance_TokenId");
+                    b.HasIndex("ProcessId");
 
-                    b.HasIndex("ProcessId", "ActivityInstanceId")
-                        .HasDatabaseName("IX_NodeInstance_Process_ActivityInstance")
-                        .HasFilter("[ActivityInstanceId] IS NOT NULL");
+                    b.HasIndex("TokenId");
 
-                    b.HasIndex("ProcessId", "ElementId")
-                        .HasDatabaseName("IX_NodeInstance_Process_Element");
-
-                    b.HasIndex("ProcessId", "ScopeId")
-                        .HasDatabaseName("IX_NodeInstance_Process_Scope")
-                        .HasFilter("[ScopeId] IS NOT NULL");
-
-                    b.HasIndex("ProcessId", "State")
-                        .HasDatabaseName("IX_NodeInstance_Process_State");
-
-                    b.HasIndex("TokenId", "State")
-                        .HasDatabaseName("IX_NodeInstance_TokenId_State");
-
-                    b.HasIndex("WorkerId", "State")
-                        .HasDatabaseName("IX_NodeInstance_WorkerId_State")
+                    b.HasIndex("WorkerId")
                         .HasFilter("[WorkerId] IS NOT NULL");
 
-                    b.HasIndex("ProcessId", "ElementId", "CreatedAtUtc")
-                        .HasDatabaseName("IX_NodeInstance_Process_Element_Created");
+                    b.HasIndex("ProcessId", "ActivityInstanceId")
+                        .HasFilter("[ActivityInstanceId] IS NOT NULL");
 
-                    b.HasIndex("ProcessId", "State", "CreatedAtUtc")
-                        .HasDatabaseName("IX_NodeInstance_Process_State_Created");
+                    b.HasIndex("ProcessId", "ElementId");
+
+                    b.HasIndex("ProcessId", "ScopeId")
+                        .HasFilter("[ScopeId] IS NOT NULL");
+
+                    b.HasIndex("ProcessId", "State", "CreatedAtUtc");
 
                     b.ToTable("NodeInstances", (string)null);
                 });
@@ -723,26 +684,19 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ParentTokenId")
-                        .HasDatabaseName("IX_Token_ParentTokenId")
                         .HasFilter("[ParentTokenId] IS NOT NULL");
 
+                    b.HasIndex("ProcessId");
+
                     b.HasIndex("ProcessId", "ActivityInstanceId")
-                        .HasDatabaseName("IX_Token_Process_ActivityInstance")
                         .HasFilter("[ActivityInstanceId] IS NOT NULL");
 
+                    b.HasIndex("ProcessId", "CurrentElementId");
+
                     b.HasIndex("ProcessId", "ScopeId")
-                        .HasDatabaseName("IX_Token_Process_Scope")
                         .HasFilter("[ScopeId] IS NOT NULL");
 
-                    b.HasIndex("ProcessId", "State")
-                        .HasDatabaseName("IX_Token_Process_State");
-
-                    b.HasIndex("ProcessId", "CurrentElementId", "State")
-                        .HasDatabaseName("IX_Token_Process_Element_State");
-
-                    b.HasIndex("ScopeId", "CurrentElementId", "State")
-                        .HasDatabaseName("IX_Token_Scope_Element_State")
-                        .HasFilter("[ScopeId] IS NOT NULL");
+                    b.HasIndex("ProcessId", "State");
 
                     b.ToTable("Tokens", (string)null);
                 });

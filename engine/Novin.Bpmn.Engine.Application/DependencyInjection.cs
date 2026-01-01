@@ -6,6 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Application.ElementHandlers;
 using Novin.Bpmn.Engine.Application.EventHandlers;
+using Novin.Bpmn.Engine.Application.Services.Implementations.Infrastructure;
+using Novin.Bpmn.Engine.Application.BackgroundServices;
 
 // Dispatcher + element handlers
 
@@ -90,7 +92,7 @@ public static class DependencyInjection
         services.AddScoped<IIncidentService, IncidentService>();
         services.AddScoped<IBpmnQuery, BpmnQuery>();
         services.AddScoped<IBpmnStartResolver, BpmnStartResolver>();
-        services.AddScoped<IBoundaryEventSubscriptionService, IBoundaryEventSubscriptionService.BoundaryEventSubscriptionService>();
+        services.AddScoped<IBoundaryEventSubscriptionService, BoundaryEventSubscriptionService>();
         services.AddScoped<IProcessInstantiationService, ProcessInstantiationService>();
 
         // -------------------------
@@ -99,9 +101,13 @@ public static class DependencyInjection
         services.AddScoped<IClock, SystemClock>();
         
         // Boundary Timer Scheduler: Use Quartz in production, Null for testing
-        // To use Quartz: services.AddQuartz() in Program.cs and register QuartzBoundaryTimerScheduler
-        // For now, using NullBoundaryTimerScheduler (can be swapped in Program.cs)
+        // To use Quartz: services.AddQuartz() in Program.cs and register QuartzTimerScheduler
+        // For now, using NullTimerScheduler (can be swapped in Program.cs)
         services.AddScoped<IBoundaryTimerScheduler, NullBoundaryTimerScheduler>();
+        
+        // New ITimerScheduler interface (for Quartz-based timer scheduling)
+        // Default to NullTimerScheduler - override in Program.cs with QuartzTimerScheduler
+        services.AddScoped<ITimerScheduler, NullTimerScheduler>();
 
         // -------------------------
         // ScriptTask / ServiceTask
@@ -129,9 +135,16 @@ public static class DependencyInjection
         // -------------------------
         services.AddScoped<IClientCommunicationService, SignalRClientCommunicationService>();
 
+        // -------------------------
+        // BPMN Definition Catalog (Memory Store + Compilation)
+        // -------------------------
+        services.AddSingleton<IBpmnDefinitionMemoryStore, BpmnDefinitionMemoryStore>();
+        services.AddScoped<IExecutableDefinitionCatalog, ExecutableDefinitionCatalog>();
+
         // Background Services
         // -------------------------
         services.AddHostedService<WorkerMonitorBackgroundService>();
+        services.AddHostedService<DefinitionWarmupHostedService>();
 
         // -------------------------
         // BPMN Element Handlers (با Decorator Pattern برای Variable Mapping)

@@ -131,6 +131,12 @@ public sealed class EfBoundarySubscriptionRepository : IBoundarySubscriptionRepo
             subscription.State);
         return Task.CompletedTask;
     }
-    
-    
+
+    public async Task<bool> ExistsActiveAsync(Guid processId, Guid nodeInstanceId, string boundaryElementId, CancellationToken ct)
+    {
+         return await _context.BoundaryEventSubscription
+            .AnyAsync(s => s.ProcessId == processId && s.NodeInstanceId == nodeInstanceId && s.BoundaryElementId == boundaryElementId,ct);
+            
+
+    }
 }

@@ -8,7 +8,7 @@ public class BpmnEngineDbContextFactory : IDesignTimeDbContextFactory<BpmnEngine
     public BpmnEngineDbContext CreateDbContext(string[] args)
     {
         var optionsBuilder = new DbContextOptionsBuilder<BpmnEngineDbContext>();
-        optionsBuilder.UseSqlite("Filename=./Bpmn.db");
+        optionsBuilder.UseSqlite("Filename=./../Novin.Bpmn.Engine.Api/Bpmn.db");
         optionsBuilder.EnableSensitiveDataLogging();
 
         return new BpmnEngineDbContext(optionsBuilder.Options);
