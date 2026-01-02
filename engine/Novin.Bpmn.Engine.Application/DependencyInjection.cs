@@ -107,7 +107,7 @@ public static class DependencyInjection
         
         // New ITimerScheduler interface (for Quartz-based timer scheduling)
         // Default to NullTimerScheduler - override in Program.cs with QuartzTimerScheduler
-        services.AddScoped<ITimerScheduler, NullTimerScheduler>();
+        services.AddScoped<ITimerScheduler, QuartzTimerScheduler>();
 
         // -------------------------
         // ScriptTask / ServiceTask
@@ -143,7 +143,7 @@ public static class DependencyInjection
 
         // Background Services
         // -------------------------
-        services.AddHostedService<WorkerMonitorBackgroundService>();
+        // services.AddHostedService<WorkerMonitorBackgroundService>();
         services.AddHostedService<DefinitionWarmupHostedService>();
 
         // -------------------------

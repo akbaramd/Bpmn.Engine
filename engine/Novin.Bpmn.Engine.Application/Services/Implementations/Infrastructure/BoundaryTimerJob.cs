@@ -1,51 +1,76 @@
 using Quartz;
 using MediatR;
-using Novin.Bpmn.Engine.Domain.Events;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Novin.Bpmn.Engine.Application.Common.Interfaces;
+using Novin.Bpmn.Engine.Domain.Events;
+using Novin.Bpmn.Engine.Domain.ValueObjects;
 
 namespace Novin.Bpmn.Engine.Application.Services.Implementations.Infrastructure;
 
-/// <summary>
-/// Quartz job that fires when a BPMN timer boundary event should trigger.
-/// Does NOT contain BPMN logic - only publishes BoundarySubscriptionTriggeredEvent.
-/// All BPMN decisions (interrupting, cancel, spawn token) happen in BoundarySubscriptionTriggeredEventHandler.
-/// </summary>
-[DisallowConcurrentExecution] // Prevent duplicate fires for same subscription
+[DisallowConcurrentExecution]
 public sealed class BoundaryTimerJob : IJob
 {
-    private readonly IMediator _mediator;
+    private readonly IServiceProvider _sp;
     private readonly ILogger<BoundaryTimerJob> _logger;
 
-    public BoundaryTimerJob(IMediator mediator, ILogger<BoundaryTimerJob> logger)
+    public BoundaryTimerJob(IServiceProvider sp, ILogger<BoundaryTimerJob> logger)
     {
-        _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
+        _sp = sp ?? throw new ArgumentNullException(nameof(sp));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task Execute(IJobExecutionContext context)
     {
-        var subscriptionIdStr = context.MergedJobDataMap.GetString("SubscriptionId");
-        if (string.IsNullOrWhiteSpace(subscriptionIdStr) || !Guid.TryParse(subscriptionIdStr, out var subscriptionId))
+        var subIdText = context.MergedJobDataMap.GetString("SubscriptionId");
+
+        // IMPORTANT: you stored as "N" => parse as "N"
+        if (string.IsNullOrWhiteSpace(subIdText) || !Guid.TryParseExact(subIdText, "N", out var subscriptionId))
         {
-            _logger.LogError("Invalid SubscriptionId in job data: {SubscriptionId}", subscriptionIdStr);
-            throw new JobExecutionException($"Invalid SubscriptionId: {subscriptionIdStr}");
+            _logger.LogError("[TIMER-JOB] Invalid SubscriptionId in job data: {SubscriptionId}", subIdText);
+            return;
         }
 
-        _logger.LogInformation("Timer fired for subscription {SubscriptionId}", subscriptionId);
+        using var scope = _sp.CreateScope();
 
-        // Publish event - handler will load subscription from DB and execute BPMN logic
-        // Note: We don't have full subscription data here, handler will load it
-        var @event = new BoundarySubscriptionTriggeredEvent(
-            SubscriptionId: subscriptionId,
-            ProcessId: Guid.Empty, // Will be loaded by handler
-            TokenId: Guid.Empty, // Will be loaded by handler
-            ActivityInstanceId: null, // Will be loaded by handler
-            ElementId: string.Empty, // Will be loaded by handler
-            BoundaryElementId: string.Empty, // Will be loaded by handler
-            OccurredAtUtc: DateTime.UtcNow,
-            TriggerReason: "Timer");
+        var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        var timerScheduler = scope.ServiceProvider.GetRequiredService<ITimerScheduler>();
 
-        await _mediator.Publish(@event, context.CancellationToken);
+        try
+        {
+            await uow.ExecuteInTransactionAsync(async ct =>
+            {
+                var sub = await uow.BoundarySubscriptions.GetByIdAsync(subscriptionId, ct);
+
+                if (sub is null)
+                {
+                    _logger.LogWarning("[TIMER-JOB] Subscription not found. Unscheduling. SubId={SubId}", subscriptionId);
+                    await timerScheduler.UnscheduleAsync(subscriptionId, ct);
+                    return;
+                }
+
+                // If your aggregate has IsActive/State, use it here:
+                if (sub.State != SubscriptionState.Active) // adjust if your model differs
+                {
+                    _logger.LogInformation("[TIMER-JOB] Subscription inactive. Unscheduling. SubId={SubId}", subscriptionId);
+                    await timerScheduler.UnscheduleAsync(subscriptionId, ct);
+                    return;
+                }
+
+                _logger.LogInformation(
+                    "[TIMER-JOB] Timer fired. SubId={SubId} ProcessId={ProcessId} TokenId={TokenId} Boundary={BoundaryId}",
+                    sub.Id, sub.ProcessId, sub.TokenId, sub.BoundaryElementId);
+
+                // ✅ Publish with REAL data (no Guid.Empty / empty strings)
+                sub.MarkTriggered();
+
+            }, context.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[TIMER-JOB] Failed executing timer job. SubId={SubId}", subscriptionId);
+            throw; // let Quartz see failure (or swallow if you prefer)
+        }
     }
 }
-

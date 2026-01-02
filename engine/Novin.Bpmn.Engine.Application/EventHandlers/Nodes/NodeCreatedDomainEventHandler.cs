@@ -55,6 +55,8 @@ public sealed class NodeCreatedDomainEventHandler : INotificationHandler<NodeCre
         if (node.State != NodeState.Created)
             return;
 
+        node.Start();
+        await _nodes.UpdateAsync(node, cancellationToken);
 
         await _subscriptionService.SubscribeBoundaryEventsAsync(node,cancellationToken);
         

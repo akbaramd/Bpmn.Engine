@@ -32,8 +32,13 @@ public sealed class Process : BaseAggregateRoot
     public IReadOnlyCollection<Guid> NodeInstanceIds => _nodeInstanceIds;
 
     // ---- Variables ----
-    private readonly Dictionary<string,string> _variables = new(StringComparer.Ordinal);
-    public IReadOnlyDictionary<string,string> Variables => _variables;
+    private readonly Dictionary<string, string> _variables = new(StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, string> Variables => _variables;
+
+
+    // ---- Metadata ----
+    private readonly Dictionary<string, string> _metadata = new(StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, string> Metadata => _metadata;
 
     private Process()
     {
@@ -47,7 +52,8 @@ public sealed class Process : BaseAggregateRoot
         string processBpmnId,
         string name,
         IDictionary<string, object?>? initialVariables = null,
-        string? businessKey = null)
+        string? businessKey = null,
+         IDictionary<string, object?>? initialMetadata = null)
     {
         if (projectId == Guid.Empty) throw new ArgumentException("ProjectId cannot be empty.", nameof(projectId));
         if (deploymentId == Guid.Empty) throw new ArgumentException("DeploymentId cannot be empty.", nameof(deploymentId));
@@ -70,9 +76,17 @@ public sealed class Process : BaseAggregateRoot
                 p._variables[kv.Key] = kv.Value;
         }
 
+        // ✅ Metadata (new) - store as string
+        if (initialMetadata is not null)
+        {
+            var patch = ProcessMetadataPatch.From(initialMetadata, Enumerable.Empty<string>());
+            foreach (var kv in patch.Upserts)
+                p._metadata[kv.Key] = kv.Value;
+        }
+
         p.AddDomainEvent(new ProcessInstanceCreatedEvent(
             p.Id, p.ProjectId, p.DeploymentId, p.ProcessBpmnId, p.BusinessKey,
-            new Dictionary<string,string>(p._variables), p.CreatedAtUtc));
+            new Dictionary<string, string>(p._variables), p.CreatedAtUtc));
 
         return p;
     }
@@ -158,7 +172,7 @@ public sealed class Process : BaseAggregateRoot
 
         AddDomainEvent(new ProcessVariablesChangedEvent(
             Id,
-            new Dictionary<string,string>(patch.Upserts),
+            new Dictionary<string, string>(patch.Upserts),
             patch.Removals.ToList().AsReadOnly(),
             DateTime.UtcNow));
     }
@@ -175,12 +189,96 @@ public sealed class Process : BaseAggregateRoot
             throw new InvalidOperationException($"Process in {State} is immutable.");
     }
 
-// داخل کلاس Process
+    // داخل کلاس Process
 
-public void SetVariable(string key, string value)
+    public void SetVariable(string key, string value)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Variable key cannot be empty.", nameof(key));
+
+        EnsureCanAcceptRuntimeMutations();
+
+        key = key.Trim();
+
+        // Convention: empty => remove
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            if (_variables.Remove(key))
+            {
+                AddDomainEvent(new ProcessVariablesChangedEvent(
+                    Id,
+                    new Dictionary<string, string>(StringComparer.Ordinal),
+                    new List<string> { key }.AsReadOnly(),
+                    DateTime.UtcNow));
+            }
+            return;
+        }
+
+        var newValue = value; // already string
+
+        // Idempotent upsert: if unchanged => no event
+        if (_variables.TryGetValue(key, out var oldValue) &&
+            string.Equals(oldValue, newValue, StringComparison.Ordinal))
+            return;
+
+        _variables[key] = newValue;
+
+        AddDomainEvent(new ProcessVariablesChangedEvent(
+            Id,
+            new Dictionary<string, string>(StringComparer.Ordinal) { [key] = newValue },
+            Array.Empty<string>(),
+            DateTime.UtcNow));
+    }
+
+    public bool HasVariable(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return false;
+
+        return _variables.ContainsKey(key.Trim());
+    }
+
+    public string? GetVariable(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return null;
+
+        key = key.Trim();
+        return _variables.TryGetValue(key, out var v) ? v : null;
+    }
+
+    // Optional but useful
+    public bool TryGetVariable(string key, out string value)
+    {
+        value = string.Empty;
+        if (string.IsNullOrWhiteSpace(key))
+            return false;
+
+        return _variables.TryGetValue(key.Trim(), out value!);
+    }
+
+    public void RemoveVariable(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return;
+
+        EnsureCanAcceptRuntimeMutations();
+
+        key = key.Trim();
+        if (!_variables.Remove(key))
+            return;
+
+        AddDomainEvent(new ProcessVariablesChangedEvent(
+            Id,
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new List<string> { key }.AsReadOnly(),
+            DateTime.UtcNow));
+    }
+
+    public void SetMetadata(string key, string value)
 {
     if (string.IsNullOrWhiteSpace(key))
-        throw new ArgumentException("Variable key cannot be empty.", nameof(key));
+        throw new ArgumentException("Metadata key cannot be empty.", nameof(key));
 
     EnsureCanAcceptRuntimeMutations();
 
@@ -189,9 +287,9 @@ public void SetVariable(string key, string value)
     // Convention: empty => remove
     if (string.IsNullOrWhiteSpace(value))
     {
-        if (_variables.Remove(key))
+        if (_metadata.Remove(key))
         {
-            AddDomainEvent(new ProcessVariablesChangedEvent(
+            AddDomainEvent(new ProcessMetadataChangedEvent(
                 Id,
                 new Dictionary<string, string>(StringComparer.Ordinal),
                 new List<string> { key }.AsReadOnly(),
@@ -200,50 +298,49 @@ public void SetVariable(string key, string value)
         return;
     }
 
-    var newValue = value; // already string
+    var newValue = value;
 
-    // Idempotent upsert: if unchanged => no event
-    if (_variables.TryGetValue(key, out var oldValue) &&
+    // Idempotent upsert
+    if (_metadata.TryGetValue(key, out var oldValue) &&
         string.Equals(oldValue, newValue, StringComparison.Ordinal))
         return;
 
-    _variables[key] = newValue;
+    _metadata[key] = newValue;
 
-    AddDomainEvent(new ProcessVariablesChangedEvent(
+    AddDomainEvent(new ProcessMetadataChangedEvent(
         Id,
         new Dictionary<string, string>(StringComparer.Ordinal) { [key] = newValue },
         Array.Empty<string>(),
         DateTime.UtcNow));
 }
 
-public bool HasVariable(string key)
+public bool HasMetadata(string key)
 {
     if (string.IsNullOrWhiteSpace(key))
         return false;
 
-    return _variables.ContainsKey(key.Trim());
+    return _metadata.ContainsKey(key.Trim());
 }
 
-public string? GetVariable(string key)
+public string? GetMetadata(string key)
 {
     if (string.IsNullOrWhiteSpace(key))
         return null;
 
     key = key.Trim();
-    return _variables.TryGetValue(key, out var v) ? v : null;
+    return _metadata.TryGetValue(key, out var v) ? v : null;
 }
 
-// Optional but useful
-public bool TryGetVariable(string key, out string value)
+public bool TryGetMetadata(string key, out string value)
 {
     value = string.Empty;
     if (string.IsNullOrWhiteSpace(key))
         return false;
 
-    return _variables.TryGetValue(key.Trim(), out value!);
+    return _metadata.TryGetValue(key.Trim(), out value!);
 }
 
-public void RemoveVariable(string key)
+public void RemoveMetadata(string key)
 {
     if (string.IsNullOrWhiteSpace(key))
         return;
@@ -251,13 +348,33 @@ public void RemoveVariable(string key)
     EnsureCanAcceptRuntimeMutations();
 
     key = key.Trim();
-    if (!_variables.Remove(key))
+    if (!_metadata.Remove(key))
         return;
 
-    AddDomainEvent(new ProcessVariablesChangedEvent(
+    AddDomainEvent(new ProcessMetadataChangedEvent(
         Id,
         new Dictionary<string, string>(StringComparer.Ordinal),
         new List<string> { key }.AsReadOnly(),
+        DateTime.UtcNow));
+}
+
+public void ApplyMetadataPatch(ProcessMetadataPatch patch)
+{
+    if (patch is null) throw new ArgumentNullException(nameof(patch));
+    if (!patch.HasChanges) return;
+
+    EnsureCanAcceptRuntimeMutations();
+
+    foreach (var upsert in patch.Upserts)
+        _metadata[upsert.Key] = upsert.Value;
+
+    foreach (var removal in patch.Removals)
+        _metadata.Remove(removal);
+
+    AddDomainEvent(new ProcessMetadataChangedEvent(
+        Id,
+        new Dictionary<string, string>(patch.Upserts),
+        patch.Removals.ToList().AsReadOnly(),
         DateTime.UtcNow));
 }
 }

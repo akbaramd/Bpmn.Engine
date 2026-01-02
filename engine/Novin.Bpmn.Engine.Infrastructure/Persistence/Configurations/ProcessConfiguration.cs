@@ -16,6 +16,9 @@ public sealed class ProcessConfiguration : IEntityTypeConfiguration<Process>
 
         entity.HasKey(x => x.Id);
 
+        // If Id is generated in domain (recommended for AggregateRoot)
+        entity.Property(x => x.Id).ValueGeneratedNever();
+
         // ---------- Required scalars ----------
         entity.Property(x => x.ProjectId).IsRequired();
         entity.Property(x => x.DeploymentId).IsRequired();
@@ -43,23 +46,13 @@ public sealed class ProcessConfiguration : IEntityTypeConfiguration<Process>
         entity.Property(x => x.FailedAtUtc);
         entity.Property(x => x.TerminatedAtUtc);
 
-        entity.Property(x => x.FailureReason)
-            .HasMaxLength(2000);
-
-        entity.Property(x => x.TerminationReason)
-            .HasMaxLength(2000);
+        entity.Property(x => x.FailureReason).HasMaxLength(2000);
+        entity.Property(x => x.TerminationReason).HasMaxLength(2000);
 
         // ---------- Domain collections (IDs only) ----------
-        // Exposed as IReadOnlyCollection<Guid>, backed by private HashSet<Guid> fields:
-        //   _tokenIds, _nodeInstanceIds
-        // Persist them as JSON columns (single-row, snapshot-friendly).
-        // If you prefer normalized tables later, you can replace these with owned tables.
-
         entity.Ignore(x => x.TokenIds);
         entity.Ignore(x => x.NodeInstanceIds);
 
-        // _tokenIds -> JSON
-     
         var tokenIdsComparer = new ValueComparer<HashSet<Guid>>(
             (a, b) => EfComparers.GuidSetEqual(a, b),
             v => EfComparers.GuidSetHash(v),
@@ -86,12 +79,10 @@ public sealed class ProcessConfiguration : IEntityTypeConfiguration<Process>
                 v => JsonHelper.DeserializeObject<HashSet<Guid>>(v) ?? new HashSet<Guid>())
             .Metadata.SetValueComparer(nodeIdsComparer);
 
-
-
         // ---------- Variables (Dictionary<string,string>) ----------
         entity.Ignore(x => x.Variables);
 
-        var varsComparer = new ValueComparer<Dictionary<string, string>>(
+        var dictComparer = new ValueComparer<Dictionary<string, string>>(
             (a, b) => EfComparers.VarsEqual(a, b),
             v => EfComparers.VarsHash(v),
             v => EfComparers.VarsSnapshot(v));
@@ -102,29 +93,38 @@ public sealed class ProcessConfiguration : IEntityTypeConfiguration<Process>
             .HasConversion(
                 v => JsonHelper.SerializeObject(v ?? new Dictionary<string, string>(StringComparer.Ordinal)),
                 v => JsonHelper.DeserializeObject<Dictionary<string, string>>(v) ?? new Dictionary<string, string>(StringComparer.Ordinal))
-            .Metadata.SetValueComparer(varsComparer);
+            .Metadata.SetValueComparer(dictComparer);
+
+        // ---------- Metadata (Dictionary<string,string>) ----------
+        // Requires you added:
+        //   private readonly Dictionary<string,string> _metadata = new(StringComparer.Ordinal);
+        //   public IReadOnlyDictionary<string,string> Metadata => _metadata;
+        entity.Ignore(x => x.Metadata);
+
+        entity.Property<Dictionary<string, string>>("_metadata")
+            .HasColumnName("Metadata")
+            .HasColumnType("text")
+            .HasConversion(
+                v => JsonHelper.SerializeObject(v ?? new Dictionary<string, string>(StringComparer.Ordinal)),
+                v => JsonHelper.DeserializeObject<Dictionary<string, string>>(v) ?? new Dictionary<string, string>(StringComparer.Ordinal))
+            .Metadata.SetValueComparer(dictComparer);
 
         // ---------- Indexes ----------
-        // Multi-tenant boundary
         entity.HasIndex(x => x.ProjectId);
-
-        // Most common lookups
         entity.HasIndex(x => x.DeploymentId);
         entity.HasIndex(x => new { x.ProjectId, x.State });
         entity.HasIndex(x => new { x.ProjectId, x.CreatedAtUtc });
 
-        // BusinessKey queries (optional uniqueness is enforced by app/domain rules)
+        // NOTE: HasFilter is provider-specific:
+        // - SQL Server: "[BusinessKey] IS NOT NULL"
+        // - PostgreSQL (Npgsql): "\"BusinessKey\" IS NOT NULL"
+        // If you want to stay provider-agnostic, remove HasFilter.
         entity.HasIndex(x => new { x.ProjectId, x.BusinessKey })
             .HasFilter("[BusinessKey] IS NOT NULL");
 
-        // Process definition analytics
         entity.HasIndex(x => new { x.DeploymentId, x.ProcessBpmnId });
 
         // ---------- Domain events ----------
-        entity.Ignore("DomainEvents"); // or entity.Ignore(x => x.DomainEvents) if accessible
+        entity.Ignore("DomainEvents");
     }
 }
-
-
-
-

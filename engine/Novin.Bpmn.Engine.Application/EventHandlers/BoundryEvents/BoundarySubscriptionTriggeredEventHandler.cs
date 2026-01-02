@@ -7,6 +7,7 @@ using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.Events;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 using NodeState = Novin.Bpmn.Engine.Domain.Entities.NodeState;
+using Novin.Bpmn.Engine.Application.Commands.CreateToken;
 
 namespace Novin.Bpmn.Engine.Application.EventHandlers;
 
@@ -110,38 +111,30 @@ public sealed class BoundarySubscriptionTriggeredEventHandler
                         continue;
 
                     // It's OK to terminate the triggering token too; we'll spawn a new token for boundary path.
-                    t.Terminate("Interrupted by boundary event.");
+                    t.MarkNonExecutable("Interrupted by boundary event.");
+                    t.Activate();
                     await _uow.Tokens.UpdateAsync(t, trxCt);
                 }
             }
-
+            var arrivedViaFlowId = triggeringToken.ArrivedViaFlowIds?.LastOrDefault();
             // 4) Create a NEW token for boundary path (robust even if triggering token is Failed/Waiting/Terminated)
             //    Boundary flow is outside the host activity => clear ActivityInstanceId
-            var boundaryToken = new Token(
-                processId: process.Id,
-                
-                startElementId: e.BoundaryElementId,
-                parentTokenId: triggeringToken.Id);
+      var boundaryToken = await _mediator.Send(
+                new CreateTokenCommand(
+                    ProcessId: process.Id,
+                    StartElementId: e.BoundaryElementId,
+                    ParentTokenId: triggeringToken.ParentTokenId,
+                    ArrivedViaFlowId: arrivedViaFlowId,
+                    IsExecutable: true,
+                    ScopeId: triggeringToken.ScopeId,
+                    Variables: triggeringToken.Variables
+                ),
+                trxCt);
 
-            // inherit correlation scope if you need (optional)
-            if (triggeringToken.ScopeId is Guid scope && scope != Guid.Empty)
-                boundaryToken.SetScope(scope);
-
-            // boundary token is a new execution path => ensure no activity instance
-            if (boundaryToken.ActivityInstanceId is not null)
-                boundaryToken.ClearActivityInstance();
-
-            boundaryToken.Activate();
-            
-            await _uow.Tokens.AddAsync(boundaryToken, trxCt);
-
-            // register token on process aggregate (IDs only)
-            process.AddToken(boundaryToken.Id);
-            await _uow.Processes.UpdateAsync(process, trxCt);
 
             _logger.LogInformation(
                 "[BND-TRIGGER] Triggered. SubId={SubId} Host={Host}  NewToken={NewToken} NewNode={NewNode} Interrupting={Interrupting}",
-                sub.Id, sub.HostElementId, sub.BoundaryElementId, boundaryToken.Id, sub.IsInterrupting);
+                sub.Id, sub.HostElementId, sub.BoundaryElementId, boundaryToken.TokenId, sub.IsInterrupting);
 
             return ;
         }, ct);

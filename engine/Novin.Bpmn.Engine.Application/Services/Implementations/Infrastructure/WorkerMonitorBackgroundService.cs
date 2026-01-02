@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
@@ -5,27 +6,20 @@ using Novin.Bpmn.Engine.Domain.Entities;
 
 namespace Novin.Bpmn.Engine.Application.Services;
 
-/// <summary>
-/// Background service that monitors workers for timeouts and retries
-/// </summary>
-public class WorkerMonitorBackgroundService : BackgroundService
+public sealed class WorkerMonitorBackgroundService : BackgroundService
 {
-    private readonly IWorkerRepository _workerRepository;
-    private readonly IClientCommunicationService _clientCommunication;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<WorkerMonitorBackgroundService> _logger;
 
-    // Check every 30 seconds
     private readonly TimeSpan _checkInterval = TimeSpan.FromSeconds(30);
-    // Timeout after 5 minutes
     private readonly TimeSpan _timeoutThreshold = TimeSpan.FromMinutes(5);
 
     public WorkerMonitorBackgroundService(
-        IWorkerRepository workerRepository,
+        IServiceScopeFactory scopeFactory,
         IClientCommunicationService clientCommunication,
         ILogger<WorkerMonitorBackgroundService> logger)
     {
-        _workerRepository = workerRepository ?? throw new ArgumentNullException(nameof(workerRepository));
-        _clientCommunication = clientCommunication ?? throw new ArgumentNullException(nameof(clientCommunication));
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -56,13 +50,18 @@ public class WorkerMonitorBackgroundService : BackgroundService
 
     private async Task CheckForTimedOutWorkersAsync(CancellationToken cancellationToken)
     {
-        // Get workers that are in progress and have been running longer than the timeout
-        var timedOutWorkers = await _workerRepository.GetByStatusAsync(JobStatus.Running, cancellationToken);
+        using var scope = _scopeFactory.CreateScope();
+
+        var workerRepository = scope.ServiceProvider.GetRequiredService<IWorkerRepository>();
+        // اگر IClientCommunicationService هم Scoped بود:
+        // var clientCommunication = scope.ServiceProvider.GetRequiredService<IClientCommunicationService>();
+
+        var timedOutWorkers = await workerRepository.GetByStatusAsync(JobStatus.Running, cancellationToken);
         var now = DateTime.UtcNow;
 
-        var actuallyTimedOut = timedOutWorkers.Where(w =>
-            w.StartedAtUtc.HasValue &&
-            (now - w.StartedAtUtc.Value) > _timeoutThreshold).ToList();
+        var actuallyTimedOut = timedOutWorkers
+            .Where(w => w.StartedAtUtc.HasValue && (now - w.StartedAtUtc.Value) > _timeoutThreshold)
+            .ToList();
 
         foreach (var worker in actuallyTimedOut)
         {
@@ -71,27 +70,24 @@ public class WorkerMonitorBackgroundService : BackgroundService
 
             try
             {
-                // Mark as timed out
                 worker.Fail("timed out");
-                await _workerRepository.UpdateAsync(worker, cancellationToken);
+                await workerRepository.UpdateAsync(worker, cancellationToken);
 
-                // TODO: Could implement retry logic here
-                // For now, just mark as timed out
+                // نمونه: اطلاع‌رسانی (اختیاری)
+                // await clientCommunication.NotifyAsync(...);
 
                 _logger.LogInformation("Job {WorkerId} marked as timed out", worker.Id);
             }
             catch (Exception ex)
             {
-                // Check if this is a foreign key constraint violation (orphaned worker)
                 if (ex.Message.Contains("FOREIGN KEY constraint failed") ||
                     ex.InnerException?.Message.Contains("FOREIGN KEY constraint failed") == true)
                 {
-                    _logger.LogWarning("Job {WorkerId} appears to be orphaned (referenced Process/Token deleted). Deleting worker.", worker.Id);
+                    _logger.LogWarning("Job {WorkerId} appears orphaned. Deleting worker.", worker.Id);
 
                     try
                     {
-                        // Delete the orphaned worker
-                        await _workerRepository.DeleteAsync(worker.Id, cancellationToken);
+                        await workerRepository.DeleteAsync(worker.Id, cancellationToken);
                         _logger.LogInformation("Deleted orphaned worker {WorkerId}", worker.Id);
                     }
                     catch (Exception deleteEx)
@@ -101,14 +97,12 @@ public class WorkerMonitorBackgroundService : BackgroundService
                 }
                 else
                 {
-                _logger.LogError(ex, "Error processing timeout for worker {WorkerId}", worker.Id);
+                    _logger.LogError(ex, "Error processing timeout for worker {WorkerId}", worker.Id);
                 }
             }
         }
 
-        if (actuallyTimedOut.Any())
-        {
+        if (actuallyTimedOut.Count > 0)
             _logger.LogInformation("Processed {Count} timed out workers", actuallyTimedOut.Count);
-        }
     }
 }

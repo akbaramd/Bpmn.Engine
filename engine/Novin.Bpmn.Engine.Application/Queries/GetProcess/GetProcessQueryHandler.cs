@@ -8,16 +8,13 @@ namespace Novin.Bpmn.Engine.Application.Queries.GetProcess;
 public class GetProcessQueryHandler : IRequestHandler<GetProcessQuery, ProcessDto?>
 {
     private readonly IProcessRepository _processRepository;
-    private readonly IProcessStatusService _statusService;
     private readonly ILogger<GetProcessQueryHandler> _logger;
 
     public GetProcessQueryHandler(
         IProcessRepository processRepository,
-        IProcessStatusService statusService,
         ILogger<GetProcessQueryHandler> logger)
     {
         _processRepository = processRepository ?? throw new ArgumentNullException(nameof(processRepository));
-        _statusService = statusService ?? throw new ArgumentNullException(nameof(statusService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -34,7 +31,6 @@ public class GetProcessQueryHandler : IRequestHandler<GetProcessQuery, ProcessDt
         }
 
         // Calculate derived status (considers open incidents, failed tokens, etc.)
-        var derivedStatus = await _statusService.GetDerivedStatusAsync(process, cancellationToken);
 
         return new ProcessDto
         {
@@ -43,7 +39,6 @@ public class GetProcessQueryHandler : IRequestHandler<GetProcessQuery, ProcessDt
             DeploymentId = process.DeploymentId,
             ProcessBpmnId = process.ProcessBpmnId,
             State = process.State,
-            DerivedStatus = derivedStatus,
             Variables = new Dictionary<string, string>(process.Variables),
             CreatedAt = process.CreatedAtUtc,
             StartedAt = process.StartedAtUtc,

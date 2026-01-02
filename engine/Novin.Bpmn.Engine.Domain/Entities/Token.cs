@@ -77,7 +77,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         // -------------------- Lifecycle --------------------
         public void Activate()
         {
-            EnsureState(TokenState.Created);
 
             State = TokenState.Active;
             ActivatedAt = DateTime.UtcNow;

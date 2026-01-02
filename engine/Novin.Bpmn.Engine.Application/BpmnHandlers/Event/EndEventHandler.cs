@@ -15,13 +15,61 @@ public sealed class EndEventHandler : BpmnElementHandlerBase
         IFeelExpressionEvaluator feel,
         ILogger<EndEventHandler> logger)
         : base(feel, logger)
-    { 
+    {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public override bool CanHandle(BpmnFlowElement element) => element is BpmnEndEvent;
 
-    public override async Task<ElementProcessResult> NodeProcessAsync(
+    /// <summary>
+    /// Token-level semantics of EndEvent:
+    /// - Terminate End => terminate token (and later process cancellation rules can be applied)
+    /// - Normal End => complete executable token; terminate non-executable(trace) token
+    /// Idempotent: if already terminal, no-op.
+    /// </summary>
+    public override Task<TokenProcessResult> TokenProcessAsync(
+    Domain.Entities.Process process,
+    Token token,
+    BpmnFlowElement element,
+    BpmnRuntimeContext ctx,
+    bool isResume,
+    CancellationToken ct)
+    {
+        if (process is null) throw new ArgumentNullException(nameof(process));
+        if (token is null) throw new ArgumentNullException(nameof(token));
+        if (element is null) throw new ArgumentNullException(nameof(element));
+        if (ctx is null) throw new ArgumentNullException(nameof(ctx));
+
+        var endEvent = (BpmnEndEvent)element;
+        var isTerminate = IsTerminateEndEvent(endEvent);
+
+        // اگر قبلاً تمام شده، این پیام احتمالاً تکراری است
+        // در این حالت بهتر است NodeProcess هم نرود (چون node هم قبلاً بسته شده)
+        if (token.State is TokenState.Completed or TokenState.Terminated or TokenState.Failed)
+            return Task.FromResult(TokenProcessResult.NoOp);
+
+        if (isTerminate)
+        {
+            token.Terminate("Terminate EndEvent reached.");
+            // با اینکه terminate شد، هنوز می‌خواهیم NodeProcess اجرا شود تا NodeInstance Complete شود.
+            return Task.FromResult(TokenProcessResult.Continue);
+        }
+
+        if (token.IsExecutable)
+            token.Complete();
+        else
+            token.Terminate("Trace token ended at EndEvent.");
+
+        // باز هم Continue برای بستن NodeInstance
+        return Task.FromResult(TokenProcessResult.Continue);
+    }
+
+
+    /// <summary>
+    /// Node-level processing should only manage node instance lifecycle,
+    /// not token termination/completion.
+    /// </summary>
+    public override Task<ElementProcessResult> NodeProcessAsync(
         Domain.Entities.Process process,
         Token token,
         NodeInstance node,
@@ -45,44 +93,20 @@ public sealed class EndEventHandler : BpmnElementHandlerBase
             ["TokenId"] = token.Id.ToString(),
             ["NodeId"] = node.Id.ToString(),
             ["ElementId"] = token.CurrentElementId,
-            ["Executable"] = token.IsExecutable.ToString(),
-            ["TokenState"] = token.State.ToString(),
             ["NodeState"] = node.State.ToString(),
             ["IsTerminateEnd"] = isTerminate.ToString()
         }))
         {
             _logger.LogInformation(
-                "[END] NodeProcessAsync. Terminate={Terminate} TokenState={TokenState} NodeState={NodeState} Exec={Exec} Resume={Resume}",
-                isTerminate, token.State, node.State, token.IsExecutable, isResume);
+                "[END][NODE] NodeProcessAsync. Terminate={Terminate} NodeState={NodeState} Resume={Resume}",
+                isTerminate, node.State, isResume);
 
-            // Terminal safety + idempotency: اگر دوباره رسیدیم، Completed بده
-            if (token.State is TokenState.Terminated or TokenState.Completed or TokenState.Failed)
-                return ElementProcessResult.Completed;
-
-            if (isTerminate)
-            {
-                token.Terminate();
-
-                return ElementProcessResult.Completed;
-            }
+            // idempotency for node
+            if (node.State is NodeState.Completed or NodeState.Failed or NodeState.Skipped)
+                return Task.FromResult(ElementProcessResult.Completed);
 
             node.Complete();
-            // Normal End: only end this token
-            if (token.IsExecutable)
-            {
-                
-                token.Complete();
-            }
-            else
-            {
-                token.Terminate("Trace token ended at EndEvent.");
-            }
-
-            // Optional: if NodeInstance tracks lifecycle separately, close it too.
-            // If you have node.Complete()/node.Terminate(), call them here.
-            // Otherwise leave it to your NodeEvent pipeline.
-
-            return ElementProcessResult.Completed;
+            return Task.FromResult(ElementProcessResult.Completed);
         }
     }
 

@@ -168,9 +168,7 @@ public override async Task<TokenProcessResult> TokenProcessAsync(
 
     // ✅ For InclusiveGateway: count ALL child tokens that should arrive at this gateway
     // (both executable and non-executable tokens created during fork)
-    var totalChildCount = childTokens.Count(t => 
-        t.ProcessId == process.Id &&
-        t.ScopeId == scopeId);
+    var totalChildCount = incoming.Count;
     // ✅ For InclusiveGateway: count ALL child tokens that should arrive at this gateway
     // (both executable and non-executable tokens created during fork)
     var excuatable = childTokens.Where(t =>
