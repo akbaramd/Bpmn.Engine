@@ -67,4 +67,55 @@ public class EfOutboxMessageRepository : IOutboxMessageRepository
 
         return messages.AsReadOnly();
     }
+
+    public async Task<OutboxMessage> GetByIdAsync(Guid outboxId, CancellationToken ct)
+    {
+       return await _context.OutboxMessages
+           
+            .FirstOrDefaultAsync(c=>c.Id == outboxId,ct);
+
+    }
+
+
+    
+public Task MarkProcessedAsync(Guid id, DateTime processedOnUtc, CancellationToken ct)
+{
+    return _context.OutboxMessages
+        .Where(x => x.Id == id)
+        .ExecuteUpdateAsync(s => s
+            .SetProperty(x => x.Status, OutboxMessageStatus.Processed)
+            .SetProperty(x => x.ProcessedOnUtc, processedOnUtc)
+            .SetProperty(x => x.LastError, (string?)null),
+            ct);
+}
+
+public Task MarkFailedAsync(Guid id, string error, CancellationToken ct)
+{
+    return _context.OutboxMessages
+        .Where(x => x.Id == id)
+        .ExecuteUpdateAsync(s => s
+            .SetProperty(x => x.Status, OutboxMessageStatus.Failed)
+            .SetProperty(x => x.LastError, error)
+            .SetProperty(x => x.LockId, (Guid?)null)
+            .SetProperty(x => x.LockedUntilUtc, (DateTime?)null),
+            ct);
+}
+
+public Task MarkDispatchedAsync(Guid id, DateTime utcNow, CancellationToken ct)
+{
+    return _context.OutboxMessages
+        .Where(x => x.Id == id)
+        .ExecuteUpdateAsync(s => s
+            .SetProperty(x => x.Status, OutboxMessageStatus.Dispatched),
+            ct);
+}
+
+public Task MarkDispatchedAsync(List<Guid> ids, DateTime utcNow, CancellationToken ct)
+{
+    return _context.OutboxMessages
+        .Where(x => ids.Contains(x.Id))
+        .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, OutboxMessageStatus.Dispatched), ct);
+}
+
+    
 }

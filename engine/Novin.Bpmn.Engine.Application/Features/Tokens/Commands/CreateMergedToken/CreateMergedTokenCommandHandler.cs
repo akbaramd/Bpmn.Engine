@@ -45,7 +45,7 @@ public sealed class CreateMergedTokenCommandHandler : IRequestHandler<CreateMerg
                     // ✅ Idempotency check: if merged token already created for this join, return existing
                     // This check happens INSIDE the transaction, so we see committed changes
                     var mergedTokenKey = GatewayScopeKeys.GwMergedToken(cmd.GatewayId, cmd.ScopeId);
-                    var existingMergedTokenIdStr = process.Variables.TryGetValue(mergedTokenKey, out var existing) 
+                    var existingMergedTokenIdStr = process.TryGetVariable<string>(mergedTokenKey, out var existing) 
                         ? existing?.ToString() 
                         : null;
 
@@ -75,30 +75,18 @@ public sealed class CreateMergedTokenCommandHandler : IRequestHandler<CreateMerg
                     // by the database isolation level (Repeatable Read or Serializable)
 
                     // Create new merged token
-                    // Determine executability: merged token is executable only if parent was executable
-                    var mergedIsExecutable = false;
-                    if (cmd.ParentTokenId.HasValue && cmd.ParentTokenId.Value != Guid.Empty)
-                    {
-                        var parentToken = await _uow.Tokens.GetByIdAsync(cmd.ParentTokenId.Value, trxCt);
-                        if (parentToken?.IsExecutable == true)
-                        {
-                            mergedIsExecutable = true;
-                        }
-                    }
-
                     var mergedToken = new Token(
                         processId: cmd.ProcessId,
                         startElementId: cmd.GatewayId,
                         parentTokenId: cmd.ParentTokenId);
 
-                    // Collect ArrivedViaFlowIds from parent token if executable
+                    // Collect ArrivedViaFlowIds from parent token
                     var allFlowIds = new HashSet<string>(StringComparer.Ordinal);
                     
                     if (cmd.ParentTokenId.HasValue && cmd.ParentTokenId.Value != Guid.Empty)
                     {
                         var parentToken = await _uow.Tokens.GetByIdAsync(cmd.ParentTokenId.Value, trxCt);
-                        // Only collect flow IDs from executable tokens
-                        if (parentToken != null && parentToken.IsExecutable)
+                        if (parentToken != null)
                         {
                             foreach (var flowId in parentToken.ArrivedViaFlowIds)
                             {
@@ -110,18 +98,10 @@ public sealed class CreateMergedTokenCommandHandler : IRequestHandler<CreateMerg
                         }
                     }
                     
-           
                     // Set all collected flow IDs
                     if (allFlowIds.Count > 0)
                     {
                         mergedToken.SetArrivedViaFlowIds(allFlowIds);
-                    }
-
-                    // Set executability: merged token inherits executability from parent tokens
-                    // If all parents are non-executable, merged token is non-executable
-                    if (!mergedIsExecutable)
-                    {
-                        mergedToken.MarkNonExecutable("All parent tokens were non-executable");
                     }
 
                     // ScopeId is cleared because join scope is complete
@@ -143,8 +123,8 @@ public sealed class CreateMergedTokenCommandHandler : IRequestHandler<CreateMerg
                     _logger.LogInformation(
                         "[CREATE-MERGED-TOKEN] Merged token created and activated. " +
                         "ProcessId={ProcessId} GatewayId={GatewayId} ScopeId={ScopeId} MergedTokenId={MergedTokenId} " +
-                        "ParentTokenId={ParentTokenId} IsExecutable={IsExecutable}",
-                        cmd.ProcessId, cmd.GatewayId, cmd.ScopeId, mergedToken.Id, cmd.ParentTokenId, mergedToken.IsExecutable);
+                        "ParentTokenId={ParentTokenId}",
+                        cmd.ProcessId, cmd.GatewayId, cmd.ScopeId, mergedToken.Id, cmd.ParentTokenId);
 
                     result = mergedToken.Id;
                 }, ct);
@@ -173,7 +153,7 @@ public sealed class CreateMergedTokenCommandHandler : IRequestHandler<CreateMerg
             if (process == null) return;
 
             var mergedTokenKey = GatewayScopeKeys.GwMergedToken(cmd.GatewayId, cmd.ScopeId);
-            var existingMergedTokenIdStr = process.Variables.TryGetValue(mergedTokenKey, out var existing) 
+            var existingMergedTokenIdStr = process.TryGetVariable<string>(mergedTokenKey, out var existing) 
                 ? existing?.ToString() 
                 : null;
 

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -20,6 +21,7 @@ public sealed class GetProcessExecutionFlowQueryHandler
     private readonly IProcessRepository _processRepository;
     private readonly ITokenRepository _tokenRepository;
     private readonly INodeInstanceRepository _nodeInstances;
+    private readonly IExecutionFlowRepository _executionFlows;
     private readonly IBpmnRuntimeContextFactory _ctxFactory;
     private readonly ILogger<GetProcessExecutionFlowQueryHandler> _logger;
 
@@ -27,12 +29,14 @@ public sealed class GetProcessExecutionFlowQueryHandler
         IProcessRepository processRepository,
         ITokenRepository tokenRepository,
         INodeInstanceRepository nodeInstances,
+        IExecutionFlowRepository executionFlows,
         IBpmnRuntimeContextFactory ctxFactory,
         ILogger<GetProcessExecutionFlowQueryHandler> logger)
     {
         _processRepository = processRepository ?? throw new ArgumentNullException(nameof(processRepository));
         _tokenRepository = tokenRepository ?? throw new ArgumentNullException(nameof(tokenRepository));
         _nodeInstances = nodeInstances ?? throw new ArgumentNullException(nameof(nodeInstances));
+        _executionFlows = executionFlows ?? throw new ArgumentNullException(nameof(executionFlows));
         _ctxFactory = ctxFactory ?? throw new ArgumentNullException(nameof(ctxFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -42,46 +46,46 @@ public sealed class GetProcessExecutionFlowQueryHandler
         if (request.ProcessId == Guid.Empty)
             return null;
 
-        // 1) Process
         var process = await _processRepository.GetByIdAsync(request.ProcessId, ct);
         if (process is null)
-        {
-            _logger.LogWarning("Process not found. ProcessId={ProcessId}", request.ProcessId);
             return null;
-        }
 
-        // 2) NodeInstances (اینجا منبع اصلی executed nodes + state هست)
         var nodes = (await _nodeInstances.GetByProcessIdAsync(process.Id, ct)).ToList();
-
-        // 3) Tokens فقط برای TotalTokens (اگر نمیخوای، میتونی unique TokenId از nodes بگیری)
         var tokens = (await _tokenRepository.GetByProcessIdAsync(process.Id, ct)).ToList();
+        var flowRecords = await _executionFlows.GetByProcessIdAsync(process.Id, ct);
 
-        // 4) Load BPMN definitions/model for names/types + sequence flows
-        // (برای اینکه از روی deployment definitions، node/flow details رو پر کنیم)
-        BpmnRuntimeContext? ctx = null;
-        string bpmnProcessId = process.ProcessBpmnId;
-
-        // elementId -> element
+        // ---- BPMN context (best-effort) ----
         var elementById = new Dictionary<string, BpmnFlowElement>(StringComparer.Ordinal);
-
-        // flowId -> sequenceFlow
-        var flowById = new Dictionary<string, BpmnSequenceFlow>(StringComparer.Ordinal);
+        var flowByKey = new Dictionary<string, BpmnSequenceFlow>(StringComparer.Ordinal);
+        var bpmnProcessId = process.ProcessBpmnId;
 
         try
         {
-            ctx = await _ctxFactory.CreateAsync(process, ct);
+            var ctx = await _ctxFactory.CreateAsync(process, ct);
             if (ctx is not null)
             {
                 bpmnProcessId = ctx.BpmnProcessId;
 
-                foreach (var e in ctx.Model.GetFlowElements(bpmnProcessId).Where(x => !string.IsNullOrWhiteSpace(x.id)))
-                    elementById[e.id!] = e;
+                foreach (var el in ctx.Model.GetFlowElements(bpmnProcessId))
+                {
+                    if (!string.IsNullOrWhiteSpace(el.id))
+                        elementById[el.id!] = el;
+                }
 
                 foreach (var f in ctx.Model.GetSequenceFlows(bpmnProcessId))
                 {
-                    var key = FlowKey(f);
-                    if (!string.IsNullOrWhiteSpace(key))
-                        flowById[key] = f;
+                    var k1 = FlowKey(f);
+                    if (!string.IsNullOrWhiteSpace(k1) && !flowByKey.ContainsKey(k1))
+                        flowByKey[k1] = f;
+
+                    // also index by source->target to support older persisted keys
+                    var k2 = $"{f.sourceRef}->{f.targetRef}";
+                    if (!string.IsNullOrWhiteSpace(k2) && !flowByKey.ContainsKey(k2))
+                        flowByKey[k2] = f;
+
+                    // also index by id if present (even if FlowKey chose other)
+                    if (!string.IsNullOrWhiteSpace(f.id) && !flowByKey.ContainsKey(f.id!))
+                        flowByKey[f.id!] = f;
                 }
             }
         }
@@ -91,158 +95,30 @@ public sealed class GetProcessExecutionFlowQueryHandler
         }
 
         // ----------------------------
-        // ExecutedElements (از روی NodeInstances + State)
+        // Executed Elements (NodeInstances authoritative)
         // ----------------------------
-        // 4) Executed Elements (group by ElementId) - ✅ with single Status
-        var executedElements = nodes
-            .Where(n => !string.IsNullOrWhiteSpace(n.ElementId))
-            .GroupBy(n => n.ElementId, StringComparer.Ordinal)
-            .Select(g =>
-            {
-                var elementId = g.Key;
-
-                // time helpers
-                static DateTime NodeTime(NodeInstance n) => n.StartedAtUtc ?? n.CreatedAtUtc;
-
-                var firstExecutedAt = g.Min(NodeTime);
-
-                // ✅ latest node instance decides Status and provides all node details
-                var latestNode = g
-                    .OrderByDescending(n => n.CompletedAtUtc ?? n.StartedAtUtc ?? n.CreatedAtUtc)
-                    .First();
-
-                var status = latestNode.State;
-
-                // name/type from definitions
-                string? name = null;
-                string type = "Unknown";
-                if (elementById.TryGetValue(elementId, out var el))
-                {
-                    name = ReadName(el);
-                    type = GetElementType(el);
-                }
-
-                var tokenExecutions = g
-                    .GroupBy(x => x.TokenId)
-                    .Select(tg => new TokenExecutionDto
-                    {
-                        TokenId = tg.Key,
-                        FirstExecutedAt = tg.Min(NodeTime),
-                        LastExecutedAt = tg.Max(NodeTime),
-                        ExecutionCount = tg.Count()
-                    })
-                    .OrderBy(x => x.FirstExecutedAt)
-                    .ToList();
-
-                // Merge variables from all node instances (latest wins for same key)
-                var allVariables = new Dictionary<string, string>(StringComparer.Ordinal);
-                foreach (var node in g.OrderByDescending(n => n.CompletedAtUtc ?? n.StartedAtUtc ?? n.CreatedAtUtc))
-                {
-                    foreach (var kvp in node.Variables)
-                    {
-                        if (!allVariables.ContainsKey(kvp.Key))
-                        {
-                            allVariables[kvp.Key] = kvp.Value;
-                        }
-                    }
-                }
-
-                return new ExecutedElementDto
-                {
-                    ElementId = elementId,
-                    ElementType = type,
-                    ElementName = name,
-                    FirstExecutedAt = firstExecutedAt,
-
-                    // ✅ renamed
-                    CalculatedExecutionCount = g.Count(),
-
-                    // ✅ single status
-                    Status = status.ToString(),
-
-                    // Node instance fields from latest node
-                    NodeInstanceId = latestNode.Id,
-                    ScopeId = latestNode.ScopeId,
-                    ActivityInstanceId = latestNode.ActivityInstanceId,
-                    ArrivedViaFlowIds = latestNode.ArrivedViaFlowIds.ToList(),
-                    StartedAtUtc = latestNode.StartedAtUtc,
-                    CompletedAtUtc = latestNode.CompletedAtUtc,
-                    ErrorMessage = latestNode.ErrorMessage,
-                    Variables = allVariables,
-
-                    TokenExecutions = tokenExecutions
-                };
-            })
-            .OrderBy(x => x.FirstExecutedAt)
-            .ToList();
+        var executedElements = BuildExecutedElements(nodes, elementById);
 
         // ----------------------------
-        // ExecutedFlows (فقط با ArrivedViaFlowIds از NodeInstances)
-        // هر NodeInstance مقصد یک flow هست => ArrivedViaFlowIds همان flowهای اجرا شده است
-        // IMPORTANT: Only use ArrivedViaFlowIds from executable nodes (nodes are only created from executable tokens)
+        // Executed Flows (ExecutionFlowRecord authoritative)
         // ----------------------------
-        // Flatten all ArrivedViaFlowIds from executable nodes only
-        var executedFlows = nodes
-            .Where(n => n.IsExecutable) // Only executable nodes (nodes are only created from executable tokens)
-            .SelectMany(n => n.ArrivedViaFlowIds.Select(flowId => new { Node = n, FlowId = flowId }))
-            .Where(x => !string.IsNullOrWhiteSpace(x.FlowId))
-            .GroupBy(x => x.FlowId!, StringComparer.Ordinal)
-            .Select(g =>
-            {
-                var flowId = g.Key;
-                var nodeGroup = g.Select(x => x.Node).ToList();
-
-                string source = "";
-                string target = "";
-                string? name = null;
-                string? condition = null;
-
-                if (flowById.TryGetValue(flowId, out var f))
-                {
-                    source = f.sourceRef ?? "";
-                    target = f.targetRef ?? "";
-                    name = ReadName(f);
-                    condition = ReadConditionExpression(f);
-                }
-
-                var firstAt = nodeGroup.Min(NodeTime);
-
-                var tokenExecutions = nodeGroup
-                    .GroupBy(x => x.TokenId)
-                    .Select(tg => new TokenExecutionDto
-                    {
-                        TokenId = tg.Key,
-                        FirstExecutedAt = tg.Min(NodeTime),
-                        LastExecutedAt = tg.Max(NodeTime),
-                        ExecutionCount = tg.Count()
-                    })
-                    .OrderBy(x => x.FirstExecutedAt)
-                    .ToList();
-
-                return new ExecutedFlowDto
-                {
-                    FlowId = flowId,
-                    SourceElementId = source,
-                    TargetElementId = target,
-                    FlowName = name,
-                    ConditionExpression = condition,
-                    FirstExecutedAt = firstAt,
-                    ExecutionCount = nodeGroup.Count,
-                    TokenExecutions = tokenExecutions
-                };
-            })
-            .OrderBy(x => x.FirstExecutedAt)
-            .ToList();
+        var executedFlows = BuildExecutedFlows(flowRecords, flowByKey);
 
         // ----------------------------
         // Stats
         // ----------------------------
-        DateTime? minTime = nodes.Count > 0 ? nodes.Min(NodeTime) : (DateTime?)null;
-        DateTime? maxTime = nodes.Count > 0 ? nodes.Max(NodeTime) : (DateTime?)null;
+        DateTime? minNode = nodes.Count > 0 ? nodes.Min(NodeTime) : null;
+        DateTime? maxNode = nodes.Count > 0 ? nodes.Max(NodeLastTime) : null;
+
+        DateTime? minFlow = flowRecords.Count > 0 ? flowRecords.Min(r => r.OccurredAtUtc) : null;
+        DateTime? maxFlow = flowRecords.Count > 0 ? flowRecords.Max(r => r.OccurredAtUtc) : null;
+
+        var minTime = MinNullable(minNode, minFlow);
+        var maxTime = MaxNullable(maxNode, maxFlow);
 
         var stats = new ExecutionStatsDto
         {
-            TotalTokens = tokens.Count, // یا: nodes.Select(x=>x.TokenId).Distinct().Count()
+            TotalTokens = tokens.Count,
             ExecutedElements = executedElements.Count,
             ExecutedFlows = executedFlows.Count,
             BoundaryEventsConfigured = 0,
@@ -270,10 +146,250 @@ public sealed class GetProcessExecutionFlowQueryHandler
         };
     }
 
+    // ----------------------------
+    // Build Executed Elements
+    // ----------------------------
+    private static List<ExecutedElementDto> BuildExecutedElements(
+        List<NodeInstance> nodes,
+        Dictionary<string, BpmnFlowElement> elementById)
+    {
+        if (nodes.Count == 0)
+            return new List<ExecutedElementDto>(0);
+
+        var grouped = new Dictionary<string, List<NodeInstance>>(StringComparer.Ordinal);
+
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            var n = nodes[i];
+            if (string.IsNullOrWhiteSpace(n.ElementId)) continue;
+
+            if (!grouped.TryGetValue(n.ElementId, out var list))
+            {
+                list = new List<NodeInstance>(capacity: 4);
+                grouped[n.ElementId] = list;
+            }
+            list.Add(n);
+        }
+
+        var result = new List<ExecutedElementDto>(grouped.Count);
+
+        foreach (var kv in grouped)
+        {
+            var elementId = kv.Key;
+            var list = kv.Value;
+
+            // first executed at
+            DateTime firstAt = DateTime.MaxValue;
+            for (var i = 0; i < list.Count; i++)
+            {
+                var t = NodeTime(list[i]);
+                if (t < firstAt) firstAt = t;
+            }
+
+            // latest node decides status/details
+            NodeInstance latest = list[0];
+            DateTime latestKey = NodeLastTime(latest);
+
+            for (var i = 1; i < list.Count; i++)
+            {
+                var n = list[i];
+                var k = NodeLastTime(n);
+                if (k > latestKey)
+                {
+                    latest = n;
+                    latestKey = k;
+                }
+            }
+
+            string? name = null;
+            string type = "Unknown";
+            if (elementById.TryGetValue(elementId, out var el))
+            {
+                name = ReadName(el);
+                type = GetElementType(el);
+            }
+
+            // token executions
+            var byToken = new Dictionary<Guid, TokenExecutionDto>();
+            for (var i = 0; i < list.Count; i++)
+            {
+                var n = list[i];
+                if (!byToken.TryGetValue(n.TokenId, out var te))
+                {
+                    te = new TokenExecutionDto
+                    {
+                        TokenId = n.TokenId,
+                        FirstExecutedAt = NodeTime(n),
+                        LastExecutedAt = NodeTime(n),
+                        ExecutionCount = 0
+                    };
+                    byToken[n.TokenId] = te;
+                }
+
+                var nt = NodeTime(n);
+                if (nt < te.FirstExecutedAt) te.FirstExecutedAt = nt;
+                if (nt > te.LastExecutedAt) te.LastExecutedAt = nt;
+                te.ExecutionCount += 1;
+            }
+
+            var tokenExecutions = byToken.Values
+                .OrderBy(x => x.FirstExecutedAt)
+                .ToList();
+
+            // variables (latest wins)
+            var mergedVars = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
+            list.Sort((a, b) => NodeLastTime(b).CompareTo(NodeLastTime(a)));
+            for (var i = 0; i < list.Count; i++)
+            {
+                var n = list[i];
+                foreach (var kvp in n.VariablesObject)
+                {
+                    if (!mergedVars.ContainsKey(kvp.Key))
+                        mergedVars[kvp.Key] = kvp.Value;
+                }
+            }
+
+            result.Add(new ExecutedElementDto
+            {
+                ElementId = elementId,
+                ElementType = type,
+                ElementName = name,
+                FirstExecutedAt = firstAt,
+                CalculatedExecutionCount = list.Count,
+                Status = latest.State.ToString(),
+                NodeInstanceId = latest.Id,
+                ScopeId = latest.ScopeId,
+                ActivityInstanceId = latest.ActivityInstanceId,
+                ArrivedViaFlowIds = latest.ArrivedViaFlowIds?.ToList() ?? new List<string>(),
+                StartedAtUtc = latest.StartedAtUtc,
+                CompletedAtUtc = latest.CompletedAtUtc,
+                ErrorMessage = latest.ErrorMessage,
+                Variables = mergedVars,
+                TokenExecutions = tokenExecutions
+            });
+        }
+
+        result.Sort((a, b) => a.FirstExecutedAt.CompareTo(b.FirstExecutedAt));
+        return result;
+    }
+
+    // ----------------------------
+    // Build Executed Flows
+    // ----------------------------
+    private static List<ExecutedFlowDto> BuildExecutedFlows(
+        IReadOnlyList<Domain.Entities.ExecutionFlowRecord> records,
+        Dictionary<string, BpmnSequenceFlow> flowByKey)
+    {
+        if (records.Count == 0)
+            return new List<ExecutedFlowDto>(0);
+
+        var agg = new Dictionary<string, FlowAgg>(StringComparer.Ordinal);
+
+        for (var i = 0; i < records.Count; i++)
+        {
+            var r = records[i];
+            var via = r.ViaFlowIds;
+            if (via is null || via.Count == 0) continue;
+
+            for (var j = 0; j < via.Count; j++)
+            {
+                var flowId = via[j];
+                if (string.IsNullOrWhiteSpace(flowId)) continue;
+
+                if (!agg.TryGetValue(flowId, out var a))
+                {
+                    a = new FlowAgg(flowId)
+                    {
+                        FirstAt = r.OccurredAtUtc,
+                        FallbackFrom = r.FromElementId,
+                        FallbackTo = r.ToElementId
+                    };
+                    agg[flowId] = a;
+                }
+
+                if (r.OccurredAtUtc < a.FirstAt) a.FirstAt = r.OccurredAtUtc;
+
+                a.ExecutionCount += 1;
+
+                if (!a.ByToken.TryGetValue(r.TokenId, out var te))
+                {
+                    te = new TokenExecutionDto
+                    {
+                        TokenId = r.TokenId,
+                        FirstExecutedAt = r.OccurredAtUtc,
+                        LastExecutedAt = r.OccurredAtUtc,
+                        ExecutionCount = 0
+                    };
+                    a.ByToken[r.TokenId] = te;
+                }
+
+                if (r.OccurredAtUtc < te.FirstExecutedAt) te.FirstExecutedAt = r.OccurredAtUtc;
+                if (r.OccurredAtUtc > te.LastExecutedAt) te.LastExecutedAt = r.OccurredAtUtc;
+                te.ExecutionCount += 1;
+            }
+        }
+
+        var list = new List<ExecutedFlowDto>(agg.Count);
+
+        foreach (var a in agg.Values.OrderBy(x => x.FirstAt))
+        {
+            string source = a.FallbackFrom;
+            string target = a.FallbackTo;
+            string? name = null;
+            string? condition = null;
+
+            if (flowByKey.TryGetValue(a.FlowId, out var f))
+            {
+                source = f.sourceRef ?? source;
+                target = f.targetRef ?? target;
+                name = ReadName(f);
+                condition = ReadConditionExpression(f);
+            }
+
+            list.Add(new ExecutedFlowDto
+            {
+                FlowId = a.FlowId,
+                SourceElementId = source,
+                TargetElementId = target,
+                FlowName = name,
+                ConditionExpression = condition,
+                FirstExecutedAt = a.FirstAt,
+                ExecutionCount = a.ExecutionCount,
+                TokenExecutions = a.ByToken.Values.OrderBy(x => x.FirstExecutedAt).ToList()
+            });
+        }
+
+        return list;
+    }
+
+    private sealed class FlowAgg
+    {
+        public FlowAgg(string flowId)
+        {
+            FlowId = flowId;
+        }
+
+        public string FlowId { get; }
+        public DateTime FirstAt { get; set; } = DateTime.MaxValue;
+        public int ExecutionCount { get; set; }
+        public string FallbackFrom { get; set; } = "";
+        public string FallbackTo { get; set; } = "";
+        public Dictionary<Guid, TokenExecutionDto> ByToken { get; } = new();
+    }
+
     // ---------------- helpers ----------------
 
     private static DateTime NodeTime(NodeInstance n)
         => n.StartedAtUtc ?? n.CreatedAtUtc;
+
+    private static DateTime NodeLastTime(NodeInstance n)
+        => n.CompletedAtUtc ?? n.StartedAtUtc ?? n.CreatedAtUtc;
+
+    private static DateTime? MinNullable(DateTime? a, DateTime? b)
+        => a.HasValue && b.HasValue ? (a.Value <= b.Value ? a : b) : (a ?? b);
+
+    private static DateTime? MaxNullable(DateTime? a, DateTime? b)
+        => a.HasValue && b.HasValue ? (a.Value >= b.Value ? a : b) : (a ?? b);
 
     private static string FlowKey(BpmnSequenceFlow f)
         => !string.IsNullOrWhiteSpace(f.id) ? f.id! : $"{f.sourceRef}->{f.targetRef}";
@@ -297,16 +413,50 @@ public sealed class GetProcessExecutionFlowQueryHandler
     private static string? ReadName(object obj)
     {
         var t = obj.GetType();
-        var p = t.GetProperty("name") ?? t.GetProperty("Name") ?? t.GetProperty("label") ?? t.GetProperty("Label");
-        return p?.GetValue(obj) as string;
+        var p =
+            t.GetProperty("name", BindingFlags.Public | BindingFlags.Instance)
+            ?? t.GetProperty("Name", BindingFlags.Public | BindingFlags.Instance)
+            ?? t.GetProperty("label", BindingFlags.Public | BindingFlags.Instance)
+            ?? t.GetProperty("Label", BindingFlags.Public | BindingFlags.Instance);
+
+        var v = p?.GetValue(obj) as string;
+        return string.IsNullOrWhiteSpace(v) ? null : v;
     }
 
     private static string? ReadConditionExpression(BpmnSequenceFlow f)
     {
-        // اگر در مدل شما conditionExpression موجود است:
-        var p = f.GetType().GetProperty("conditionExpression", BindingFlags.Public | BindingFlags.Instance)
-             ?? f.GetType().GetProperty("ConditionExpression", BindingFlags.Public | BindingFlags.Instance);
+        var ceProp =
+            f.GetType().GetProperty("conditionExpression", BindingFlags.Public | BindingFlags.Instance)
+            ?? f.GetType().GetProperty("ConditionExpression", BindingFlags.Public | BindingFlags.Instance);
 
-        return p?.GetValue(f) as string;
+        var ce = ceProp?.GetValue(f);
+        if (ce is null) return null;
+
+        var textProp =
+            ce.GetType().GetProperty("Text", BindingFlags.Public | BindingFlags.Instance)
+            ?? ce.GetType().GetProperty("text", BindingFlags.Public | BindingFlags.Instance);
+
+        var textVal = textProp?.GetValue(ce);
+        if (textVal is null) return null;
+
+        if (textVal is string s)
+        {
+            var x = s.Trim();
+            return string.IsNullOrWhiteSpace(x) ? null : x;
+        }
+
+        if (textVal is string[] arr)
+        {
+            var x = string.Concat(arr).Trim();
+            return string.IsNullOrWhiteSpace(x) ? null : x;
+        }
+
+        if (textVal is IEnumerable<string> en)
+        {
+            var x = string.Concat(en).Trim();
+            return string.IsNullOrWhiteSpace(x) ? null : x;
+        }
+
+        return null;
     }
 }

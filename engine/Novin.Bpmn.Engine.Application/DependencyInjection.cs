@@ -25,7 +25,7 @@ public static class DependencyInjection
         services.AddMediatR(cfg =>
         {
             cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
-            cfg.NotificationPublisher = new TaskWhenAllPublisher();
+            cfg.NotificationPublisher = new ForeachAwaitPublisher();
         });
         services.AddMemoryCache();
         // -------------------------
@@ -59,6 +59,7 @@ public static class DependencyInjection
         services.AddScoped<ITokenForkService, TokenForkService>();
 
         services.AddScoped<IGatewaySplitService, GatewaySplitService>();
+        services.AddScoped<IGatewayJoinService,GatewayJoinService>();
 
         // اگر می‌خواهی شرط‌ها فقط روی Token.Variables اجرا شوند (پیشنهادی با IO Mapping)
         services.AddScoped<ISequenceFlowSelector,FeelSequenceFlowSelector>();

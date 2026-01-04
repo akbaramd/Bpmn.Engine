@@ -88,6 +88,7 @@ public sealed class ProcessInstantiationService : IProcessInstantiationService
             parentTokenId: null);
         token.SetScope(Guid.NewGuid());
         token.Activate();
+        token.MoveTo(startElementId,false,[]);
 
         // Ownership link (IDs only)
         process.AddToken(token.Id);

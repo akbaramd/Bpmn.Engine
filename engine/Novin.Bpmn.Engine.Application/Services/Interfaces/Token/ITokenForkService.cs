@@ -10,7 +10,6 @@ public interface ITokenForkService
         Token parent,
         IReadOnlyList<BpmnSequenceFlow> outgoing,
         Guid scopeId,
-        Func<BpmnSequenceFlow, bool> isExecutableForFlow,
         BpmnRuntimeContext ctx,
         CancellationToken ct);
 }

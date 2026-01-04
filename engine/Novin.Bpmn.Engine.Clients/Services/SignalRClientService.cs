@@ -216,7 +216,7 @@ public class SignalRClientService : ISignalRClientService, IAsyncDisposable
     /// <returns>A task representing the asynchronous operation</returns>
     public async Task SendServiceTaskCompletedAsync(
         Guid executionId,
-        Dictionary<string, string>? result = null,
+        Dictionary<string, object?>? result = null,
         CancellationToken cancellationToken = default)
     {
         if (_hubConnection == null)
@@ -623,7 +623,7 @@ public class SignalRClientService : ISignalRClientService, IAsyncDisposable
             await handler.ExecuteAsync(workerContext);
 
             // Send completion notification with result (convert BonyanVariables to Dictionary<string, string>)
-            var result = new Dictionary<string, string>
+            var result = new Dictionary<string, object?>
             {
                 ["success"] = "true",
                 ["executedBy"] = _options.ClientId ?? string.Empty,

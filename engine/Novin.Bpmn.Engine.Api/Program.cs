@@ -4,6 +4,7 @@ using Novin.Bpmn.Engine.Application.Hubs;
 using Novin.Bpmn.Engine.Infrastructure;
 using Quartz;
 using Novin.Bpmn.Engine.Application.Services;
+using Novin.Bpmn.Engine.Infrastructure.Persistence.Startup;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -74,6 +75,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+await app.MigrateAndSeedAsync();
 
 app.UseHttpsRedirection();
 

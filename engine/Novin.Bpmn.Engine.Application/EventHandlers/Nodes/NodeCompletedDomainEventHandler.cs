@@ -22,6 +22,9 @@ public sealed class NodeCompletedDomainEventHandler
             "[NODE-COMPLETE] NodeId={NodeId} TokenId={TokenId} ElementId={ElementId}",
             e.NodeId, e.TokenId, e.ElementId);
 
+
+
+
         // 👉 trigger NAVIGATION phase
         await _mediator.Send(
             new DispatchTokenNavigateCommand(e.TokenId),

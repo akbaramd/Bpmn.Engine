@@ -1,270 +1,321 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Novin.Bpmn.Engine.Domain.ValueObjects;
+
 namespace Novin.Bpmn.Engine.Application.Services;
 
-/// <summary>
-/// BonyanVariables - A dictionary that extends Dictionary&lt;string, string&gt; with typed setter and getter methods.
-/// All values are stored as strings internally, but provides convenient methods for different types.
-/// </summary>
-public sealed class BonyanVariables : Dictionary<string, string>
+public sealed class BonyanVariables : Dictionary<string, object?>
 {
-    /// <summary>
-    /// Initializes a new instance of BonyanVariables
-    /// </summary>
-    public BonyanVariables() : base()
+    public BonyanVariables() : base(StringComparer.Ordinal) { }
+    public BonyanVariables(int capacity) : base(capacity, StringComparer.Ordinal) { }
+
+    public BonyanVariables(IDictionary<string, object?> dictionary)
+        : base(dictionary ?? throw new ArgumentNullException(nameof(dictionary)), StringComparer.Ordinal) { }
+
+    // -------------------------
+    // Setters
+    // -------------------------
+
+    public void Set(string key, object? value)
     {
+        var k = EnsureKey(key);
+        this[k] = value;
     }
 
-    /// <summary>
-    /// Initializes a new instance of BonyanVariables with initial capacity
-    /// </summary>
-    public BonyanVariables(int capacity) : base(capacity)
-    {
-    }
+    public void SetString(string key, string? value) => Set(key, value);
+    public void SetInt(string key, int value) => Set(key, value);
+    public void SetLong(string key, long value) => Set(key, value);
+    public void SetDecimal(string key, decimal value) => Set(key, value);
+    public void SetDouble(string key, double value) => Set(key, value);
+    public void SetFloat(string key, float value) => Set(key, value);
+    public void SetBoolean(string key, bool value) => Set(key, value);
+    public void SetDateTime(string key, DateTime value) => Set(key, value.Kind == DateTimeKind.Unspecified ? value : value.ToUniversalTime());
+    public void SetGuid(string key, Guid value) => Set(key, value);
+    public void SetJson(string key, JsonNode? value) => Set(key, value);
 
-    /// <summary>
-    /// Initializes a new instance of BonyanVariables with initial values
-    /// </summary>
-    public BonyanVariables(IDictionary<string, string> dictionary) : base(dictionary)
-    {
-    }
+    // -------------------------
+    // Getters
+    // -------------------------
 
-    /// <summary>
-    /// Sets a variable as a string value
-    /// </summary>
-    public void SetString(string key, string? value)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Key cannot be null or empty", nameof(key));
-
-        this[key] = value ?? string.Empty;
-    }
-
-    /// <summary>
-    /// Sets a variable as an integer value (converted to string)
-    /// </summary>
-    public void SetInt(string key, int value)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Key cannot be null or empty", nameof(key));
-
-        this[key] = value.ToString();
-    }
-
-    /// <summary>
-    /// Sets a variable as a long value (converted to string)
-    /// </summary>
-    public void SetLong(string key, long value)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Key cannot be null or empty", nameof(key));
-
-        this[key] = value.ToString();
-    }
-
-    /// <summary>
-    /// Sets a variable as a decimal value (converted to string)
-    /// </summary>
-    public void SetDecimal(string key, decimal value)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Key cannot be null or empty", nameof(key));
-
-        this[key] = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    /// <summary>
-    /// Sets a variable as a double value (converted to string)
-    /// </summary>
-    public void SetDouble(string key, double value)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Key cannot be null or empty", nameof(key));
-
-        this[key] = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    /// <summary>
-    /// Sets a variable as a float value (converted to string)
-    /// </summary>
-    public void SetFloat(string key, float value)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Key cannot be null or empty", nameof(key));
-
-        this[key] = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    /// <summary>
-    /// Sets a variable as a boolean value (converted to string)
-    /// </summary>
-    public void SetBoolean(string key, bool value)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Key cannot be null or empty", nameof(key));
-
-        this[key] = value.ToString().ToLowerInvariant();
-    }
-
-    /// <summary>
-    /// Sets a variable as a DateTime value (converted to ISO 8601 string)
-    /// </summary>
-    public void SetDateTime(string key, DateTime value)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Key cannot be null or empty", nameof(key));
-
-        this[key] = value.ToString("O"); // ISO 8601 format
-    }
-
-    /// <summary>
-    /// Sets a variable as a Guid value (converted to string)
-    /// </summary>
-    public void SetGuid(string key, Guid value)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Key cannot be null or empty", nameof(key));
-
-        this[key] = value.ToString();
-    }
-
-    /// <summary>
-    /// Gets a variable value as string
-    /// </summary>
-    /// <param name="key">The variable key</param>
-    /// <param name="fallback">Fallback value if key doesn't exist or is null/empty</param>
-    /// <returns>The string value or fallback if key doesn't exist or is null/empty</returns>
     public string? GetString(string key, string? fallback = null)
     {
-        if (!TryGetValue(key, out var value) || string.IsNullOrEmpty(value))
-            return fallback;
+        var k = NormalizeKey(key);
+        if (k.Length == 0) return fallback;
 
-        return value;
+        if (!TryGetValue(k, out var v) || v is null) return fallback;
+
+        if (v is string s)
+            return string.IsNullOrWhiteSpace(s) ? fallback : s;
+
+        if (v is JsonNode jn)
+        {
+            try
+            {
+                var obj = jn.Deserialize<object>(JsonVariableCodec.Options);
+                var str = obj?.ToString();
+                return string.IsNullOrWhiteSpace(str) ? fallback : str;
+            }
+            catch
+            {
+                var raw = jn.ToJsonString(JsonVariableCodec.Options);
+                return string.IsNullOrWhiteSpace(raw) ? fallback : raw;
+            }
+        }
+
+        var txt = v.ToString();
+        return string.IsNullOrWhiteSpace(txt) ? fallback : txt;
     }
 
-    /// <summary>
-    /// Gets a variable value as integer (parsed from string)
-    /// </summary>
-    /// <param name="key">The variable key</param>
-    /// <param name="fallback">Fallback value if key doesn't exist or parsing fails</param>
-    /// <returns>The integer value or fallback if key doesn't exist or parsing fails</returns>
     public int GetInt(string key, int? fallback = null)
-    {
-        if (!TryGetValue(key, out var value) || string.IsNullOrEmpty(value))
-            return fallback ?? 0;
+        => TryGetNumber(key, out int v) ? v : (fallback ?? 0);
 
-        return int.TryParse(value, out var result) ? result : (fallback ?? 0);
-    }
-
-    /// <summary>
-    /// Gets a variable value as long (parsed from string)
-    /// </summary>
-    /// <param name="key">The variable key</param>
-    /// <param name="fallback">Fallback value if key doesn't exist or parsing fails</param>
-    /// <returns>The long value or fallback if key doesn't exist or parsing fails</returns>
     public long GetLong(string key, long? fallback = null)
-    {
-        if (!TryGetValue(key, out var value) || string.IsNullOrEmpty(value))
-            return fallback ?? 0L;
+        => TryGetNumber(key, out long v) ? v : (fallback ?? 0L);
 
-        return long.TryParse(value, out var result) ? result : (fallback ?? 0L);
-    }
-
-    /// <summary>
-    /// Gets a variable value as decimal (parsed from string)
-    /// </summary>
-    /// <param name="key">The variable key</param>
-    /// <param name="fallback">Fallback value if key doesn't exist or parsing fails</param>
-    /// <returns>The decimal value or fallback if key doesn't exist or parsing fails</returns>
     public decimal GetDecimal(string key, decimal? fallback = null)
-    {
-        if (!TryGetValue(key, out var value) || string.IsNullOrEmpty(value))
-            return fallback ?? 0m;
+        => TryGetNumber(key, out decimal v) ? v : (fallback ?? 0m);
 
-        return decimal.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var result) 
-            ? result 
-            : (fallback ?? 0m);
-    }
-
-    /// <summary>
-    /// Gets a variable value as double (parsed from string)
-    /// </summary>
-    /// <param name="key">The variable key</param>
-    /// <param name="fallback">Fallback value if key doesn't exist or parsing fails</param>
-    /// <returns>The double value or fallback if key doesn't exist or parsing fails</returns>
     public double GetDouble(string key, double? fallback = null)
-    {
-        if (!TryGetValue(key, out var value) || string.IsNullOrEmpty(value))
-            return fallback ?? 0.0;
+        => TryGetNumber(key, out double v) ? v : (fallback ?? 0d);
 
-        return double.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var result) 
-            ? result 
-            : (fallback ?? 0.0);
-    }
-
-    /// <summary>
-    /// Gets a variable value as float (parsed from string)
-    /// </summary>
-    /// <param name="key">The variable key</param>
-    /// <param name="fallback">Fallback value if key doesn't exist or parsing fails</param>
-    /// <returns>The float value or fallback if key doesn't exist or parsing fails</returns>
     public float GetFloat(string key, float? fallback = null)
-    {
-        if (!TryGetValue(key, out var value) || string.IsNullOrEmpty(value))
-            return fallback ?? 0f;
+        => TryGetNumber(key, out float v) ? v : (fallback ?? 0f);
 
-        return float.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var result) 
-            ? result 
-            : (fallback ?? 0f);
-    }
-
-    /// <summary>
-    /// Gets a variable value as boolean (parsed from string)
-    /// </summary>
-    /// <param name="key">The variable key</param>
-    /// <param name="fallback">Fallback value if key doesn't exist or parsing fails</param>
-    /// <returns>The boolean value or fallback if key doesn't exist or parsing fails</returns>
     public bool GetBoolean(string key, bool? fallback = null)
     {
-        if (!TryGetValue(key, out var value) || string.IsNullOrEmpty(value))
-            return fallback ?? false;
+        var k = NormalizeKey(key);
+        if (k.Length == 0) return fallback ?? false;
 
-        return bool.TryParse(value, out var result) ? result : (fallback ?? false);
+        if (!TryGetValue(k, out var v) || v is null) return fallback ?? false;
+
+        if (v is bool b) return b;
+
+        if (v is JsonNode jn)
+        {
+            try
+            {
+                var obj = jn.Deserialize<object>(JsonVariableCodec.Options);
+                if (obj is bool bb) return bb;
+                if (obj is string s && bool.TryParse(s, out var parsed)) return parsed;
+                if (TryLooseBool(obj, out var lb)) return lb;
+            }
+            catch { }
+            return fallback ?? false;
+        }
+
+        if (v is string s2)
+            return bool.TryParse(s2, out var parsed2) ? parsed2 : (fallback ?? false);
+
+        return TryLooseBool(v, out var loose) ? loose : (fallback ?? false);
     }
 
-    /// <summary>
-    /// Gets a variable value as DateTime (parsed from ISO 8601 string)
-    /// </summary>
-    /// <param name="key">The variable key</param>
-    /// <param name="fallback">Fallback value if key doesn't exist or parsing fails</param>
-    /// <returns>The DateTime value or fallback if key doesn't exist or parsing fails</returns>
     public DateTime GetDateTime(string key, DateTime? fallback = null)
     {
-        if (!TryGetValue(key, out var value) || string.IsNullOrEmpty(value))
-            return fallback ?? DateTime.MinValue;
+        var k = NormalizeKey(key);
+        if (k.Length == 0) return fallback ?? DateTime.MinValue;
 
-        return DateTime.TryParse(value, null, System.Globalization.DateTimeStyles.RoundtripKind, out var result) 
-            ? result 
-            : (fallback ?? DateTime.MinValue);
+        if (!TryGetValue(k, out var v) || v is null) return fallback ?? DateTime.MinValue;
+
+        if (v is DateTime dt) return dt;
+        if (v is DateTimeOffset dto) return dto.UtcDateTime;
+
+        if (v is JsonNode jn)
+        {
+            try
+            {
+                var obj = jn.Deserialize<object>(JsonVariableCodec.Options);
+                if (obj is DateTime dt2) return dt2;
+                if (obj is DateTimeOffset dto2) return dto2.UtcDateTime;
+                if (obj is string s && DateTime.TryParse(s, null, DateTimeStyles.RoundtripKind, out var parsed))
+                    return parsed;
+            }
+            catch { }
+            return fallback ?? DateTime.MinValue;
+        }
+
+        if (v is string s2 && DateTime.TryParse(s2, null, DateTimeStyles.RoundtripKind, out var parsed2))
+            return parsed2;
+
+        return fallback ?? DateTime.MinValue;
     }
 
-    /// <summary>
-    /// Gets a variable value as Guid (parsed from string)
-    /// </summary>
-    /// <param name="key">The variable key</param>
-    /// <param name="fallback">Fallback value if key doesn't exist or parsing fails</param>
-    /// <returns>The Guid value or fallback if key doesn't exist or parsing fails</returns>
     public Guid GetGuid(string key, Guid? fallback = null)
     {
-        if (!TryGetValue(key, out var value) || string.IsNullOrEmpty(value))
-            return fallback ?? Guid.Empty;
+        var k = NormalizeKey(key);
+        if (k.Length == 0) return fallback ?? Guid.Empty;
 
-        return Guid.TryParse(value, out var result) ? result : (fallback ?? Guid.Empty);
+        if (!TryGetValue(k, out var v) || v is null) return fallback ?? Guid.Empty;
+
+        if (v is Guid g) return g;
+
+        if (v is JsonNode jn)
+        {
+            try
+            {
+                var obj = jn.Deserialize<object>(JsonVariableCodec.Options);
+                if (obj is Guid g2) return g2;
+                if (obj is string s && Guid.TryParse(s, out var parsed)) return parsed;
+            }
+            catch { }
+            return fallback ?? Guid.Empty;
+        }
+
+        if (v is string s2 && Guid.TryParse(s2, out var parsed2)) return parsed2;
+
+        return fallback ?? Guid.Empty;
     }
 
-    /// <summary>
-    /// Checks if a variable exists
-    /// </summary>
     public bool Has(string key)
     {
-        return ContainsKey(key);
+        var k = NormalizeKey(key);
+        return k.Length != 0 && ContainsKey(k);
+    }
+
+    // -------------------------
+    // Typed helpers
+    // -------------------------
+
+    private bool TryGetNumber<T>(string key, out T value) where T : struct
+    {
+        value = default;
+
+        var k = NormalizeKey(key);
+        if (k.Length == 0) return false;
+
+        if (!TryGetValue(k, out var v) || v is null) return false;
+
+        if (v is T direct)
+        {
+            value = direct;
+            return true;
+        }
+
+        if (v is JsonNode jn)
+        {
+            try
+            {
+                var obj = jn.Deserialize<object>(JsonVariableCodec.Options);
+                return TryConvertNumber(obj, out value);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        return TryConvertNumber(v, out value);
+    }
+
+    private static bool TryConvertNumber<T>(object? v, out T value) where T : struct
+    {
+        value = default;
+        if (v is null) return false;
+
+        try
+        {
+            if (v is T t)
+            {
+                value = t;
+                return true;
+            }
+
+            if (v is string s)
+            {
+                s = s.Trim();
+                if (s.Length == 0) return false;
+
+                if (typeof(T) == typeof(int) &&
+                    int.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var i))
+                { value = (T)(object)i; return true; }
+
+                if (typeof(T) == typeof(long) &&
+                    long.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var l))
+                { value = (T)(object)l; return true; }
+
+                if (typeof(T) == typeof(decimal) &&
+                    decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var m))
+                { value = (T)(object)m; return true; }
+
+                if (typeof(T) == typeof(double) &&
+                    double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+                { value = (T)(object)d; return true; }
+
+                if (typeof(T) == typeof(float) &&
+                    float.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var f))
+                { value = (T)(object)f; return true; }
+
+                return false;
+            }
+
+            if (typeof(T) == typeof(int))
+            { value = (T)(object)Convert.ToInt32(v, CultureInfo.InvariantCulture); return true; }
+
+            if (typeof(T) == typeof(long))
+            { value = (T)(object)Convert.ToInt64(v, CultureInfo.InvariantCulture); return true; }
+
+            if (typeof(T) == typeof(decimal))
+            { value = (T)(object)Convert.ToDecimal(v, CultureInfo.InvariantCulture); return true; }
+
+            if (typeof(T) == typeof(double))
+            { value = (T)(object)Convert.ToDouble(v, CultureInfo.InvariantCulture); return true; }
+
+            if (typeof(T) == typeof(float))
+            { value = (T)(object)Convert.ToSingle(v, CultureInfo.InvariantCulture); return true; }
+
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryLooseBool(object? v, out bool b)
+    {
+        b = false;
+        if (v is null) return false;
+
+        if (v is bool bb) { b = bb; return true; }
+
+        if (v is int i) { b = i != 0; return true; }
+        if (v is long l) { b = l != 0; return true; }
+        if (v is double d) { b = Math.Abs(d) > double.Epsilon; return true; }
+        if (v is float f) { b = Math.Abs(f) > float.Epsilon; return true; }
+        if (v is decimal m) { b = m != 0m; return true; }
+
+        if (v is string s)
+        {
+            s = s.Trim();
+            if (bool.TryParse(s, out var parsed)) { b = parsed; return true; }
+            if (int.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var i2)) { b = i2 != 0; return true; }
+        }
+
+        return false;
+    }
+
+    private static string NormalizeKey(string key) => (key ?? string.Empty).Trim();
+
+    private static string EnsureKey(string key)
+    {
+        var k = NormalizeKey(key);
+        if (k.Length == 0) throw new ArgumentException("Key cannot be null or empty.", nameof(key));
+        return k;
+    }
+}
+
+public sealed class ScriptExecutionContext
+{
+    public Guid ProcessId { get; }
+    public Guid TokenId { get; }
+    public BonyanVariables Variables { get; }
+
+    public ScriptExecutionContext(Guid processId, Guid tokenId, IDictionary<string, object?>? initialVariables = null)
+    {
+        ProcessId = processId;
+        TokenId = tokenId;
+        Variables = initialVariables is null ? new BonyanVariables() : new BonyanVariables(initialVariables);
     }
 }

@@ -10,6 +10,7 @@ using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 using ProcessDetailDto = Novin.Bpmn.Engine.Application.Queries.GetProcess.ProcessDto;
 using ProcessListDto = Novin.Bpmn.Engine.Application.Queries.GetProcesses.ProcessDto;
+using System.Text.Json.Nodes;
 
 namespace Novin.Bpmn.Engine.Api.Controllers
 {
@@ -272,7 +273,7 @@ namespace Novin.Bpmn.Engine.Api.Controllers
         [HttpGet("{processId}/variables")]
         [ProducesResponseType(typeof(Dictionary<string, string>), 200)]
         [ProducesResponseType(404)]
-        public async Task<ActionResult<Dictionary<string, string>>> GetProcessVariables(Guid processId)
+        public async Task<ActionResult<JsonObject>> GetProcessVariables(Guid processId)
         {
             try
             {
@@ -280,7 +281,7 @@ namespace Novin.Bpmn.Engine.Api.Controllers
                 if (process == null)
                     return NotFound(new { error = $"Process {processId} not found" });
 
-                return Ok(process.Variables);
+                return Ok(process.VariablesObject);
             }
             catch (Exception ex)
             {

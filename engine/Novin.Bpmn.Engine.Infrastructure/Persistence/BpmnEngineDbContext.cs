@@ -16,7 +16,7 @@ public class BpmnEngineDbContext : DbContext
     public DbSet<Process> Processes { get; set; }
     public DbSet<Token> Tokens { get; set; }
     public DbSet<Project> Projects { get; set; }
-
+ public DbSet<ExecutionFlowRecord> ExecutionFlowRecords => Set<ExecutionFlowRecord>();
     public DbSet<Incident> Incidents { get; set; }
     public DbSet<BoundaryEventSubscription> BoundaryEventSubscription { get; set; }
     public DbSet<NodeInstance> NodeInstances { get; set; }

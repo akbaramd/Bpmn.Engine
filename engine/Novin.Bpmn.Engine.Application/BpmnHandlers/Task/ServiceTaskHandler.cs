@@ -82,13 +82,6 @@ public sealed class ServiceTaskHandler : BpmnElementHandlerBase
             return ElementProcessResult.NoOp;
         }
 
-        // Trace/non-executable: pass-through (no job)
-        if (!token.IsExecutable)
-        {
-            token.Processed();
-            node.Complete();
-            return ElementProcessResult.Completed;
-        }
 
         // Resume path MUST be job-driven (never blindly complete)
         if (isResume)
@@ -98,7 +91,7 @@ public sealed class ServiceTaskHandler : BpmnElementHandlerBase
         // - Apply inputs once
         // - Ensure a single Job exists
         token.ClearLocalVariables();
-        _mapping.ApplyInputs(process, token, task, ctx);
+        _mapping.ApplyInputs(process, token,node, task, ctx);
 
         var existingJob = await FindJobAsync(token, node, elementId, ct);
 
@@ -172,7 +165,7 @@ public sealed class ServiceTaskHandler : BpmnElementHandlerBase
         {
             case JobStatus.Succeeded:
                 // Apply outputs once and complete
-                _mapping.ApplyOutputs(process, token, task, ctx);
+                _mapping.ApplyOutputs(process, token,node, task, ctx);
                 token.Processed();
                 node.Complete();
                 return ElementProcessResult.Completed;

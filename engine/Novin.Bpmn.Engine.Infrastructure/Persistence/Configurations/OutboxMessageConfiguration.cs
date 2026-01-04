@@ -42,25 +42,26 @@ public sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outbox
         entity.Property(x => x.PartitionKey).HasMaxLength(100);
         entity.Property(x => x.AggregateId);
 
-        // Indexes (SQL Server filters as in your original)
-        entity.HasIndex(e => new { e.Status, e.OccurredOnUtc, e.NextAttemptOnUtc })
-            .HasFilter("[Status] IN (0, 3)")
-            .HasDatabaseName("IX_OutboxMessages_Status_Occurred_NextAttempt");
+// Indexes (PostgreSQL partial indexes)
+entity.HasIndex(e => new { e.Status, e.OccurredOnUtc, e.NextAttemptOnUtc })
+    .HasFilter("\"Status\" IN (0, 3)")
+    .HasDatabaseName("IX_OutboxMessages_Status_Occurred_NextAttempt");
 
-        entity.HasIndex(e => new { e.Status, e.LockedUntilUtc })
-            .HasFilter("[Status] = 1 AND [LockedUntilUtc] IS NOT NULL")
-            .HasDatabaseName("IX_OutboxMessages_Status_LockedUntil");
+entity.HasIndex(e => new { e.Status, e.LockedUntilUtc })
+    .HasFilter("\"Status\" = 1 AND \"LockedUntilUtc\" IS NOT NULL")
+    .HasDatabaseName("IX_OutboxMessages_Status_LockedUntil");
 
-        entity.HasIndex(e => new { e.PartitionKey, e.Status, e.OccurredOnUtc })
-            .HasFilter("[PartitionKey] IS NOT NULL")
-            .HasDatabaseName("IX_OutboxMessages_PartitionKey_Status_Occurred");
+entity.HasIndex(e => new { e.PartitionKey, e.Status, e.OccurredOnUtc })
+    .HasFilter("\"PartitionKey\" IS NOT NULL")
+    .HasDatabaseName("IX_OutboxMessages_PartitionKey_Status_Occurred");
 
-        entity.HasIndex(e => e.CorrelationId)
-            .HasFilter("[CorrelationId] IS NOT NULL")
-            .HasDatabaseName("IX_OutboxMessages_CorrelationId");
+entity.HasIndex(e => e.CorrelationId)
+    .HasFilter("\"CorrelationId\" IS NOT NULL")
+    .HasDatabaseName("IX_OutboxMessages_CorrelationId");
 
-        entity.HasIndex(e => e.AggregateId)
-            .HasFilter("[AggregateId] IS NOT NULL")
-            .HasDatabaseName("IX_OutboxMessages_AggregateId");
+entity.HasIndex(e => e.AggregateId)
+    .HasFilter("\"AggregateId\" IS NOT NULL")
+    .HasDatabaseName("IX_OutboxMessages_AggregateId");
+
     }
 }

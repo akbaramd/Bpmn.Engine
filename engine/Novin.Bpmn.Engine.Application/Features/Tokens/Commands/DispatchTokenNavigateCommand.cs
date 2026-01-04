@@ -53,6 +53,10 @@ public sealed class DispatchNodeNavigateCommandHandler
                 // ✅ Deployment is loaded by BpmnRuntimeContextFactory via catalog (memory-first)
                 var ctx = await _ctxFactory.CreateAsync(process, ct);
 
+
+ 
+
+
                 var element = ctx.Model.GetElementById(process.ProcessBpmnId, token.CurrentElementId);
                 if (element is null)
                     throw new InvalidOperationException(

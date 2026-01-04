@@ -158,4 +158,9 @@ public class OutboxMessage : BaseEntity
     /// </summary>
     public bool IsLockExpired(DateTime currentTime) =>
         LockedUntilUtc.HasValue && LockedUntilUtc.Value < currentTime;
+
+    public void MarkAsDispatched(DateTime utcNow)
+    {
+         Status = OutboxMessageStatus.Dispatched;
+    }
 }

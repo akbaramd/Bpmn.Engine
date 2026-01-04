@@ -89,24 +89,21 @@ public sealed class BoundaryEventSubscriptionConfiguration : IEntityTypeConfigur
         entity.HasIndex(x => x.TokenId);
         entity.HasIndex(x => x.NodeInstanceId);
 
-        entity.HasIndex(x => new { x.ProcessId, x.State, x.Kind });
-        entity.HasIndex(x => new { x.State, x.DueAt })
-            .HasFilter("[DueAt] IS NOT NULL");
+     entity.HasIndex(x => new { x.State, x.DueAt })
+    .HasFilter("\"DueAt\" IS NOT NULL");
 
-        entity.HasIndex(x => new { x.ProcessId, x.HostElementId });
-        entity.HasIndex(x => new { x.ProcessId, x.BoundaryElementId });
+entity.HasIndex(x => new { x.ProcessId, x.ActivityInstanceId })
+    .HasFilter("\"ActivityInstanceId\" IS NOT NULL");
 
-        entity.HasIndex(x => new { x.ProcessId, x.ActivityInstanceId })
-            .HasFilter("[ActivityInstanceId] IS NOT NULL");
+entity.HasIndex(x => new { x.ProcessId, x.TokenScopeId })
+    .HasFilter("\"TokenScopeId\" IS NOT NULL");
 
-        entity.HasIndex(x => new { x.ProcessId, x.TokenScopeId })
-            .HasFilter("[TokenScopeId] IS NOT NULL");
+// Timer indexes for recovery (Kind/State are strings)
+entity.HasIndex(x => new { x.Kind, x.State, x.DueAt })
+    .HasFilter("\"Kind\" = 'Timer' AND \"State\" = 'Active' AND \"DueAt\" IS NOT NULL");
 
-        // Timer indexes for recovery
-        entity.HasIndex(x => new { x.Kind, x.State, x.DueAt })
-            .HasFilter("[Kind] = 'Timer' AND [State] = 'Active' AND [DueAt] IS NOT NULL");
-        entity.HasIndex(x => new { x.Kind, x.State, x.NextDueAtUtc })
-            .HasFilter("[Kind] = 'Timer' AND [State] = 'Active' AND [NextDueAtUtc] IS NOT NULL");
+entity.HasIndex(x => new { x.Kind, x.State, x.NextDueAtUtc })
+    .HasFilter("\"Kind\" = 'Timer' AND \"State\" = 'Active' AND \"NextDueAtUtc\" IS NOT NULL");
 
         entity.Ignore("DomainEvents");
     }

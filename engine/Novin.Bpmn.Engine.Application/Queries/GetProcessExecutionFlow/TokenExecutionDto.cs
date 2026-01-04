@@ -5,8 +5,8 @@
 /// </summary>
 public sealed class TokenExecutionDto
 {
-    public Guid TokenId { get; init; }
-    public DateTime FirstExecutedAt { get; init; }
-    public DateTime? LastExecutedAt { get; init; }
-    public int ExecutionCount { get; init; }
+    public Guid TokenId { get; set; }
+    public DateTime FirstExecutedAt { get; set; }
+    public DateTime? LastExecutedAt { get; set; }
+    public int ExecutionCount { get; set; }
 }

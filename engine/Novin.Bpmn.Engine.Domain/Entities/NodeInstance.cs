@@ -1,5 +1,7 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Novin.Bpmn.Engine.Domain.Common;
+using Novin.Bpmn.Engine.Domain.ValueObjects;
 
 namespace Novin.Bpmn.Engine.Domain.Entities;
 
@@ -21,14 +23,15 @@ public enum NodeState
 /// Created ONLY when the token is executable (this rule should be enforced by application service).
 /// </summary>
 
+// Domain/Entities/NodeInstance.cs  (final variables implementation: single JSON blob, JsonNode per key, Zeebe-like)
+
+
 public sealed class NodeInstance : BaseAggregateRoot
 {
     public Guid ProcessId { get; private set; }
     public Guid TokenId { get; private set; }
 
-    /// <summary>BPMN element id (e.g., "UserTask_1")</summary>
     public string ElementId { get; private set; } = default!;
-
     public NodeState State { get; private set; }
 
     public DateTime CreatedAtUtc { get; private set; }
@@ -37,25 +40,27 @@ public sealed class NodeInstance : BaseAggregateRoot
 
     public Guid? ScopeId { get; private set; }
     public Guid? ActivityInstanceId { get; private set; }
-    
+
     private readonly List<string> _arrivedViaFlowIds = new();
     public IReadOnlyList<string> ArrivedViaFlowIds => _arrivedViaFlowIds.AsReadOnly();
 
-    /// <summary>Job correlation if this node waits for external/user completion</summary>
     public Guid? WorkerId { get; private set; }
     public Guid? UserTaskId { get; private set; }
 
-    /// <summary>Failure detail (revealed to ops/UI if needed)</summary>
     public string? ErrorMessage { get; private set; }
 
-    /// <summary>
-    /// Execution flag (mirrors Token.IsExecutable intent).
-    /// If false => aggregate ignores all transitions/changes (no auto-skip).
-    /// </summary>
     public bool IsExecutable { get; private set; }
 
-    private readonly Dictionary<string, string> _variables = new(StringComparer.Ordinal);
-    public IReadOnlyDictionary<string, string> Variables => _variables;
+    // =========================
+    // Variables (SINGLE JSON)
+    // =========================
+    private string _variablesJson = "{}";
+    private JsonObject? _variablesObj;
+    private bool _variablesLoaded;
+
+    public string VariablesJson => _variablesJson;
+
+    public JsonObject VariablesObject => GetVarsClone();
 
     private NodeInstance() { } // EF
 
@@ -78,15 +83,13 @@ public sealed class NodeInstance : BaseAggregateRoot
 
         ScopeId = scopeId;
         ActivityInstanceId = activityInstanceId;
-        
+
         if (arrivedViaFlowIds != null)
         {
             foreach (var flowId in arrivedViaFlowIds)
             {
                 if (!string.IsNullOrWhiteSpace(flowId))
-                {
                     _arrivedViaFlowIds.Add(flowId.Trim());
-                }
             }
         }
 
@@ -94,6 +97,10 @@ public sealed class NodeInstance : BaseAggregateRoot
 
         State = NodeState.Created;
         CreatedAtUtc = DateTime.UtcNow;
+
+        _variablesJson = "{}";
+        _variablesLoaded = false;
+        _variablesObj = null;
 
         AddDomainEvent(new NodeCreatedDomainEvent(
             NodeId: Id,
@@ -108,17 +115,11 @@ public sealed class NodeInstance : BaseAggregateRoot
         ));
     }
 
-    /// <summary>
-    /// Make this node non-executable. Does NOT auto-skip and does NOT change State.
-    /// After this, all operations become no-ops.
-    /// </summary>
     public void MarkNonExecutable(string? reason = null)
     {
         if (!IsExecutable) return;
 
         IsExecutable = false;
-
-        // Optional cleanup: avoid stale correlation
         WorkerId = null;
         UserTaskId = null;
     }
@@ -200,6 +201,7 @@ public sealed class NodeInstance : BaseAggregateRoot
         var oldWorkerId = WorkerId;
         WorkerId = null;
         UserTaskId = null;
+
         State = NodeState.Processing;
 
         AddDomainEvent(new NodeResumedDomainEvent(
@@ -256,7 +258,7 @@ public sealed class NodeInstance : BaseAggregateRoot
 
     public void Skip(string? reason = null)
     {
-        if (!IsExecutable) return; // <- important: non-executable does not even generate skipped
+        if (!IsExecutable) return;
         if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
 
         State = NodeState.Skipped;
@@ -272,66 +274,187 @@ public sealed class NodeInstance : BaseAggregateRoot
         ));
     }
 
+    public void WaitForJoin()
+    {
+        if (!IsExecutable) return;
+        if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
+
+        State = NodeState.Waiting;
+    }
+
+    // =========================
+    // Variables API
+    // =========================
+
+    public bool HasVariable(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return false;
+        var k = NormalizeKey(key);
+        return Vars().ContainsKey(k);
+    }
+
+    public JsonNode? GetVariableNode(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return null;
+        var k = NormalizeKey(key);
+        var vars = Vars();
+        return vars.TryGetPropertyValue(k, out var node) ? node : null;
+    }
+
+    public bool TryGetVariable<T>(string key, out T? value)
+    {
+        value = default;
+        var node = GetVariableNode(key);
+        if (node is null) return false;
+
+        try
+        {
+            value = node.Deserialize<T>(JsonVariableCodec.Options);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public T? GetVariable<T>(string key, T? defaultValue = default)
+        => TryGetVariable<T>(key, out var v) ? v : defaultValue;
+
+    /// <summary>
+    /// Upsert variable (JSON null is allowed; it does NOT remove the key).
+    /// </summary>
     public void SetVariable(string key, object? value)
     {
         if (!IsExecutable) return;
+        if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
 
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Key is required.", nameof(key));
+        var k = EnsureKey(key);
+        var vars = Vars();
 
-        key = key.Trim();
+        var node = JsonVariableCodec.ToNode(value);
+        var newJson = JsonVariableCodec.ToStableJson(node);
 
-        if (value is null)
+        if (vars.TryGetPropertyValue(k, out var oldNode))
         {
-            if (_variables.Remove(key))
-                AddDomainEvent(new NodeVariableRemovedDomainEvent(
-                    NodeId: Id,
-                    ProcessId: ProcessId,
-                    TokenId: TokenId,
-                    ElementId: ElementId,
-                    Key: key,
-                    OccurredAtUtc: DateTime.UtcNow
-                ));
-
-            return;
+            var oldJson = JsonVariableCodec.ToStableJson(oldNode);
+            if (string.Equals(oldJson, newJson, StringComparison.Ordinal))
+                return;
         }
 
-        var serialized = SerializeValue(value);
-        _variables[key] = serialized;
+        vars[k] = node;
+        FlushVars(vars);
 
         AddDomainEvent(new NodeVariableSetDomainEvent(
             NodeId: Id,
             ProcessId: ProcessId,
             TokenId: TokenId,
             ElementId: ElementId,
-            Key: key,
-            Value: serialized,
+            Key: k,
+            Value: newJson,
             OccurredAtUtc: DateTime.UtcNow
         ));
     }
 
-    public bool TryGetVariable(string key, out string? value)
+    /// <summary>
+    /// Remove variable key completely.
+    /// </summary>
+    public void RemoveVariable(string key)
     {
-        value = null;
-        if (string.IsNullOrWhiteSpace(key)) return false;
-        return _variables.TryGetValue(key.Trim(), out value);
+        if (!IsExecutable) return;
+        if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
+
+        if (string.IsNullOrWhiteSpace(key)) return;
+        var k = NormalizeKey(key);
+
+        var vars = Vars();
+        if (!vars.Remove(k))
+            return;
+
+        FlushVars(vars);
+
+        AddDomainEvent(new NodeVariableRemovedDomainEvent(
+            NodeId: Id,
+            ProcessId: ProcessId,
+            TokenId: TokenId,
+            ElementId: ElementId,
+            Key: k,
+            OccurredAtUtc: DateTime.UtcNow
+        ));
     }
-
-    private static string SerializeValue(object value)
+    public void ApplyVariablesPatch(IReadOnlyDictionary<string, JsonNode?> rawTokenVars)
     {
-        if (value is string s) return s;
+        if (!IsExecutable) return;
+        if (rawTokenVars is null || rawTokenVars.Count == 0) return;
 
-        return JsonSerializer.Serialize(value, new JsonSerializerOptions
+        var patch = VariablesPatch.UpsertAllFromNodes(rawTokenVars);
+        ApplyVariablesPatch(patch);
+    }
+    public void ApplyVariablesPatch(VariablesPatch patch)
+    {
+        if (!IsExecutable) return;
+        if (State is NodeState.Completed or NodeState.Failed or NodeState.Skipped) return;
+
+        if (patch is null) throw new ArgumentNullException(nameof(patch));
+        if (!patch.HasChanges) return;
+
+        var vars = Vars();
+
+        // removals
+        foreach (var raw in patch.Removals ?? Array.Empty<string>())
         {
-            WriteIndented = false
-        });
+            var k = NormalizeKey(raw);
+            if (k.Length == 0) continue;
+            vars.Remove(k);
+        }
+
+        // upserts (already JsonNode?)
+        foreach (var kv in patch.Upserts ?? new Dictionary<string, JsonNode?>(StringComparer.Ordinal))
+        {
+            var k = NormalizeKey(kv.Key);
+            if (k.Length == 0) continue;
+            vars[k] = kv.Value;
+        }
+
+        FlushVars(vars);
     }
 
-    public void WaitForJoin()
+    // ---- internals ----
+
+    private JsonObject Vars()
     {
-        State = NodeState.Waiting;
+        if (_variablesLoaded && _variablesObj is not null)
+            return _variablesObj;
+
+        _variablesObj = JsonVariableCodec.ParseObjectOrEmpty(_variablesJson);
+        _variablesLoaded = true;
+        return _variablesObj;
+    }
+
+    private void FlushVars(JsonObject vars)
+    {
+        _variablesObj = vars;
+        _variablesLoaded = true;
+        _variablesJson = vars.ToJsonString(JsonVariableCodec.Options);
+    }
+
+    private JsonObject GetVarsClone()
+    {
+        var vars = Vars();
+        var json = vars.ToJsonString(JsonVariableCodec.Options);
+        return JsonVariableCodec.ParseObjectOrEmpty(json);
+    }
+
+    private static string NormalizeKey(string key) => key.Trim();
+
+    private static string EnsureKey(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Key is required.", nameof(key));
+        return key.Trim();
     }
 }
+
 
 
 // =======================

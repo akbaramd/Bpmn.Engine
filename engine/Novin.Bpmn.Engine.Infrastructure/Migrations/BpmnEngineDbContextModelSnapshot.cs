@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Novin.Bpmn.Engine.Infrastructure.Persistence;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -15,102 +16,106 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "8.0.0");
+            modelBuilder
+                .HasAnnotation("ProductVersion", "8.0.0")
+                .HasAnnotation("Relational:MaxIdentifierLength", 63);
+
+            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("BoundaryEventSubscription", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("ActivityInstanceId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<string>("BoundaryElementId")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime?>("CanceledAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("CorrelationKey")
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTimeOffset?>("DueAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ErrorCode")
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("ExternalJobKey")
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<int>("FireCount")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("integer")
                         .HasDefaultValue(0);
 
                     b.Property<string>("HostElementId")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<bool>("IsInterrupting")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(32)");
 
                     b.Property<DateTime?>("LastFiredAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Meta")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<DateTimeOffset?>("NextDueAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("NodeInstanceId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("ProcessId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("TimerExpression")
                         .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<string>("TimerType")
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(32)");
 
                     b.Property<Guid>("TokenId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("TokenScopeId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("TriggeredAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -121,25 +126,19 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                     b.HasIndex("TokenId");
 
                     b.HasIndex("ProcessId", "ActivityInstanceId")
-                        .HasFilter("[ActivityInstanceId] IS NOT NULL");
-
-                    b.HasIndex("ProcessId", "BoundaryElementId");
-
-                    b.HasIndex("ProcessId", "HostElementId");
+                        .HasFilter("\"ActivityInstanceId\" IS NOT NULL");
 
                     b.HasIndex("ProcessId", "TokenScopeId")
-                        .HasFilter("[TokenScopeId] IS NOT NULL");
+                        .HasFilter("\"TokenScopeId\" IS NOT NULL");
 
                     b.HasIndex("State", "DueAt")
-                        .HasFilter("[DueAt] IS NOT NULL");
+                        .HasFilter("\"DueAt\" IS NOT NULL");
 
                     b.HasIndex("Kind", "State", "DueAt")
-                        .HasFilter("[Kind] = 'Timer' AND [State] = 'Active' AND [DueAt] IS NOT NULL");
+                        .HasFilter("\"Kind\" = 'Timer' AND \"State\" = 'Active' AND \"DueAt\" IS NOT NULL");
 
                     b.HasIndex("Kind", "State", "NextDueAtUtc")
-                        .HasFilter("[Kind] = 'Timer' AND [State] = 'Active' AND [NextDueAtUtc] IS NOT NULL");
-
-                    b.HasIndex("ProcessId", "State", "Kind");
+                        .HasFilter("\"Kind\" = 'Timer' AND \"State\" = 'Active' AND \"NextDueAtUtc\" IS NOT NULL");
 
                     b.ToTable("BoundaryEventSubscriptions", (string)null);
                 });
@@ -148,77 +147,77 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Cause")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(64)");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ElementId")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("ErrorCode")
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("LastOccurredAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Message")
                         .IsRequired()
                         .HasMaxLength(4000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(4000)");
 
                     b.Property<Guid?>("NodeInstanceId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Occurrences")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<Guid>("ProcessId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("ResolvedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("RetryCount")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("integer");
 
                     b.Property<string>("Scope")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(32)");
 
                     b.Property<Guid?>("TokenId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("WorkerId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
                     b.HasIndex("NodeInstanceId")
-                        .HasFilter("[NodeInstanceId] IS NOT NULL");
+                        .HasFilter("\"NodeInstanceId\" IS NOT NULL");
 
                     b.HasIndex("ProcessId");
 
                     b.HasIndex("TokenId")
-                        .HasFilter("[TokenId] IS NOT NULL");
+                        .HasFilter("\"TokenId\" IS NOT NULL");
 
                     b.HasIndex("WorkerId")
-                        .HasFilter("[WorkerId] IS NOT NULL");
+                        .HasFilter("\"WorkerId\" IS NOT NULL");
 
                     b.HasIndex("ProcessId", "Status", "LastOccurredAtUtc");
 
@@ -229,57 +228,57 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<int>("Attempts")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("integer");
 
                     b.Property<string>("ClientId")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(256)");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ElementId")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("ErrorMessage")
                         .HasMaxLength(4000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(4000)");
 
                     b.Property<string>("Implementation")
                         .IsRequired()
                         .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<DateTime?>("LeasedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("LockId")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(256)");
 
                     b.Property<DateTime?>("LockedUntilUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("NextAttemptAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("NodeInstanceId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Payload")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<Guid>("ProcessId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Result")
                         .IsRequired()
@@ -288,23 +287,23 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("BLOB");
+                        .HasColumnType("bytea");
 
                     b.Property<DateTime?>("StartedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("TaskName")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<Guid>("TokenId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -333,105 +332,176 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<string>("BpmnHash")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("text");
 
                     b.Property<string>("BpmnXml")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("DeployedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("DeploymentKey")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Label")
                         .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<Guid>("ProjectId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Version")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
                     b.ToTable("Deployments");
                 });
 
-            modelBuilder.Entity("Novin.Bpmn.Engine.Domain.Entities.NodeInstance", b =>
+            modelBuilder.Entity("Novin.Bpmn.Engine.Domain.Entities.ExecutionFlowRecord", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("ActivityInstanceId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EventKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("FromElementId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Position")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Position"));
+
+                    b.Property<Guid>("ProcessId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ScopeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ToElementId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("TokenId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("_viaFlowIds")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ViaFlowIds");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ExecutionFlow_EventKey");
+
+                    b.HasIndex("ProcessId", "OccurredAtUtc")
+                        .HasDatabaseName("IX_ExecutionFlow_Process_OccurredAtUtc");
+
+                    b.HasIndex("ProcessId", "Position")
+                        .HasDatabaseName("IX_ExecutionFlow_Process_Position");
+
+                    b.HasIndex("ProcessId", "ToElementId")
+                        .HasDatabaseName("IX_ExecutionFlow_Process_ToElement");
+
+                    b.HasIndex("TokenId", "Position")
+                        .HasDatabaseName("IX_ExecutionFlow_Token_Position");
+
+                    b.HasIndex("ProcessId", "ScopeId", "Position")
+                        .HasDatabaseName("IX_ExecutionFlow_Process_Scope_Position")
+                        .HasFilter("\"ScopeId\" IS NOT NULL");
+
+                    b.ToTable("ExecutionFlowRecords", (string)null);
+                });
+
+            modelBuilder.Entity("Novin.Bpmn.Engine.Domain.Entities.NodeInstance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActivityInstanceId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ElementId")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("ErrorMessage")
                         .HasMaxLength(4000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(4000)");
 
                     b.Property<bool>("IsExecutable")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("boolean");
 
                     b.Property<Guid>("ProcessId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("ScopeId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("StartedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(32)");
 
                     b.Property<Guid>("TokenId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("UserTaskId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("WorkerId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<string>("_arrivedViaFlowIds")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("ArrivedViaFlowIds");
 
-                    b.Property<string>("_variables")
+                    b.Property<string>("_variablesJson")
                         .IsRequired()
                         .HasColumnType("text")
-                        .HasColumnName("Variables");
+                        .HasColumnName("VariablesJson");
 
                     b.HasKey("Id");
 
@@ -439,15 +509,13 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                         .HasDatabaseName("IX_NodeInstance_TokenId");
 
                     b.HasIndex("ProcessId", "ActivityInstanceId")
-                        .HasDatabaseName("IX_NodeInstance_Process_ActivityInstance")
-                        .HasFilter("[ActivityInstanceId] IS NOT NULL");
+                        .HasDatabaseName("IX_NodeInstance_Process_ActivityInstance");
 
                     b.HasIndex("ProcessId", "ElementId")
                         .HasDatabaseName("IX_NodeInstance_Process_Element");
 
                     b.HasIndex("ProcessId", "ScopeId")
-                        .HasDatabaseName("IX_NodeInstance_Process_Scope")
-                        .HasFilter("[ScopeId] IS NOT NULL");
+                        .HasDatabaseName("IX_NodeInstance_Process_Scope");
 
                     b.HasIndex("ProcessId", "State")
                         .HasDatabaseName("IX_NodeInstance_Process_State");
@@ -456,8 +524,7 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                         .HasDatabaseName("IX_NodeInstance_TokenId_State");
 
                     b.HasIndex("WorkerId", "State")
-                        .HasDatabaseName("IX_NodeInstance_WorkerId_State")
-                        .HasFilter("[WorkerId] IS NOT NULL");
+                        .HasDatabaseName("IX_NodeInstance_WorkerId_State");
 
                     b.HasIndex("ProcessId", "ElementId", "CreatedAtUtc")
                         .HasDatabaseName("IX_NodeInstance_Process_Element_Created");
@@ -472,76 +539,76 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("AggregateId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<int>("Attempts")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("integer");
 
                     b.Property<Guid?>("CorrelationId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<string>("LastError")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("text");
 
                     b.Property<Guid?>("LockId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("LockedUntilUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("MessageName")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("MessageType")
                         .HasMaxLength(400)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(400)");
 
                     b.Property<DateTime?>("NextAttemptOnUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("OccurredOnUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("PartitionKey")
                         .HasMaxLength(100)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("Payload")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("ProcessedOnUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<byte>("Status")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("smallint");
 
                     b.HasKey("Id");
 
                     b.HasIndex("AggregateId")
                         .HasDatabaseName("IX_OutboxMessages_AggregateId")
-                        .HasFilter("[AggregateId] IS NOT NULL");
+                        .HasFilter("\"AggregateId\" IS NOT NULL");
 
                     b.HasIndex("CorrelationId")
                         .HasDatabaseName("IX_OutboxMessages_CorrelationId")
-                        .HasFilter("[CorrelationId] IS NOT NULL");
+                        .HasFilter("\"CorrelationId\" IS NOT NULL");
 
                     b.HasIndex("Status", "LockedUntilUtc")
                         .HasDatabaseName("IX_OutboxMessages_Status_LockedUntil")
-                        .HasFilter("[Status] = 1 AND [LockedUntilUtc] IS NOT NULL");
+                        .HasFilter("\"Status\" = 1 AND \"LockedUntilUtc\" IS NOT NULL");
 
                     b.HasIndex("PartitionKey", "Status", "OccurredOnUtc")
                         .HasDatabaseName("IX_OutboxMessages_PartitionKey_Status_Occurred")
-                        .HasFilter("[PartitionKey] IS NOT NULL");
+                        .HasFilter("\"PartitionKey\" IS NOT NULL");
 
                     b.HasIndex("Status", "OccurredOnUtc", "NextAttemptOnUtc")
                         .HasDatabaseName("IX_OutboxMessages_Status_Occurred_NextAttempt")
-                        .HasFilter("[Status] IN (0, 3)");
+                        .HasFilter("\"Status\" IN (0, 3)");
 
                     b.ToTable("OutboxMessages", (string)null);
                 });
@@ -549,56 +616,59 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
             modelBuilder.Entity("Novin.Bpmn.Engine.Domain.Entities.Process", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<string>("BusinessKey")
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("DeploymentId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("FailedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("FailureReason")
                         .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("ProcessBpmnId")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<Guid>("ProjectId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("StartedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(32)");
 
                     b.Property<DateTime?>("TerminatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("TerminationReason")
                         .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("_metadata")
+                        .HasColumnType("text")
+                        .HasColumnName("Metadata");
 
                     b.Property<string>("_nodeInstanceIds")
                         .IsRequired()
@@ -610,10 +680,10 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("TokenIds");
 
-                    b.Property<string>("_variables")
+                    b.Property<string>("_variablesJson")
                         .IsRequired()
                         .HasColumnType("text")
-                        .HasColumnName("Variables");
+                        .HasColumnName("VariablesJson");
 
                     b.HasKey("Id");
 
@@ -623,8 +693,7 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
 
                     b.HasIndex("DeploymentId", "ProcessBpmnId");
 
-                    b.HasIndex("ProjectId", "BusinessKey")
-                        .HasFilter("[BusinessKey] IS NOT NULL");
+                    b.HasIndex("ProjectId", "BusinessKey");
 
                     b.HasIndex("ProjectId", "CreatedAtUtc");
 
@@ -637,30 +706,30 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Key")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
@@ -674,46 +743,48 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("ActivatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("ActivityInstanceId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("CurrentElementId")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsExecutable")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<Guid?>("ParentTokenId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("ProcessId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("ScopeId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("_arrivedViaFlowIds")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("ArrivedViaFlowIds");
+
+                    b.Property<string>("_scopeStack")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ScopeStack");
 
                     b.Property<string>("_variables")
                         .IsRequired()
@@ -724,15 +795,15 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
 
                     b.HasIndex("ParentTokenId")
                         .HasDatabaseName("IX_Token_ParentTokenId")
-                        .HasFilter("[ParentTokenId] IS NOT NULL");
+                        .HasFilter("\"ParentTokenId\" IS NOT NULL");
 
                     b.HasIndex("ProcessId", "ActivityInstanceId")
                         .HasDatabaseName("IX_Token_Process_ActivityInstance")
-                        .HasFilter("[ActivityInstanceId] IS NOT NULL");
+                        .HasFilter("\"ActivityInstanceId\" IS NOT NULL");
 
                     b.HasIndex("ProcessId", "ScopeId")
                         .HasDatabaseName("IX_Token_Process_Scope")
-                        .HasFilter("[ScopeId] IS NOT NULL");
+                        .HasFilter("\"ScopeId\" IS NOT NULL");
 
                     b.HasIndex("ProcessId", "State")
                         .HasDatabaseName("IX_Token_Process_State");
@@ -742,7 +813,7 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
 
                     b.HasIndex("ScopeId", "CurrentElementId", "State")
                         .HasDatabaseName("IX_Token_Scope_Element_State")
-                        .HasFilter("[ScopeId] IS NOT NULL");
+                        .HasFilter("\"ScopeId\" IS NOT NULL");
 
                     b.ToTable("Tokens", (string)null);
                 });
@@ -751,62 +822,62 @@ namespace Novin.Bpmn.Engine.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<string>("CancelReason")
                         .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<DateTime?>("CanceledAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("ClaimedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ClaimedByUserId")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(256)");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("CompletedByUserId")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(256)");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ElementId")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("Metadata")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<Guid?>("NodeInstanceId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("ProcessId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("StartedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("TaskName")
                         .IsRequired()
                         .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<Guid>("TokenId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Variables")
                         .IsRequired()

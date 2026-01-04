@@ -1,0 +1,8 @@
+entity.HasIndex(x => x.NodeInstanceId)
+    .HasFilter("\"NodeInstanceId\" IS NOT NULL");
+
+entity.HasIndex(x => x.TokenId)
+    .HasFilter("\"TokenId\" IS NOT NULL");
+
+entity.HasIndex(x => x.WorkerId)
+    .HasFilter("\"WorkerId\" IS NOT NULL");

@@ -10,19 +10,18 @@ using System.Threading.Tasks;
 namespace Novin.Bpmn.Engine.Application.Services;
 
 /// <summary>
-/// Gateway split/fork service (production-ready).
+/// Gateway routing service (Zeebe-inspired structured execution):
+/// - Only forks when > 1 branches are actually taken.
+/// - XOR/OR with a single taken flow routes the SAME token (no child tokens).
+/// - AND forks all outgoing.
+/// - OR forks chosenMany (>1) else routes single/default.
+/// - EventBasedGateway is not handled here (subscription-based).
 ///
-/// Responsibilities:
-/// - Split only when outgoing > 1 (fork candidate)
-/// - Determine executability for each outgoing flow (AND/XOR/OR)
-/// - Create ScopeId for correlation at join
-/// - Persist expected counts on Process variables (by ScopeId)
-/// - Consume parent token and fork children via ITokenForkService
-///
-/// Policies:
-/// - Non-executable tokens MUST NOT fork (they must use default navigation)
-/// - EventBasedGateway is NOT handled here (must be subscription-based) => fail fast
-/// - Structural issues (missing targetRef) => fail token and mark split as handled
+/// IMPORTANT (Zeebe-like):
+/// - When forking, we create a NEW scopeId and PUSH it on parent token.
+/// - Children MUST receive the SAME scope snapshot (parent.ScopeStack) and ParentTokenId=parent.Id.
+///   (This is responsibility of ITokenForkService / CreateTokenCommand.)
+/// - ExpectedCount is stored in Process.Metadata keyed by scopeId.
 /// </summary>
 public sealed class GatewaySplitService : IGatewaySplitService
 {
@@ -52,95 +51,114 @@ public sealed class GatewaySplitService : IGatewaySplitService
         if (gateway is null) throw new ArgumentNullException(nameof(gateway));
         if (ctx is null) throw new ArgumentNullException(nameof(ctx));
 
-        // Split candidates only (outgoing > 1)
-        var outgoingRaw = ctx.Model.GetOutgoingSequenceFlows(ctx.BpmnProcessId, token.CurrentElementId);
+        var gwId = gateway.id ?? throw new InvalidOperationException("Gateway must have id.");
+
+        // Only split candidates when outgoing > 1
+        var outgoingRaw = ctx.Model.GetOutgoingSequenceFlows(ctx.BpmnProcessId, gwId);
         if (outgoingRaw is null || outgoingRaw.Count <= 1)
             return false;
 
-        // Must be Active
+        // Must be Active (if not, ignore but mark handled to avoid retry storms)
         if (token.State != TokenState.Active)
         {
-            _logger.LogWarning(
-                "[SPLIT] Ignored (state != Active). State={State} TokenId={TokenId} Gw={Gw}",
-                token.State, token.Id, gateway.id);
-            return true; // handled: do not retry/fallback
+            _logger.LogDebug(
+                "[SPLIT:SKIP] State!=Active. Gw={Gw} Type={Type} Token={Token} State={State} Scope={Scope}",
+                gwId, gateway.GetType().Name, token.Id, token.State, token.ScopeId);
+            return true;
         }
 
-        // Policy: trace/non-executable tokens never fork
-        if (!token.IsExecutable)
-        {
-            _logger.LogDebug("[SPLIT] Skipped (non-executable). TokenId={TokenId} Gw={Gw}", token.Id, gateway.id);
-            return false; // allow default navigation
-        }
-
-        // Event-based must be implemented with subscriptions, not split-service
+        // Event-based must be implemented with subscriptions
         if (gateway is BpmnEventBasedGateway)
         {
-            token.Fail($"EventBasedGateway '{gateway.id}' is not supported by GatewaySplitService (requires subscriptions).");
-            _logger.LogError("[SPLIT] EventBasedGateway not supported. TokenId={TokenId} Gw={Gw}", token.Id, gateway.id);
-            return true; // handled by failing token
+            token.Fail($"EventBasedGateway '{gwId}' is not supported here (requires subscriptions).");
+            _logger.LogError("[SPLIT:FAIL] EventBasedGateway not supported. Gw={Gw} Token={Token}", gwId, token.Id);
+            return true;
         }
 
-        // Remove duplicates + structural validation
+        // Validate + deduplicate outgoing
         var outgoingAll = DeduplicateAndValidate(outgoingRaw, gateway, token);
         if (token.State == TokenState.Failed)
-            return true; // handled by failing token
+            return true;
 
         if (outgoingAll.Count <= 1)
             return false;
 
-        // Decide executability
-        var (execPredicate, expectedExec) = BuildExecutability(process, token, gateway, outgoingAll);
+        // Choose flows according to gateway semantics
+        var flowsChosen = DetermineFlows(process, token, gateway, outgoingAll);
 
-        // Normalize expectedExec
-        if (expectedExec < 0) expectedExec = 0;
-        if (expectedExec > outgoingAll.Count) expectedExec = outgoingAll.Count;
+        if (token.State == TokenState.Failed)
+            return true;
 
-        // Strict safety: executable parent must create at least one executable branch.
-        // Otherwise the process would dead-end or cause surprising behavior.
-        if (expectedExec == 0)
+        if (flowsChosen.Count == 0)
         {
-            token.Fail($"Gateway '{gateway.id}' produced 0 executable outgoing flows (no condition matched and no default).");
-            _logger.LogError("[SPLIT] 0 executable branches. TokenId={TokenId} Gw={Gw}", token.Id, gateway.id);
+            token.Fail($"Gateway '{gwId}' produced 0 outgoing flows (no condition matched and no default).");
+            _logger.LogError("[SPLIT:FAIL] 0 flows chosen. Gw={Gw} Token={Token}", gwId, token.Id);
             return true;
         }
 
+        // ✅ If only 1 flow => route SAME token (no fork)
+        if (flowsChosen.Count == 1)
+        {
+            var f = flowsChosen[0];
+            if (string.IsNullOrWhiteSpace(f.targetRef))
+            {
+                token.Fail($"Gateway '{gwId}' has chosen flow with empty targetRef. Flow={FlowKey(f)}");
+                _logger.LogError("[SPLIT:FAIL] Empty targetRef. Gw={Gw} Token={Token} Flow={Flow}", gwId, token.Id, FlowKey(f));
+                return true;
+            }
+
+            _logger.LogInformation(
+                "[ROUTE] Gw={Gw} Type={Type} Token={Token} Flow={Flow} Target={Target} Scope={Scope}",
+                gwId, gateway.GetType().Name, token.Id, FlowKey(f), f.targetRef, token.ScopeId);
+
+            token.MoveTo(f.targetRef!, skipProcess: false, FlowKey(f));
+            return true;
+        }
+
+        // ✅ Real fork (2+ branches)
         var scopeId = Guid.NewGuid();
 
         _logger.LogInformation(
-            "[SPLIT] Gw={Gw} Type={Type} TokenId={TokenId} ScopeId={ScopeId} Total={Total} ExecExpected={ExecExpected}",
-            gateway.id, gateway.GetType().Name, token.Id, scopeId, outgoingAll.Count, expectedExec);
+            "[FORK] Gw={Gw} Type={Type} Token={Token} NewScope={Scope} OutgoingTotal={Total} ForkCount={ForkCount} PrevScope={PrevScope}",
+            gwId, gateway.GetType().Name, token.Id, scopeId, outgoingAll.Count, flowsChosen.Count, token.ScopeId);
 
-        // ✅ Policy: Parent token is Forked (not Terminated) - it will be reactivated when children merge
-        // Parent token remains in process and will be reactivated after all children merge
-        token.Fork(outgoingAll.Count, $"Split gateway '{gateway.id}' forked {outgoingAll.Count} branch token(s).");
+        // Persist join expectations (scope-correlated)
+        PersistJoinExpectations(process, scopeId, gateway, flowsChosen);
 
-        // Fork children: MUST set child.ScopeId = scopeId and set IsExecutable per flow
+        // Park parent waiting for join:
+        // Zeebe-like: PUSH scope on parent
+        token.SetScope(scopeId); // alias for PushScope(scopeId)
+        token.Fork(flowsChosen.Count, $"Gateway '{gwId}' forked {flowsChosen.Count} branch token(s).");
+
+        // Fork children:
+        // IMPORTANT: ForkChildrenAsync MUST create child tokens with:
+        // - ParentTokenId = token.Id
+        // - ScopeStackSnapshot = token.ScopeStack (includes scopeId on top)
+        // - ArrivedViaFlowId = each chosen flow key
         await _fork.ForkChildrenAsync(
             process: process,
             parent: token,
-            outgoing: outgoingAll,
+            outgoing: flowsChosen,
             scopeId: scopeId,
-            isExecutableForFlow: execPredicate,
             ctx: ctx,
             ct: ct);
 
         return true;
     }
 
-    // -------------------- Executability rules --------------------
+    // -------------------- Flow selection rules --------------------
 
-    private (Func<BpmnSequenceFlow, bool> predicate, int expectedExec) BuildExecutability(
+    private List<BpmnSequenceFlow> DetermineFlows(
         Process process,
         Token token,
         BpmnGateway gateway,
         List<BpmnSequenceFlow> outgoingAll)
     {
-        // AND split: all branches executable
+        // AND split: all branches
         if (gateway is BpmnParallelGateway)
-            return (static _ => true, expectedExec: outgoingAll.Count);
+            return outgoingAll;
 
-        // XOR split: exactly one branch executable
+        // XOR split: exactly one branch
         if (gateway is BpmnExclusiveGateway)
         {
             var defaultId = GetGatewayDefaultFlowId(gateway);
@@ -148,24 +166,22 @@ public sealed class GatewaySplitService : IGatewaySplitService
             var chosen =
                 _selector.ChooseOne(outgoingAll, gateway, process, token)
                 ?? ResolveDefaultFlow(outgoingAll, defaultId)
-                ?? outgoingAll[0]; // deterministic fallback
+                ?? outgoingAll[0];
 
-            var chosenKey = FlowKey(chosen);
-            return (f => StringComparer.OrdinalIgnoreCase.Equals(FlowKey(f), chosenKey), expectedExec: 1);
+            return new List<BpmnSequenceFlow>(1) { chosen };
         }
 
-        // OR split: one-or-more branches executable
+        // OR split: one-or-more branches
         if (gateway is BpmnInclusiveGateway)
         {
             var defaultId = GetGatewayDefaultFlowId(gateway);
             var hasAnyCondition = HasAnyCondition(outgoingAll);
 
-            // If no conditions exist at all, treat as all executable (common interpretation).
-            // NOTE: If you want stricter BPMN validation, replace with "default-only or fail".
+            // If no conditions exist => ALL flows (common BPMN usage)
             if (!hasAnyCondition)
             {
-                _logger.LogWarning("[SPLIT] OR: no conditions => ALL executable. Gw={Gw}", gateway.id);
-                return (static _ => true, expectedExec: outgoingAll.Count);
+                _logger.LogWarning("[SPLIT] OR: no conditions => ALL flows. Gw={Gw}", gateway.id);
+                return outgoingAll;
             }
 
             var chosenMany = _selector.ChooseMany(outgoingAll, gateway, process, token);
@@ -173,50 +189,80 @@ public sealed class GatewaySplitService : IGatewaySplitService
             if (chosenMany is null || chosenMany.Count == 0)
             {
                 var def = ResolveDefaultFlow(outgoingAll, defaultId);
-                if (def is not null)
-                {
-                    var defKey = FlowKey(def);
-                    return (f => StringComparer.OrdinalIgnoreCase.Equals(FlowKey(f), defKey), expectedExec: 1);
-                }
-
-                // Strict: if conditions exist but none match and no default => 0 executable (handled by caller => fail).
-                _logger.LogWarning("[SPLIT] OR: no condition matched & no default. Gw={Gw}", gateway.id);
-                return (static _ => false, expectedExec: 0);
+                return def is null ? new List<BpmnSequenceFlow>(0) : new List<BpmnSequenceFlow>(1) { def };
             }
 
-            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (var i = 0; i < chosenMany.Count; i++)
-                set.Add(FlowKey(chosenMany[i]));
+            // Deduplicate chosenMany safely
+            var dedup = new Dictionary<string, BpmnSequenceFlow>(StringComparer.Ordinal);
+            foreach (var f in chosenMany)
+            {
+                var k = FlowKey(f);
+                if (!dedup.ContainsKey(k))
+                    dedup[k] = f;
+            }
 
-            return (f => set.Contains(FlowKey(f)), expectedExec: set.Count);
+            var list = new List<BpmnSequenceFlow>(dedup.Count);
+            foreach (var kv in dedup)
+                list.Add(kv.Value);
+
+            return list;
         }
 
-        // Unknown gateway: safest is all executable (but warn)
-        _logger.LogWarning("[SPLIT] Unknown gateway type => ALL executable. Gw={Gw} Type={Type}", gateway.id, gateway.GetType().Name);
-        return (static _ => true, expectedExec: outgoingAll.Count);
+        token.Fail($"Unsupported gateway type '{gateway.GetType().Name}' at '{gateway.id}'.");
+        _logger.LogError("[SPLIT:FAIL] Unsupported gateway. Token={Token} Gw={Gw} Type={Type}",
+            token.Id, gateway.id, gateway.GetType().Name);
+
+        return new List<BpmnSequenceFlow>(0);
     }
 
-    // -------------------- helpers (no LINQ hot-path) --------------------
+    // -------------------- Join expectation persistence --------------------
+
+    private void PersistJoinExpectations(
+        Process process,
+        Guid scopeId,
+        BpmnGateway gateway,
+        List<BpmnSequenceFlow> chosen)
+    {
+        process.SetMetadata(JoinCorrelationMetaKeys.SplitGatewayId(scopeId), gateway.id);
+        process.SetMetadata(JoinCorrelationMetaKeys.SplitGatewayType(scopeId), gateway.GetType().Name);
+        process.SetMetadata(JoinCorrelationMetaKeys.ExpectedCount(scopeId), chosen.Count.ToString());
+
+        var sb = new System.Text.StringBuilder(capacity: chosen.Count * 32);
+        for (var i = 0; i < chosen.Count; i++)
+        {
+            if (i > 0) sb.Append(',');
+            sb.Append(!string.IsNullOrWhiteSpace(chosen[i].id)
+                ? chosen[i].id
+                : $"{chosen[i].sourceRef}->{chosen[i].targetRef}");
+        }
+
+        process.SetMetadata(JoinCorrelationMetaKeys.Branches(scopeId), sb.ToString());
+
+        _logger.LogDebug(
+            "[FORK:CFG] Stored join expectations. Scope={Scope} Expected={Expected} SplitGw={Gw} Branches={Branches}",
+            scopeId, chosen.Count, gateway.id, sb.ToString());
+    }
+
+    // -------------------- helpers --------------------
 
     private static List<BpmnSequenceFlow> DeduplicateAndValidate(
         List<BpmnSequenceFlow> outgoingRaw,
         BpmnGateway gateway,
         Token token)
     {
-        var dict = new Dictionary<string, BpmnSequenceFlow>(outgoingRaw.Count, StringComparer.OrdinalIgnoreCase);
+        var dict = new Dictionary<string, BpmnSequenceFlow>(outgoingRaw.Count, StringComparer.Ordinal);
 
         for (var i = 0; i < outgoingRaw.Count; i++)
         {
             var f = outgoingRaw[i];
-            var key = FlowKey(f);
 
             if (string.IsNullOrWhiteSpace(f.targetRef))
             {
-                token.Fail($"Split gateway '{gateway.id}' has outgoing flow(s) with empty targetRef. Flow={key}");
+                token.Fail($"Split gateway '{gateway.id}' has outgoing flow(s) with empty targetRef. FlowIndex={i}");
                 return new List<BpmnSequenceFlow>(0);
             }
 
-            // Prefer id if exists; else source->target.
+            var key = FlowKeyStable(f, i);
             if (!dict.ContainsKey(key))
                 dict[key] = f;
         }
@@ -267,8 +313,12 @@ public sealed class GatewaySplitService : IGatewaySplitService
         for (var i = 0; i < outgoing.Count; i++)
         {
             var f = outgoing[i];
-            if (string.Equals(f.id, defaultFlowId, StringComparison.OrdinalIgnoreCase)) return f;
-            if (string.Equals(FlowKey(f), defaultFlowId, StringComparison.OrdinalIgnoreCase)) return f;
+            if (!string.IsNullOrWhiteSpace(f.id) &&
+                string.Equals(f.id, defaultFlowId, StringComparison.Ordinal))
+                return f;
+
+            if (string.Equals(FlowKey(f), defaultFlowId, StringComparison.Ordinal))
+                return f;
         }
 
         return null;
@@ -276,4 +326,9 @@ public sealed class GatewaySplitService : IGatewaySplitService
 
     private static string FlowKey(BpmnSequenceFlow f)
         => !string.IsNullOrWhiteSpace(f.id) ? f.id! : $"{f.sourceRef}->{f.targetRef}";
+
+    private static string FlowKeyStable(BpmnSequenceFlow f, int indexWhenNoId)
+        => !string.IsNullOrWhiteSpace(f.id)
+            ? f.id!
+            : $"{f.sourceRef}->{f.targetRef}#{indexWhenNoId}";
 }

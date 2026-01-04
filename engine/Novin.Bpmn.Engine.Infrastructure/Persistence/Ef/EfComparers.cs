@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Nodes;
+using Novin.Bpmn.Engine.Domain.ValueObjects;
 using Novin.Bpmn.Engine.Infrastructure.Common;
 
 namespace Novin.Bpmn.Engine.Infrastructure.Persistence.Ef;
@@ -67,30 +69,8 @@ internal static class EfComparers
             ? new Dictionary<string, string>(StringComparer.Ordinal)
             : new Dictionary<string, string>(v, StringComparer.Ordinal);
 
-    // -----------------------------
-    // List<Guid> (Token._parentTokenIds)
-    // -----------------------------
-    public static bool GuidListEqual(List<Guid>? a, List<Guid>? b)
-    {
-        if (ReferenceEquals(a, b)) return true;
-        if (a is null || b is null) return false;
-        if (a.Count != b.Count) return false;
-        return a.SequenceEqual(b);
-    }
 
-    public static int GuidListHash(List<Guid>? v)
-    {
-        if (v is null || v.Count == 0) return 0;
 
-        var hash = 0;
-        foreach (var g in v)
-            hash = HashCode.Combine(hash, g.GetHashCode());
-
-        return hash;
-    }
-
-    public static List<Guid> GuidListSnapshot(List<Guid>? v)
-        => v is null ? new List<Guid>() : new List<Guid>(v);
 
     // -----------------------------
     // List<string> (NodeInstance._arrivedViaFlowIds)
@@ -116,4 +96,39 @@ internal static class EfComparers
 
     public static List<string> ListSnapshot(List<string>? v)
         => v is null ? new List<string>() : new List<string>(v);
+
+
+    public static bool GuidListEqual(List<Guid>? a, List<Guid>? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+        if (a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+            if (a[i] != b[i]) return false;
+        return true;
+    }
+
+    public static int GuidListHash(List<Guid>? v)
+    {
+        if (v is null) return 0;
+        var h = new HashCode();
+        for (int i = 0; i < v.Count; i++) h.Add(v[i]);
+        return h.ToHashCode();
+    }
+
+    public static List<Guid> GuidListSnapshot(List<Guid>? v)
+        => v is null ? new List<Guid>() : new List<Guid>(v);
+
+
+            public static bool JsonNodeDictEqual(Dictionary<string, JsonNode?>? a, Dictionary<string, JsonNode?>? b)
+        => ReferenceEquals(a, b) || JsonVariableCodec.SerializeVars(a) == JsonVariableCodec.SerializeVars(b);
+
+    public static int JsonNodeDictHash(Dictionary<string, JsonNode?>? v)
+        => v is null ? 0 : JsonVariableCodec.SerializeVars(v).GetHashCode();
+
+    public static Dictionary<string, JsonNode?> JsonNodeDictSnapshot(Dictionary<string, JsonNode?>? v)
+        => v is null
+            ? new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
+            : new Dictionary<string, JsonNode?>(v, StringComparer.Ordinal);
+
 }

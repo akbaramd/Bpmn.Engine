@@ -1,4 +1,5 @@
 using Novin.Bpmn.Engine.Domain.Entities;
+using Novin.Bpmn.Engine.Infrastructure.Outbox.Redis;
 
 namespace Novin.Bpmn.Engine.Application.Services.Interfaces.Infrastructure;
 
@@ -15,5 +16,10 @@ public interface IOutboxBatchClaimer
     /// <param name="lease">Time span for which the messages should be locked</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>Collection of claimed outbox messages</returns>
-    Task<IReadOnlyList<OutboxMessage>> ClaimAsync(int batchSize, TimeSpan lease, CancellationToken ct);
+    
+  Task<IReadOnlyList<OutboxDispatchItem>> ClaimAsync(
+        int batchSize,
+        TimeSpan lease,
+      
+        CancellationToken ct);
 }

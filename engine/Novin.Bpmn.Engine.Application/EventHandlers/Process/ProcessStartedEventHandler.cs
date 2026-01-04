@@ -107,11 +107,7 @@ public sealed class ProcessStartedEventHandler : INotificationHandler<ProcessSta
                     continue;
                 }
 
-                var createResult = await _mediator.Send(new CreateTokenCommand(
-                    process.Id,
-                    startId,
-                    ScopeId:Guid.NewGuid(),
-                    ParentTokenId: null), txCt);
+                var createResult = await _mediator.Send(new CreateTokenCommand(process.Id, startId), txCt);
 
                 if (!createResult.Success)
                 {

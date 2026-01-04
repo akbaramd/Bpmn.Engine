@@ -24,7 +24,7 @@ public sealed record CompleteUserTaskCommand(
     string? Comment
 ) : IRequest<CompleteUserTaskResult>;
 
-public enum CompleteUserTaskResult { Ok, NotFound, InvalidState, TokenNotWaiting }
+public enum CompleteUserTaskResult { Ok, NotFound, InvalidState, TokenNotWaiting,NodeNotWaiting }
 
 public sealed record CompleteServiceTaskCommand(
     Guid WorkerId,

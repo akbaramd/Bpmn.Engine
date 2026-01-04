@@ -1,4 +1,5 @@
-﻿using Novin.Bpmn.Engine.Domain.ValueObjects;
+﻿using System.Text.Json.Nodes;
+using Novin.Bpmn.Engine.Domain.ValueObjects;
 
 namespace Novin.Bpmn.Engine.Application.Queries.GetProcesses;
 
@@ -14,7 +15,7 @@ public record ProcessDto(
     DateTime CreatedAt,
     DateTime? StartedAt,
     DateTime? CompletedAt,
-    IReadOnlyDictionary<string, string> Variables
+    JsonObject Variables
 );
 
 public record ProcessListDto

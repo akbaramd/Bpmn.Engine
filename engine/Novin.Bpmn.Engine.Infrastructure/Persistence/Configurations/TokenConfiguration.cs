@@ -1,7 +1,11 @@
+using System;
+using System.Collections.Generic;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Novin.Bpmn.Engine.Domain.Entities;
+using Novin.Bpmn.Engine.Domain.ValueObjects;
 using Novin.Bpmn.Engine.Infrastructure.Common;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.Ef;
 
@@ -27,14 +31,29 @@ public sealed class TokenConfiguration : IEntityTypeConfiguration<Token>
             .HasConversion<string>()
             .HasMaxLength(32);
 
-
-        entity.Property(x => x.IsExecutable).IsRequired();
-
+        // ✅ Current ScopeId persisted + indexed (top-of-stack)
         entity.Property(x => x.ScopeId);
         entity.Property(x => x.ActivityInstanceId);
         entity.Property(x => x.ParentTokenId);
 
-        // ArrivedViaFlowIds (private _arrivedViaFlowIds) - stored as JSON
+        // ---------------- ScopeStack (private _scopeStack) -> JSON ----------------
+        // Expose ScopeStack as read-only (ignore) and persist backing field
+        entity.Ignore(x => x.ScopeStack);
+
+        var scopeStackComparer = new ValueComparer<List<Guid>>(
+            (a, b) => EfComparers.GuidListEqual(a, b),
+            v => EfComparers.GuidListHash(v),
+            v => EfComparers.GuidListSnapshot(v));
+
+        entity.Property<List<Guid>>("_scopeStack")
+            .HasColumnName("ScopeStack")
+            .HasColumnType("text")
+            .HasConversion(
+                v => JsonHelper.SerializeObject(v ?? new List<Guid>()),
+                v => JsonHelper.DeserializeObject<List<Guid>>(v) ?? new List<Guid>())
+            .Metadata.SetValueComparer(scopeStackComparer);
+
+        // ---------------- ArrivedViaFlowIds (private _arrivedViaFlowIds) -> JSON ----------------
         entity.Ignore(x => x.ArrivedViaFlowIds);
 
         var flowIdsComparer = new ValueComparer<List<string>>(
@@ -50,61 +69,50 @@ public sealed class TokenConfiguration : IEntityTypeConfiguration<Token>
                 v => JsonHelper.DeserializeObject<List<string>>(v) ?? new List<string>())
             .Metadata.SetValueComparer(flowIdsComparer);
 
-        // -------- Local Variables (private Dictionary<string,string> _variables -> JSON) --------
-        entity.Ignore(x => x.Variables);
+        // ---------------- Local Variables (private _variables) -> JSON ----------------
+      entity.Ignore(x => x.Variables);
 
-        var varsComparer = new ValueComparer<Dictionary<string, string>>(
-            (a, b) => EfComparers.VarsEqual(a, b),
-            v => EfComparers.VarsHash(v),
-            v => EfComparers.VarsSnapshot(v));
+        var varsComparer = new ValueComparer<Dictionary<string, JsonNode?>>(
+            (a, b) => EfComparers.JsonNodeDictEqual(a, b),
+            v => EfComparers.JsonNodeDictHash(v),
+            v => EfComparers.JsonNodeDictSnapshot(v));
 
-        entity.Property<Dictionary<string, string>>("_variables")
+        entity.Property<Dictionary<string, JsonNode?>>("_variables")
             .HasColumnName("Variables")
             .HasColumnType("text")
             .HasConversion(
-                v => JsonHelper.SerializeObject(v ?? new Dictionary<string, string>(StringComparer.Ordinal)),
-                v => JsonHelper.DeserializeObject<Dictionary<string, string>>(v) ?? new Dictionary<string, string>(StringComparer.Ordinal))
+                v => JsonVariableCodec.SerializeVars(v),
+                v => JsonVariableCodec.DeserializeVars(v))
             .Metadata.SetValueComparer(varsComparer);
-
         // -------- Timeline --------
         entity.Property(x => x.CreatedAt).IsRequired();
         entity.Property(x => x.ActivatedAt);
         entity.Property(x => x.CompletedAt);
 
         // -------- Indexes --------
-        // Hot Query: GetTokenById - Primary Key covers this
-        
-        // Hot Query: GetTokensForJoin(scopeId, elementId, state)
-        // Critical for join gateway performance
-        entity.HasIndex(x => new { x.ScopeId, x.CurrentElementId, x.State })
-            .HasDatabaseName("IX_Token_Scope_Element_State")
-            .HasFilter("[ScopeId] IS NOT NULL");
+// -------- Indexes --------
+entity.HasIndex(x => new { x.ScopeId, x.CurrentElementId, x.State })
+    .HasDatabaseName("IX_Token_Scope_Element_State")
+    .HasFilter("\"ScopeId\" IS NOT NULL");
 
-        // Hot Query: GetActiveTokens(processId, state)
-        // For runtime scheduling and dashboard
-        entity.HasIndex(x => new { x.ProcessId, x.State })
-            .HasDatabaseName("IX_Token_Process_State");
+entity.HasIndex(x => new { x.ProcessId, x.State })
+    .HasDatabaseName("IX_Token_Process_State");
 
-        // Hot Query: Trace/element view (ProcessId, CurrentElementId, State)
-        // For visualization and debugging
-        entity.HasIndex(x => new { x.ProcessId, x.CurrentElementId, x.State })
-            .HasDatabaseName("IX_Token_Process_Element_State");
+entity.HasIndex(x => new { x.ProcessId, x.CurrentElementId, x.State })
+    .HasDatabaseName("IX_Token_Process_Element_State");
 
-        // Hot Query: GetChildren(parentTokenId)
-        // For terminate cascade
-        entity.HasIndex(x => x.ParentTokenId)
-            .HasDatabaseName("IX_Token_ParentTokenId")
-            .HasFilter("[ParentTokenId] IS NOT NULL");
+entity.HasIndex(x => x.ParentTokenId)
+    .HasDatabaseName("IX_Token_ParentTokenId")
+    .HasFilter("\"ParentTokenId\" IS NOT NULL");
 
-        // Correlation for fork/join (alternative query pattern)
-        entity.HasIndex(x => new { x.ProcessId, x.ScopeId })
-            .HasDatabaseName("IX_Token_Process_Scope")
-            .HasFilter("[ScopeId] IS NOT NULL");
+entity.HasIndex(x => new { x.ProcessId, x.ScopeId })
+    .HasDatabaseName("IX_Token_Process_Scope")
+    .HasFilter("\"ScopeId\" IS NOT NULL");
 
-        // Activity instance correlation (boundary cancel, subprocess)
-        entity.HasIndex(x => new { x.ProcessId, x.ActivityInstanceId })
-            .HasDatabaseName("IX_Token_Process_ActivityInstance")
-            .HasFilter("[ActivityInstanceId] IS NOT NULL");
+entity.HasIndex(x => new { x.ProcessId, x.ActivityInstanceId })
+    .HasDatabaseName("IX_Token_Process_ActivityInstance")
+    .HasFilter("\"ActivityInstanceId\" IS NOT NULL");
+
 
         // -------- Domain events --------
         entity.Ignore("DomainEvents");

@@ -36,15 +36,6 @@ public sealed class FeelSequenceFlowSelector : ISequenceFlowSelector
         if (process is null) throw new ArgumentNullException(nameof(process));
         if (token is null) throw new ArgumentNullException(nameof(token));
 
-        // ✅ Token-Centric Model: Trace tokens never participate in gateway decisions
-        // Return first flow as fallback (trace tokens will be created for all flows in split)
-        if (!token.IsExecutable)
-        {
-            _logger.LogWarning(
-                "[SEL:ONE] Trace token => skipping condition evaluation. Returning first flow. TokenId={TokenId}",
-                token.Id);
-            return outgoing.First();
-        }
 
         var vars = BuildEvalVars(process, token);
 
@@ -59,7 +50,6 @@ public sealed class FeelSequenceFlowSelector : ISequenceFlowSelector
             ["ArrivedVia"] = token.ArrivedViaFlowIds.Count > 0 
                 ? string.Join(",", token.ArrivedViaFlowIds) 
                 : null,
-            ["Executable"] = token.IsExecutable.ToString(),
             ["IncludeProcessVars"] = _includeProcessVars.ToString(),
         }))
         {
@@ -134,15 +124,6 @@ public sealed class FeelSequenceFlowSelector : ISequenceFlowSelector
         if (process is null) throw new ArgumentNullException(nameof(process));
         if (token is null) throw new ArgumentNullException(nameof(token));
 
-        // ✅ Token-Centric Model: Trace tokens never participate in gateway decisions
-        // Return empty list (trace tokens will be created for all flows in split)
-        if (!token.IsExecutable)
-        {
-            _logger.LogWarning(
-                "[SEL:MANY] Trace token => skipping condition evaluation. Returning empty list. TokenId={TokenId}",
-                token.Id);
-            return Array.Empty<BpmnSequenceFlow>();
-        }
 
         var vars = BuildEvalVars(process, token);
         var selected = new List<BpmnSequenceFlow>();
@@ -159,7 +140,6 @@ public sealed class FeelSequenceFlowSelector : ISequenceFlowSelector
             ["ArrivedVia"] = token.ArrivedViaFlowIds.Count > 0 
                 ? string.Join(",", token.ArrivedViaFlowIds) 
                 : null,
-            ["Executable"] = token.IsExecutable.ToString(),
             ["IncludeProcessVars"] = _includeProcessVars.ToString(),
         }))
         {
@@ -234,7 +214,7 @@ public sealed class FeelSequenceFlowSelector : ISequenceFlowSelector
         }
     }
 
-    private bool SafeEval(string expr, IReadOnlyDictionary<string, string?> vars, string flowKey, bool isInclusive)
+    private bool SafeEval(string expr, IReadOnlyDictionary<string, object?> vars, string flowKey, bool isInclusive)
     {
         try
         {
@@ -257,15 +237,15 @@ public sealed class FeelSequenceFlowSelector : ISequenceFlowSelector
         }
     }
 
-    private IReadOnlyDictionary<string, string?> BuildEvalVars(Process p, Token t)
+    private IReadOnlyDictionary<string, object?> BuildEvalVars(Process p, Token t)
     {
         // حالت پیشنهادی شما: فقط Token vars (چون IO Mapping قبلش انجام شده)
         if (!_includeProcessVars)
-            return new Dictionary<string, string?>(t.Variables.Select(kv => new KeyValuePair<string, string?>(kv.Key, kv.Value)), StringComparer.Ordinal);
+            return new Dictionary<string, object?>(t.Variables.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value)), StringComparer.Ordinal);
 
         // حالت سازگار با گذشته: token overrides process
-        var dict = new Dictionary<string, string?>(StringComparer.Ordinal);
-        foreach (var kv in p.Variables) dict[kv.Key] = kv.Value;
+        var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var kv in p.VariablesObject) dict[kv.Key] = kv.Value;
         foreach (var kv in t.Variables) dict[kv.Key] = kv.Value;
         return dict;
     }

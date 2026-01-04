@@ -1,4 +1,6 @@
-﻿namespace Novin.Bpmn.Engine.Application.Queries.GetProcessExecutionFlow;
+﻿using System.Text.Json.Nodes;
+
+namespace Novin.Bpmn.Engine.Application.Queries.GetProcessExecutionFlow;
 
 /// <summary>
 /// BPMN element that was executed (represents NodeInstance)
@@ -27,7 +29,7 @@ public sealed class ExecutedElementDto
     public string? ErrorMessage { get; init; }
     
     // Node variables
-    public IReadOnlyDictionary<string, string> Variables { get; init; } = new Dictionary<string, string>();
+    public IReadOnlyDictionary<string, JsonNode?> Variables { get; init; } = new Dictionary<string, JsonNode?>();
 
     public IReadOnlyCollection<TokenExecutionDto> TokenExecutions { get; init; } = Array.Empty<TokenExecutionDto>();
 }

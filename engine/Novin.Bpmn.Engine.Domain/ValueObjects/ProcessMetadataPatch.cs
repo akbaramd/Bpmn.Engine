@@ -1,66 +1,45 @@
+// Domain/ValueObjects/ProcessMetadataPatch.cs
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
+using System.Text.Json.Nodes;
+using Novin.Bpmn.Engine.Domain.Common;
 
 namespace Novin.Bpmn.Engine.Domain.ValueObjects;
 
-public sealed class ProcessMetadataPatch
+public sealed record ProcessMetadataPatch(
+    IReadOnlyDictionary<string, JsonNode?> Upserts,
+    IReadOnlyList<string> Removals)
 {
-    public IReadOnlyDictionary<string, string> Upserts { get; }
-    public IReadOnlyCollection<string> Removals { get; }
+    public static readonly ProcessMetadataPatch Empty = ProcessMetadataPatch.From(
+        new Dictionary<string, JsonNode?>(),
+        Array.Empty<string>());
+
     public bool HasChanges => Upserts.Count > 0 || Removals.Count > 0;
 
-    private ProcessMetadataPatch(
-        IReadOnlyDictionary<string, string> upserts,
-        IReadOnlyCollection<string> removals)
-    {
-        Upserts = upserts;
-        Removals = removals;
-    }
-
     public static ProcessMetadataPatch From(
-        IDictionary<string, object?> incoming,
-        IEnumerable<string> removals)
+        IDictionary<string, JsonNode?>? upserts,
+        IEnumerable<string>? removals)
     {
-        var upserts = new Dictionary<string, string>(StringComparer.Ordinal);
+        var u = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
 
-        foreach (var (k, v) in incoming)
+        if (upserts != null)
         {
-            if (string.IsNullOrWhiteSpace(k)) continue;
-
-            var key = k.Trim();
-
-            // Convention: null => removal (optional; you can remove this if you want strictness)
-            if (v is null)
-                continue;
-
-            // store as stable string
-            var str = v switch
+            foreach (var kv in upserts)
             {
-                string s => s,
-                IFormattable f => f.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty,
-                _ => v.ToString() ?? string.Empty
-            };
-
-            if (string.IsNullOrWhiteSpace(str))
-                continue; // treat empty as "no upsert" (removal handled separately)
-
-            upserts[key] = str;
+                var k = (kv.Key ?? string.Empty).Trim();
+                if (k.Length == 0) continue;
+                u[k] = JsonVariableCodec.ToNode(kv.Value);
+            }
         }
 
-        var rem = removals
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Select(x => x.Trim())
+        var r = (removals ?? Array.Empty<string>())
+            .Select(x => (x ?? string.Empty).Trim())
+            .Where(x => x.Length > 0)
             .Distinct(StringComparer.Ordinal)
             .ToList()
             .AsReadOnly();
 
-        return new ProcessMetadataPatch(upserts, rem);
+        return new ProcessMetadataPatch(u, r);
     }
-
-    public static ProcessMetadataPatch Empty()
-        => new ProcessMetadataPatch(
-            new Dictionary<string, string>(StringComparer.Ordinal),
-            Array.Empty<string>());
 }

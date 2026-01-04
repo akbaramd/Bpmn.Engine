@@ -61,6 +61,12 @@ public sealed class CompleteUserTaskCommandHandler
                 return;
             }
 
+            var node = await _uow.NodeInstances.GetByIdAsync(task.NodeInstanceId!.Value, trxCt);
+            if (node is null)
+            {
+                result = CompleteUserTaskResult.NodeNotWaiting;
+                return;
+            }
             // Correlation: token must be waiting on THIS task
             if (token.State != TokenState.Waiting)
             {
@@ -108,7 +114,7 @@ public sealed class CompleteUserTaskCommandHandler
                     var element = ctx.Model?.GetElementById(ctx.BpmnProcessId, task.ElementId);
                     if (element != null)
                     {
-                        _variableMapping.ApplyOutputs(process, token, element, ctx);
+                        _variableMapping.ApplyOutputs(process, token,node, element, ctx);
                         _logger.LogInformation("Applied output mapping for user task {ElementId} on process {ProcessId}",
                             task.ElementId, process.Id);
                     }

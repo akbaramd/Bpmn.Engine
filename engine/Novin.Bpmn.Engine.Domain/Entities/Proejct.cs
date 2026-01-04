@@ -23,7 +23,7 @@ public sealed class Project : BaseAggregateRoot
         CreatedAtUtc = DateTime.UtcNow;
     }
 
-    public static Project Create(string key, string name, string? description = null)
+    public static Project Create(Guid id,string key, string name, string? description = null)
     {
         if (string.IsNullOrWhiteSpace(key))
             throw new ArgumentException("Project key cannot be empty.", nameof(key));
@@ -33,6 +33,7 @@ public sealed class Project : BaseAggregateRoot
 
         var p = new Project
         {
+            Id = id,
             Key = key.Trim(),
             Name = name.Trim(),
             Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim()

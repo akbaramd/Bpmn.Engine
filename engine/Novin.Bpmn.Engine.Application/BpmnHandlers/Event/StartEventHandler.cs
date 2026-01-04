@@ -46,7 +46,6 @@ public sealed class StartEventHandler : BpmnElementHandlerBase
             ["ElementType"] = element.GetType().Name,
             ["TokenState"] = token.State.ToString(),
             ["NodeState"] = node.State.ToString(),
-            ["Executable"] = token.IsExecutable.ToString(),
             ["ScopeId"] = token.ScopeId?.ToString(),
             ["ArrivedVia"] = token.ArrivedViaFlowIds.Count > 0 
                 ? string.Join(",", token.ArrivedViaFlowIds) 
@@ -54,8 +53,8 @@ public sealed class StartEventHandler : BpmnElementHandlerBase
         }))
         {
             _logger.LogInformation(
-                "[START] NodeProcessAsync. TokenState={TokenState} NodeState={NodeState} Exec={Exec} Resume={Resume}",
-                token.State, node.State, token.IsExecutable, isResume);
+                "[START] NodeProcessAsync. TokenState={TokenState} NodeState={NodeState} Resume={Resume}",
+                token.State, node.State, isResume);
 
             // Terminal safety
             if (token.State is TokenState.Terminated or TokenState.Failed)

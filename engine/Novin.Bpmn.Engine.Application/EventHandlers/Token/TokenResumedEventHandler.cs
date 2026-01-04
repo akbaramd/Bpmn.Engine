@@ -36,11 +36,10 @@ public sealed class TokenResumedEventHandler : INotificationHandler<TokenResumed
     public async Task Handle(TokenResumedEvent notification, CancellationToken ct)
     {
         _logger.LogInformation(
-            "[TOKEN-RESUMED] TokenId={TokenId} ProcessId={ProcessId} ElementId={ElementId} IsExecutable={IsExecutable}",
+            "[TOKEN-RESUMED] TokenId={TokenId} ProcessId={ProcessId} ElementId={ElementId}",
             notification.TokenId,
             notification.ProcessId,
-            notification.ElementId,
-            notification.IsExecutable);
+            notification.ElementId);
 
         // ⛔ NO variable mapping here - only orchestration!
 
@@ -96,13 +95,6 @@ public sealed class TokenResumedEventHandler : INotificationHandler<TokenResumed
             return;
         }
 
-        // Defensive: if somehow became non-executable, NAV only
-        if (!token.IsExecutable)
-        {
-            await _mediator.Send(new DispatchTokenNavigateCommand(token.Id), ct);
-            return;
-        }
-
         // Find existing node or create new one
         // Resume semantics: process the node again with isResume=true
         var arrivedViaFlowIds = token.ArrivedViaFlowIds.Count > 0 
@@ -130,7 +122,6 @@ public sealed class TokenResumedEventHandler : INotificationHandler<TokenResumed
                 ProcessId: token.ProcessId,
                 TokenId: token.Id,
                 ElementId: token.CurrentElementId,
-                IsExecutable: token.IsExecutable,
                 ScopeId: token.ScopeId,
                 ActivityInstanceId: token.ActivityInstanceId,
                 ArrivedViaFlowIds: arrivedViaFlowIds

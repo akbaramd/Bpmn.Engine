@@ -4,10 +4,18 @@ using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.Events;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
+using System;
+using System.Linq;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Novin.Bpmn.Engine.Application.EventHandlers;
 
-public sealed class TokenCompletedEventHandler : INotificationHandler<TokenCompletedEvent>
+// Zeebe-like: process completes when no OPEN EXECUTABLE tokens remain.
+public sealed class TokenCompletedEventHandler :
+    INotificationHandler<TokenCompletedEvent>,
+    INotificationHandler<TokenTerminatedEvent>
 {
     private readonly IUnitOfWork _uow;
     private readonly ILogger<TokenCompletedEventHandler> _logger;
@@ -18,49 +26,60 @@ public sealed class TokenCompletedEventHandler : INotificationHandler<TokenCompl
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task Handle(TokenCompletedEvent e, CancellationToken ct)
+    public Task Handle(TokenCompletedEvent e, CancellationToken ct)
+        => EvaluateProcessCompletionAsync(e.ProcessId, ct);
+
+    public Task Handle(TokenTerminatedEvent e, CancellationToken ct)
+        => EvaluateProcessCompletionAsync(e.ProcessId, ct);
+
+    private async Task EvaluateProcessCompletionAsync(Guid processId, CancellationToken ct)
     {
-        // بهترین حالت: همه چیز داخل یک تراکنش کوتاه
         await _uow.ExecuteInTransactionAsync(async trxCt =>
         {
-            // 1) Load process
-            var process = await _uow.Processes.GetByIdAsync(e.ProcessId, trxCt);
+            var process = await _uow.Processes.GetByIdAsync(processId, trxCt);
             if (process is null)
             {
-                _logger.LogWarning("[TOKEN-COMPLETED] Process not found. ProcessId={ProcessId}", e.ProcessId);
+                _logger.LogWarning("[PROC-END] Process not found. ProcessId={ProcessId}", processId);
                 return;
             }
 
-            // Idempotency: process already terminal
             if (process.State is ProcessState.Completed or ProcessState.Failed or ProcessState.Terminated)
                 return;
 
-            // 2) Load all tokens of process (authoritative decision)
-            // اگر در UoW متد ندارید، از repo خودتون استفاده کنید
-            var tokens = (await _uow.Tokens.GetByProcessIdAsync(process.Id, trxCt)).ToList();
+            var tokens = await _uow.Tokens.GetByProcessIdAsync(process.Id, trxCt);
 
-            // فقط executable ها معیار پایان process
-            var hasOpenExecutableTokens = tokens.Any(t =>
-                t.IsExecutable &&
-                (t.State == TokenState.Created || t.State == TokenState.Active || t.State == TokenState.Waiting));
+            // OPEN executable tokens (Forked must block completion)
+            var hasOpenExecutable = tokens.Any(t =>
+                IsExecutableToken(t) &&
+                (t.State == TokenState.Created ||
+                 t.State == TokenState.Active ||
+                 t.State == TokenState.Waiting ||
+                 t.State == TokenState.Forked));
 
-            if (hasOpenExecutableTokens)
-            {
-                _logger.LogDebug(
-                    "[TOKEN-COMPLETED] Process still has open executable tokens. ProcessId={ProcessId}",
-                    process.Id);
+            if (hasOpenExecutable)
                 return;
-            }
 
-            // 3) No open executable tokens => process complete
             process.Complete();
-
             await _uow.Processes.UpdateAsync(process, trxCt);
 
-            _logger.LogInformation(
-                "[TOKEN-COMPLETED] Process completed. ProcessId={ProcessId}",
-                process.Id);
-
+            _logger.LogInformation("[PROC-END] Process completed. ProcessId={ProcessId}", process.Id);
         }, ct);
     }
+
+    // No hard dependency on Token.IsExecutable (works if property exists)
+    private static readonly Func<Token, bool> _isExecutable = BuildIsExecutable();
+
+    private static Func<Token, bool> BuildIsExecutable()
+    {
+        var p = typeof(Token).GetProperty("IsExecutable", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (p is null || p.PropertyType != typeof(bool)) return static _ => true;
+
+        return t =>
+        {
+            try { return (bool)p.GetValue(t)!; }
+            catch { return true; }
+        };
+    }
+
+    private static bool IsExecutableToken(Token token) => _isExecutable(token);
 }

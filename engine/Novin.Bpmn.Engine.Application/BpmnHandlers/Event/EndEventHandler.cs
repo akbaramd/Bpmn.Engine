@@ -1,9 +1,13 @@
-using MediatR;
 using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 using Novin.Bpmn.Models.Models;
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Novin.Bpmn.Engine.Application.EventHandlers;
 
@@ -21,19 +25,13 @@ public sealed class EndEventHandler : BpmnElementHandlerBase
 
     public override bool CanHandle(BpmnFlowElement element) => element is BpmnEndEvent;
 
-    /// <summary>
-    /// Token-level semantics of EndEvent:
-    /// - Terminate End => terminate token (and later process cancellation rules can be applied)
-    /// - Normal End => complete executable token; terminate non-executable(trace) token
-    /// Idempotent: if already terminal, no-op.
-    /// </summary>
     public override Task<TokenProcessResult> TokenProcessAsync(
-    Domain.Entities.Process process,
-    Token token,
-    BpmnFlowElement element,
-    BpmnRuntimeContext ctx,
-    bool isResume,
-    CancellationToken ct)
+        Domain.Entities.Process process,
+        Token token,
+        BpmnFlowElement element,
+        BpmnRuntimeContext ctx,
+        bool isResume,
+        CancellationToken ct)
     {
         if (process is null) throw new ArgumentNullException(nameof(process));
         if (token is null) throw new ArgumentNullException(nameof(token));
@@ -43,32 +41,32 @@ public sealed class EndEventHandler : BpmnElementHandlerBase
         var endEvent = (BpmnEndEvent)element;
         var isTerminate = IsTerminateEndEvent(endEvent);
 
-        // اگر قبلاً تمام شده، این پیام احتمالاً تکراری است
-        // در این حالت بهتر است NodeProcess هم نرود (چون node هم قبلاً بسته شده)
-        if (token.State is TokenState.Completed or TokenState.Terminated or TokenState.Failed)
-            return Task.FromResult(TokenProcessResult.NoOp);
+        // Always allow node to complete (idempotency + crash-safe)
+        if (token.State is TokenState.Completed or TokenState.Terminated)
+            return Task.FromResult(TokenProcessResult.Continue);
+
+        if (token.State == TokenState.Failed)
+            return Task.FromResult(TokenProcessResult.Continue);
+
+        if (token.State != TokenState.Active)
+        {
+            token.Fail($"EndEvent '{endEvent.id}' reached with invalid token state '{token.State}'.");
+            return Task.FromResult(TokenProcessResult.Continue);
+        }
 
         if (isTerminate)
         {
             token.Terminate("Terminate EndEvent reached.");
-            // با اینکه terminate شد، هنوز می‌خواهیم NodeProcess اجرا شود تا NodeInstance Complete شود.
             return Task.FromResult(TokenProcessResult.Continue);
         }
 
-        if (token.IsExecutable)
-            token.Complete();
-        else
-            token.Terminate("Trace token ended at EndEvent.");
+   
+            token.Complete("EndEvent reached.");
+       
 
-        // باز هم Continue برای بستن NodeInstance
         return Task.FromResult(TokenProcessResult.Continue);
     }
 
-
-    /// <summary>
-    /// Node-level processing should only manage node instance lifecycle,
-    /// not token termination/completion.
-    /// </summary>
     public override Task<ElementProcessResult> NodeProcessAsync(
         Domain.Entities.Process process,
         Token token,
@@ -94,14 +92,14 @@ public sealed class EndEventHandler : BpmnElementHandlerBase
             ["NodeId"] = node.Id.ToString(),
             ["ElementId"] = token.CurrentElementId,
             ["NodeState"] = node.State.ToString(),
-            ["IsTerminateEnd"] = isTerminate.ToString()
+            ["IsTerminateEnd"] = isTerminate.ToString(),
+            ["Resume"] = isResume.ToString()
         }))
         {
             _logger.LogInformation(
-                "[END][NODE] NodeProcessAsync. Terminate={Terminate} NodeState={NodeState} Resume={Resume}",
-                isTerminate, node.State, isResume);
+                "[END][NODE] Closing node. Terminate={Terminate} NodeState={NodeState}",
+                isTerminate, node.State);
 
-            // idempotency for node
             if (node.State is NodeState.Completed or NodeState.Failed or NodeState.Skipped)
                 return Task.FromResult(ElementProcessResult.Completed);
 
@@ -110,7 +108,6 @@ public sealed class EndEventHandler : BpmnElementHandlerBase
         }
     }
 
-    // EndEvent => no navigation
     public override Task TokenNavigateAsync(
         Domain.Entities.Process process,
         Token token,
@@ -130,7 +127,10 @@ public sealed class EndEventHandler : BpmnElementHandlerBase
             if (items[i] is BpmnTerminateEventDefinition)
                 return true;
         }
-
         return false;
     }
+
+
+
+  
 }

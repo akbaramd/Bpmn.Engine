@@ -15,7 +15,6 @@ public sealed record CreateNodeInstanceCommand(
     Guid ProcessId,
     Guid TokenId,
     string ElementId,
-    bool IsExecutable,
     Guid? ScopeId,
     Guid? ActivityInstanceId,
     IEnumerable<string>? ArrivedViaFlowIds = null
@@ -62,13 +61,6 @@ public sealed class CreateNodeInstanceCommandHandler : IRequestHandler<CreateNod
         if (token.ProcessId != request.ProcessId)
             throw new InvalidOperationException("Token does not belong to the given ProcessId.");
 
-        // Guard: token must be executable to create a NodeInstance
-        if (!token.IsExecutable)
-        {
-            _logger.LogDebug("Skip NodeInstance creation. Token {TokenId} is non-executable (trace token).", token.Id);
-            return Guid.Empty; // explicit "no node created"
-        }
- 
         // Guard: element id must match current token position (prevents stale commands)
         var elementId = request.ElementId.Trim();
         if (!string.Equals(token.CurrentElementId, elementId, StringComparison.Ordinal))
@@ -106,10 +98,11 @@ public sealed class CreateNodeInstanceCommandHandler : IRequestHandler<CreateNod
             processId: token.ProcessId,
             tokenId: token.Id,
             elementId: elementId,
-            isExecutable:request.IsExecutable,
+            isExecutable: true,
             scopeId: token.ScopeId,
             activityInstanceId: token.ActivityInstanceId,
             arrivedViaFlowIds: arrivedViaFlowIds);
+node.ApplyVariablesPatch(token.Variables);
 
         await _nodes.AddAsync(node, cancellationToken);
 

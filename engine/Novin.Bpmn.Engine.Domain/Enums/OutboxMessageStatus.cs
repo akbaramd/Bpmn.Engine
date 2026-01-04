@@ -23,5 +23,6 @@ public enum OutboxMessageStatus : byte
     /// <summary>
     /// Message processing failed and is scheduled for retry
     /// </summary>
-    Failed = 3
+    Failed = 3,
+    Dispatched = 4
 }

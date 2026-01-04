@@ -110,8 +110,7 @@ public class EfTokenRepository : ITokenRepository
                 t.ScopeId == scopeId &&
                 (t.State == TokenState.Active || t.State == TokenState.Waiting || t.State == TokenState.Terminated || t.State == TokenState.Merged));
 
-        if (executableOnly)
-            q = q.Where(t => t.IsExecutable);
+        // executableOnly parameter is deprecated - all tokens are executable
 
         return await q.CountAsync(ct);
     }
@@ -135,8 +134,7 @@ public class EfTokenRepository : ITokenRepository
             t.ScopeId == scopeId &&
             (t.State == TokenState.Active || t.State == TokenState.Waiting || t.State == TokenState.Terminated || t.State == TokenState.Merged));
 
-        if (executableOnly)
-            q = q.Where(t => t.IsExecutable);
+        // executableOnly parameter is deprecated - all tokens are executable
 
         // Tracking لازم است چون بعداً همین توکن‌ها را Merge/Reactivate می‌کنی.
         return await q

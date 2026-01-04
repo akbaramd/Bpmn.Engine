@@ -59,9 +59,14 @@ namespace Novin.Bpmn.Engine.Infrastructure.Persistence.Configurations
             // Indexes for Incident table for optimized querying
             entity.HasIndex(x => x.ProcessId);
             entity.HasIndex(x => new { x.ProcessId, x.Status, x.LastOccurredAtUtc });
-            entity.HasIndex(x => x.NodeInstanceId).HasFilter("[NodeInstanceId] IS NOT NULL");
-            entity.HasIndex(x => x.TokenId).HasFilter("[TokenId] IS NOT NULL");
-            entity.HasIndex(x => x.WorkerId).HasFilter("[WorkerId] IS NOT NULL");
+entity.HasIndex(x => x.NodeInstanceId)
+    .HasFilter("\"NodeInstanceId\" IS NOT NULL");
+
+entity.HasIndex(x => x.TokenId)
+    .HasFilter("\"TokenId\" IS NOT NULL");
+
+entity.HasIndex(x => x.WorkerId)
+    .HasFilter("\"WorkerId\" IS NOT NULL");
 
             // Ignore DomainEvents property, as it's not mapped
             entity.Ignore("DomainEvents");

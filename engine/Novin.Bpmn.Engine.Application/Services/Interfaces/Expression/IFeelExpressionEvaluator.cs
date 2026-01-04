@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace Novin.Bpmn.Engine.Application.Services;
 
 // -------------------------
@@ -5,18 +7,10 @@ namespace Novin.Bpmn.Engine.Application.Services;
 
 public interface IFeelExpressionEvaluator
 {
-    object? Evaluate(string expression, IReadOnlyDictionary<string, string?> vars);
-    bool EvaluateBoolean(string expression, IReadOnlyDictionary<string, string?> vars);
+    object? Evaluate(string expression, IReadOnlyDictionary<string, JsonNode?> vars);
+    bool EvaluateBoolean(string expression, IReadOnlyDictionary<string, JsonNode?> vars);
+
+    // optional: برای جاهایی مثل ScriptContext که object دارند
+    object? Evaluate(string expression, IReadOnlyDictionary<string, object?> vars);
+    bool EvaluateBoolean(string expression, IReadOnlyDictionary<string, object?> vars);
 }
-
-// -------------------------
-// Lexer
-// -------------------------
-
-// -------------------------
-// Parser (precedence: not > comparisons > and > or)
-// -------------------------
-
-// -------------------------
-// Evaluator
-// -------------------------

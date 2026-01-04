@@ -62,26 +62,17 @@ public sealed class DefaultFlowNodeHandler : BpmnElementHandlerBase
         // ✅ Node lifecycle
         node.Start();
 
-        // ✅ Trace token => no mappings, mark node skipped (بهترین برای observability)
-        if (!token.IsExecutable)
-        {
-            token.Processed();
-            node.Skip("Trace token (non-executable)");
-            return Task.FromResult(ElementProcessResult.Completed);
-        }
-
-        // ✅ Executable token => apply inputs once (first time only)
+        // ✅ Apply inputs once (first time only)
         if (!isResume)
         {
             token.ClearLocalVariables();
-            _mapping.ApplyInputs(process, token, element, ctx);
+            _mapping.ApplyInputs(process, token,node, element, ctx);
         }
 
         // ✅ Output mapping: Token → Process (only when activity completes)
         // Note: DefaultFlowNodeHandler handles simple elements that always complete immediately
         // (no waiting), so we can safely apply outputs here
-        if (token.IsExecutable)
-            _mapping.ApplyOutputs(process, token, element, ctx);
+        _mapping.ApplyOutputs(process, token,node, element, ctx);
 
         // ✅ Done
         token.Processed();

@@ -1,4 +1,6 @@
-﻿namespace Novin.Bpmn.Engine.Application.Queries.GetProcess;
+﻿using System.Text.Json.Nodes;
+
+namespace Novin.Bpmn.Engine.Application.Queries.GetProcess;
 
 public class ProcessDto
 {
@@ -19,7 +21,7 @@ public class ProcessDto
     /// </summary>
     public Domain.ValueObjects.ProcessDerivedStatus DerivedStatus { get; set; }
 
-    public Dictionary<string, string> Variables { get; set; } = new();
+    public JsonObject Variables { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }

@@ -1,8 +1,9 @@
-﻿// Infrastructure/Persistence/Configurations/ProcessConfiguration.cs
+﻿// Infrastructure/Persistence/Configurations/ProcessConfiguration.cs  (final: single JSON blob variables)
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Novin.Bpmn.Engine.Domain.Entities;
+using Novin.Bpmn.Engine.Domain.ValueObjects;
 using Novin.Bpmn.Engine.Infrastructure.Common;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.Ef;
 
@@ -15,8 +16,6 @@ public sealed class ProcessConfiguration : IEntityTypeConfiguration<Process>
         entity.ToTable("Processes");
 
         entity.HasKey(x => x.Id);
-
-        // If Id is generated in domain (recommended for AggregateRoot)
         entity.Property(x => x.Id).ValueGeneratedNever();
 
         // ---------- Required scalars ----------
@@ -79,27 +78,26 @@ public sealed class ProcessConfiguration : IEntityTypeConfiguration<Process>
                 v => JsonHelper.DeserializeObject<HashSet<Guid>>(v) ?? new HashSet<Guid>())
             .Metadata.SetValueComparer(nodeIdsComparer);
 
-        // ---------- Variables (Dictionary<string,string>) ----------
-        entity.Ignore(x => x.Variables);
+        // ---------- Variables (SINGLE JSON BLOB) ----------
+        // Domain:
+        //   private string _variablesJson = "{}";
+        //   public string VariablesJson => _variablesJson;
+        //   public JsonObject VariablesObject => ...
+        entity.Ignore(x => x.VariablesObject); // JsonObject is not mapped
+        entity.Property<string>("_variablesJson")
+            .HasColumnName("VariablesJson")
+            .HasColumnType("text")
+            .IsRequired();
+
+        // Optional: if you expose VariablesJson publicly, you can also map it as shadow or ignore it.
+        // If VariablesJson is a getter only (no setter), EF will use backing field above.
+
+        // ---------- Metadata (Dictionary<string,string>) ----------
 
         var dictComparer = new ValueComparer<Dictionary<string, string>>(
             (a, b) => EfComparers.VarsEqual(a, b),
             v => EfComparers.VarsHash(v),
             v => EfComparers.VarsSnapshot(v));
-
-        entity.Property<Dictionary<string, string>>("_variables")
-            .HasColumnName("Variables")
-            .HasColumnType("text")
-            .HasConversion(
-                v => JsonHelper.SerializeObject(v ?? new Dictionary<string, string>(StringComparer.Ordinal)),
-                v => JsonHelper.DeserializeObject<Dictionary<string, string>>(v) ?? new Dictionary<string, string>(StringComparer.Ordinal))
-            .Metadata.SetValueComparer(dictComparer);
-
-        // ---------- Metadata (Dictionary<string,string>) ----------
-        // Requires you added:
-        //   private readonly Dictionary<string,string> _metadata = new(StringComparer.Ordinal);
-        //   public IReadOnlyDictionary<string,string> Metadata => _metadata;
-        entity.Ignore(x => x.Metadata);
 
         entity.Property<Dictionary<string, string>>("_metadata")
             .HasColumnName("Metadata")
@@ -115,12 +113,8 @@ public sealed class ProcessConfiguration : IEntityTypeConfiguration<Process>
         entity.HasIndex(x => new { x.ProjectId, x.State });
         entity.HasIndex(x => new { x.ProjectId, x.CreatedAtUtc });
 
-        // NOTE: HasFilter is provider-specific:
-        // - SQL Server: "[BusinessKey] IS NOT NULL"
-        // - PostgreSQL (Npgsql): "\"BusinessKey\" IS NOT NULL"
-        // If you want to stay provider-agnostic, remove HasFilter.
-        entity.HasIndex(x => new { x.ProjectId, x.BusinessKey })
-            .HasFilter("[BusinessKey] IS NOT NULL");
+        // Provider-specific filter removed for portability.
+        entity.HasIndex(x => new { x.ProjectId, x.BusinessKey });
 
         entity.HasIndex(x => new { x.DeploymentId, x.ProcessBpmnId });
 

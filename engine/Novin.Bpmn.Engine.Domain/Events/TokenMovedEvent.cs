@@ -16,8 +16,7 @@ public sealed record TokenActivatedEvent(
     Guid TokenId,
     Guid ProcessId,
     string ElementId,
-    DateTime OccurredAtUtc,
-    bool IsExecutable
+    DateTime OccurredAtUtc
 ) : IDomainEvent;
 
 
@@ -28,7 +27,6 @@ public sealed record TokenMovedEvent(
     string ToElementId,
     List<string> ViaFlowIds,
     DateTime OccurredAtUtc,
-    bool IsExecutable,
     Guid? ScopeId,
     bool SkipProcess,
     Guid? ActivityInstanceId) : IDomainEvent;
@@ -40,7 +38,6 @@ public sealed record TokenWaitingEvent(
     string ElementId,
     string? Reason,
     DateTime OccurredAtUtc,
-    bool IsExecutable,
     Guid? ScopeId
 ) : IDomainEvent;
 public record TokenArrivedViaFlowEvent(
@@ -49,7 +46,6 @@ public record TokenArrivedViaFlowEvent(
     string ElementId, 
     string ArrivedViaFlowId, 
     DateTime OccurredAtUtc, 
-    bool IsExecutable, 
     Guid? ScopeId
 ) : IDomainEvent;
 public sealed record TokenResumedEvent(
@@ -57,7 +53,6 @@ public sealed record TokenResumedEvent(
     Guid ProcessId,
     string ElementId,
     DateTime OccurredAtUtc,
-    bool IsExecutable,
     Guid? ScopeId
 ) : IDomainEvent;
 
@@ -66,7 +61,6 @@ public sealed record TokenProcessedEvent(
     Guid ProcessId,
     string ElementId,
     DateTime OccurredAtUtc,
-    bool IsExecutable,
     Guid? ScopeId
 ) : IDomainEvent;
 
@@ -76,7 +70,6 @@ public sealed record TokenFailedEvent(
     string ElementId,
     string Error,
     DateTime OccurredAtUtc,
-    bool IsExecutable,
     Guid? ScopeId,
     Guid? IncidentId = null,
     string? ErrorType = null,
@@ -89,7 +82,6 @@ public sealed record TokenCompletedEvent(
     string ElementId,
     string? Reason,
     DateTime OccurredAtUtc,
-    bool IsExecutable,
     Guid? ScopeId
 ) : IDomainEvent;
 
@@ -99,7 +91,6 @@ public sealed record TokenTerminatedEvent(
     string ElementId,
     string? Reason,
     DateTime OccurredAtUtc,
-    bool IsExecutable,
     Guid? ScopeId
 ) : IDomainEvent;
 
@@ -108,7 +99,6 @@ public sealed record TokenRetriedEvent(
     Guid ProcessId,
     string ElementId,
     DateTime OccurredAtUtc,
-    bool IsExecutable,
     Guid? ScopeId
 ) : IDomainEvent;
 
@@ -118,8 +108,7 @@ public sealed record TokenForkedEvent(
     string ElementId,
     Guid ScopeId,
     int ChildCount,
-    DateTime OccurredAtUtc,
-    bool IsExecutable
+    DateTime OccurredAtUtc
 ) : IDomainEvent;
 
 public sealed record TokenMergedEvent(
@@ -128,8 +117,7 @@ public sealed record TokenMergedEvent(
     string ElementId,
     Guid ScopeId,
     Guid ParentTokenId,
-    DateTime OccurredAtUtc,
-    bool IsExecutable
+    DateTime OccurredAtUtc
 ) : IDomainEvent;
 
 public sealed record TokenReactivatedFromForkedEvent(
@@ -138,18 +126,9 @@ public sealed record TokenReactivatedFromForkedEvent(
     string ElementId,
     Guid ScopeId,
     int MergedChildCount,
-    DateTime OccurredAtUtc,
-    bool IsExecutable
+    DateTime OccurredAtUtc
 ) : IDomainEvent;
 
-// Optional observability events (nice to have)
-public sealed record TokenBecameNonExecutableEvent(
-    Guid TokenId,
-    Guid ProcessId,
-    string ElementId,
-    DateTime OccurredAtUtc,
-    Guid? ScopeId
-) : IDomainEvent;
 
 public sealed record TokenScopeAssignedEvent(
     Guid TokenId,
@@ -314,7 +293,6 @@ public sealed record TokenProcessingFailedEvent(
     string ErrorType, // "BpmnError", "TechnicalFailure"
     string? ErrorCode,
     DateTime OccurredAtUtc,
-    bool IsExecutable,
     Guid? ScopeId
 ) : IDomainEvent;
 

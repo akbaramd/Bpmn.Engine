@@ -60,34 +60,23 @@ public sealed class ScriptTaskHandler : BpmnElementHandlerBase
         var scriptTask = (BpmnScriptTask)element;
 
         Logger.LogDebug(
-            "[SCRIPT] Start. ProcessId={ProcessId} TokenId={TokenId} NodeId={NodeId} Exec={Exec} Resume={Resume}",
-            process.Id, token.Id, node.Id, token.IsExecutable, isResume);
+            "[SCRIPT] Start. ProcessId={ProcessId} TokenId={TokenId} NodeId={NodeId} Resume={Resume}",
+            process.Id, token.Id, node.Id, isResume);
 
         // --------------------------------------------------
-        // 1) Input mapping (once, only executable)
+        // 1) Input mapping (once, first time only)
         // --------------------------------------------------
-        if (token.IsExecutable && !isResume)
+        if (!isResume)
         {
             token.ClearLocalVariables();
-            _variableMapping.ApplyInputs(process, token, element, ctx);
+            _variableMapping.ApplyInputs(process, token,node, element, ctx);
 
             Logger.LogDebug(
                 "[SCRIPT] Input mapping applied. TokenId={TokenId}",
                 token.Id);
         }
 
-        // --------------------------------------------------
-        // 2) Trace token → skip execution
-        // --------------------------------------------------
-        if (!token.IsExecutable)
-        {
-            Logger.LogDebug(
-                "[SCRIPT] Trace token → skipping execution. TokenId={TokenId}",
-                token.Id);
-
-            token.Processed();
-            return ElementProcessResult.Completed;
-        }
+   
 
         // --------------------------------------------------
         // 3) Execute script
@@ -120,7 +109,7 @@ public sealed class ScriptTaskHandler : BpmnElementHandlerBase
         // --------------------------------------------------
         // 4) Output mapping
         // --------------------------------------------------
-        _variableMapping.ApplyOutputs(process, token, element, ctx);
+        _variableMapping.ApplyOutputs(process, token, node,element, ctx);
 
         Logger.LogDebug(
             "[SCRIPT] Output mapping applied. TokenId={TokenId}",

@@ -15,17 +15,20 @@ public sealed class DispatchNodeProcessCommandHandler
     private readonly IUnitOfWork _uow;
     private readonly IBpmnRuntimeContextFactory _ctxFactory;
     private readonly INodeExecutionDispatcher _dispatcher;
+    private readonly IVariableMappingService _mapping;
     private readonly ILogger<DispatchNodeProcessCommandHandler> _logger;
 
     public DispatchNodeProcessCommandHandler(
         IUnitOfWork uow,
         IBpmnRuntimeContextFactory ctxFactory,
         INodeExecutionDispatcher dispatcher,
+        IVariableMappingService mapping,
         ILogger<DispatchNodeProcessCommandHandler> logger)
     {
         _uow = uow ?? throw new ArgumentNullException(nameof(uow));
         _ctxFactory = ctxFactory ?? throw new ArgumentNullException(nameof(ctxFactory));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+        _mapping = mapping ?? throw new ArgumentNullException(nameof(mapping));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -36,9 +39,7 @@ public sealed class DispatchNodeProcessCommandHandler
 
         await _uow.ExecuteInTransactionAsync(async trxCt =>
         {
-            // ------------------------------------------------------------
-            // 1) Load Node (tracked)
-            // ------------------------------------------------------------
+            // 1) Load Node
             var node = await _uow.NodeInstances.GetByIdAsync(request.NodeInstanceId, trxCt);
             if (node is null)
             {
@@ -53,9 +54,7 @@ public sealed class DispatchNodeProcessCommandHandler
                 return;
             }
 
-            // ------------------------------------------------------------
-            // 2) Load Token + Process + Deployment
-            // ------------------------------------------------------------
+            // 2) Load Token + Process
             var token = await _uow.Tokens.GetByIdAsync(node.TokenId, trxCt);
             if (token is null)
             {
@@ -70,11 +69,7 @@ public sealed class DispatchNodeProcessCommandHandler
                 return;
             }
 
-            // Note: Deployment is loaded by BpmnRuntimeContextFactory via catalog (memory-first)
-
-            // ------------------------------------------------------------
-            // 3) Guards
-            // ------------------------------------------------------------
+            // 3) Stale guard: ignore if token already moved away
             if (!string.Equals(token.CurrentElementId, node.ElementId, StringComparison.Ordinal))
             {
                 _logger.LogDebug(
@@ -83,25 +78,31 @@ public sealed class DispatchNodeProcessCommandHandler
                 return;
             }
 
-
-            // ------------------------------------------------------------
-            // 4) Node → Processing
-            // ------------------------------------------------------------
+            // 4) Ensure Started
             if (node.State == NodeState.Created)
+            {
                 node.Start();
+                await _uow.NodeInstances.UpdateAsync(node, trxCt);
+            }
 
-            // ------------------------------------------------------------
             // 5) Resolve BPMN element
-            // ------------------------------------------------------------
             var ctx = await _ctxFactory.CreateAsync(process, trxCt);
+            if (ctx is null)
+                throw new InvalidOperationException("BpmnRuntimeContextFactory returned null.");
 
-            var element = ctx.Model.GetElementById(process.ProcessBpmnId, node.ElementId);
+            var bpmnProcessId = ctx.BpmnProcessId; // ✅ always use ctx process id
+            var element = ctx.Model.GetElementById(bpmnProcessId, node.ElementId);
             if (element is null)
                 throw new InvalidOperationException($"BPMN element '{node.ElementId}' not found.");
 
-            // ------------------------------------------------------------
-            // 6) Dispatch PROCESS
-            // ------------------------------------------------------------
+            // 6) INPUT mapping (Process -> Token/Node) BEFORE execution
+             _mapping.ApplyInputs(process, token, node, element, ctx);
+
+            await _uow.Processes.UpdateAsync(process, trxCt);
+            await _uow.Tokens.UpdateAsync(token, trxCt);
+            await _uow.NodeInstances.UpdateAsync(node, trxCt);
+
+            // 7) Dispatch PROCESS
             _logger.LogInformation(
                 "[NODE-PROC] Dispatching PROCESS. NodeId={NodeId} ElementId={ElementId} TokenId={TokenId} Resume={Resume}",
                 node.Id, node.ElementId, token.Id, request.IsResume);
@@ -115,8 +116,9 @@ public sealed class DispatchNodeProcessCommandHandler
                 isResume: request.IsResume,
                 ct: trxCt);
 
-            // If your ExecuteInTransactionAsync does NOT auto-save, uncomment:
-            // await _uow.SaveChangesAsync(trxCt);
+            await _uow.Processes.UpdateAsync(process, trxCt);
+            await _uow.Tokens.UpdateAsync(token, trxCt);
+            await _uow.NodeInstances.UpdateAsync(node, trxCt);
 
             _logger.LogDebug("[NODE-PROC] Node processed. NodeId={NodeId} Result={Result}", node.Id, result);
 

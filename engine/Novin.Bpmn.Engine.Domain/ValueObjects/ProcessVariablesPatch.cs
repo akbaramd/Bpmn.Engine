@@ -1,68 +1,75 @@
-using System.Collections.ObjectModel;
+// Domain/ValueObjects/VariablesPatch.cs
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json.Nodes;
 
 namespace Novin.Bpmn.Engine.Domain.ValueObjects;
 
-/// <summary>
-/// Immutable patch describing variable upserts (add/update) and removals.
-/// </summary>
-public sealed class ProcessVariablesPatch
+public record VariablesPatch(
+    IReadOnlyDictionary<string, JsonNode?> Upserts,
+    IReadOnlyList<string> Removals)
 {
-    public IReadOnlyDictionary<string, string> Upserts { get; }
-    public IReadOnlyCollection<string> Removals { get; }
+    public bool HasChanges => (Upserts?.Count ?? 0) > 0 || (Removals?.Count ?? 0) > 0;
 
-    public bool HasChanges => Upserts.Count > 0 || Removals.Count > 0;
+    public static VariablesPatch Empty { get; } =
+        new VariablesPatch(new Dictionary<string, JsonNode?>(StringComparer.Ordinal), Array.Empty<string>());
 
-    private ProcessVariablesPatch(
-        IDictionary<string, string> upserts,
-        ICollection<string> removals)
+ public static VariablesPatch UpsertAllFromNodes(IReadOnlyDictionary<string, JsonNode?> raw)
     {
-        Upserts = new ReadOnlyDictionary<string, string>(upserts);
-        Removals = new ReadOnlyCollection<string>(removals.ToList());
+        if (raw is null || raw.Count == 0) return Empty;
+
+        var upserts = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
+        foreach (var kv in raw)
+        {
+            var k = kv.Key?.Trim();
+            if (string.IsNullOrWhiteSpace(k)) continue;
+            upserts[k] = kv.Value; // already JsonNode
+        }
+
+        return new VariablesPatch(upserts, Array.Empty<string>());
     }
 
-    public static ProcessVariablesPatch From(
-        IDictionary<string, object?>? upserts,
-        IEnumerable<string>? removals)
+    public static VariablesPatch From(IDictionary<string, object?>? upserts, IEnumerable<string>? removals)
     {
-        var normalizedUpserts = new Dictionary<string, string>(StringComparer.Ordinal);
+        var u = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
+
         if (upserts is not null)
         {
-            foreach (var pair in upserts)
+            foreach (var kv in upserts)
             {
-                if (string.IsNullOrWhiteSpace(pair.Key))
-                    throw new ArgumentException("Variable key cannot be null or whitespace.", nameof(upserts));
+                var key = NormalizeKey(kv.Key);
+                if (string.IsNullOrWhiteSpace(key)) continue;
 
-                normalizedUpserts[pair.Key] = ConvertToString(pair.Value);
+                u[key] = JsonVariableCodec.ToNode(kv.Value);
             }
         }
 
-        var normalizedRemovals = new HashSet<string>(StringComparer.Ordinal);
-        if (removals is not null)
-        {
-            foreach (var key in removals)
-            {
-                if (string.IsNullOrWhiteSpace(key))
-                    continue;
+        var r = removals is null
+            ? Array.Empty<string>()
+            : removals.Select(NormalizeKey)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
 
-                normalizedRemovals.Add(key);
-            }
-        }
-
-        // If a key is upserted, remove it from removals to avoid conflicting intentions
-        foreach (var upsertKey in normalizedUpserts.Keys)
-        {
-            normalizedRemovals.Remove(upsertKey);
-        }
-
-        return new ProcessVariablesPatch(normalizedUpserts, normalizedRemovals);
+        return new VariablesPatch(u, r);
     }
 
-    private static string ConvertToString(object? value)
-    {
-        if (value is null) return string.Empty;
-        if (value is string str) return str;
-
-        return Newtonsoft.Json.JsonConvert.SerializeObject(value);
-    }
+    public static string NormalizeKey(string? key)
+        => string.IsNullOrWhiteSpace(key) ? string.Empty : key.Trim();
 }
 
+// Backward compatible name (optional)
+public sealed record ProcessVariablesPatch(
+    IReadOnlyDictionary<string, JsonNode?> Upserts,
+    IReadOnlyList<string> Removals)
+    : VariablesPatch(Upserts, Removals)
+{
+    public static new ProcessVariablesPatch From(IDictionary<string, object?>? upserts, IEnumerable<string>? removals)
+    {
+        var p = VariablesPatch.From(upserts, removals);
+        return new ProcessVariablesPatch(p.Upserts, p.Removals);
+    }
+
+     
+}

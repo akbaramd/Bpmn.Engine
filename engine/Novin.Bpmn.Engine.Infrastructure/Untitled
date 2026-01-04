@@ -1,0 +1,17 @@
+services.Configure<ElasticOptions>(config.GetSection("Elastic"));
+
+    services.AddSingleton(sp =>
+    {
+        var opt = sp.GetRequiredService<IOptions<ElasticOptions>>().Value;
+
+        var settings = new ElasticsearchClientSettings(new Uri(opt.Url))
+            .DefaultIndex(opt.Index);
+
+        return new ElasticsearchClient(settings);
+    });
+
+    services.AddSingleton<IEventProjectionWriter, ElasticEventProjectionWriter>();
+    services.AddHostedService<ElasticIndexBootstrapperHostedService>(); // optional: create index/template
+
+    // Recommended: projector reading from Redis Stream (separate consumer group)
+    services.AddHostedService<RedisStreamElasticProjectorHostedService>();

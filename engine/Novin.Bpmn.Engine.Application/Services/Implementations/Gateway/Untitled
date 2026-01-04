@@ -1,0 +1,17 @@
+namespace Novin.Bpmn.Engine.Application.Services;
+
+public static class JoinCorrelationMetaKeys
+{
+    // join:{scopeN}:*
+    private static string Prefix(Guid scopeId) => $"join:{scopeId:N}";
+
+    // صرفاً برای TRACE/DEBUG: اینها Split Gateway هستند (نه Join)
+    public static string SplitGatewayId(Guid scopeId)   => $"{Prefix(scopeId)}:splitGwId";
+    public static string SplitGatewayType(Guid scopeId) => $"{Prefix(scopeId)}:splitGwType";
+
+    // این برای Join حیاتی است
+    public static string ExpectedCount(Guid scopeId)    => $"{Prefix(scopeId)}:expectedCount";
+
+    // اختیاری (دیباگ)
+    public static string Branches(Guid scopeId)         => $"{Prefix(scopeId)}:branches";
+}

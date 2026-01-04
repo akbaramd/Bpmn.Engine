@@ -1,6 +1,9 @@
+// Domain/Entities/Process.cs  (final: Variables + Metadata as single JSON blobs)
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Novin.Bpmn.Engine.Domain.Common;
 using Novin.Bpmn.Engine.Domain.Events;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
@@ -9,7 +12,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities;
 
 public sealed class Process : BaseAggregateRoot
 {
-    public Guid ProjectId { get; private set; }          // ✅ اتصال به پروژه
+    public Guid ProjectId { get; private set; }
     public Guid DeploymentId { get; private set; }
     public string ProcessBpmnId { get; private set; } = default!;
     public string Name { get; private set; } = default!;
@@ -24,26 +27,44 @@ public sealed class Process : BaseAggregateRoot
     public string? FailureReason { get; private set; }
     public string? TerminationReason { get; private set; }
 
-    // ---- IDs only (DDD-safe) ----
     private readonly HashSet<Guid> _tokenIds = new();
     public IReadOnlyCollection<Guid> TokenIds => _tokenIds;
 
-    private readonly HashSet<Guid> _nodeInstanceIds = new();   // ✅ جایگزین NodeInstance
+    private readonly HashSet<Guid> _nodeInstanceIds = new();
     public IReadOnlyCollection<Guid> NodeInstanceIds => _nodeInstanceIds;
 
-    // ---- Variables ----
-    private readonly Dictionary<string, string> _variables = new(StringComparer.Ordinal);
-    public IReadOnlyDictionary<string, string> Variables => _variables;
+    // =========================
+    // Variables (SINGLE JSON)
+    // =========================
+    private string _variablesJson = "{}";
+    private JsonObject? _variablesObj;
+    private bool _variablesLoaded;
 
+    public string VariablesJson => _variablesJson;
+    public JsonObject VariablesObject => GetVarsClone();
 
-    // ---- Metadata ----
-    private readonly Dictionary<string, string> _metadata = new(StringComparer.Ordinal);
-    public IReadOnlyDictionary<string, string> Metadata => _metadata;
+    // =========================
+    // Metadata (SINGLE JSON)
+    // =========================
+    private string _metadataJson = "{}";
+    private JsonObject? _metadataObj;
+    private bool _metadataLoaded;
+
+    public string MetadataJson => _metadataJson;
+    public JsonObject MetadataObject => GetMetaClone();
 
     private Process()
     {
         State = ProcessState.Created;
         CreatedAtUtc = DateTime.UtcNow;
+
+        _variablesJson = "{}";
+        _variablesLoaded = false;
+        _variablesObj = null;
+
+        _metadataJson = "{}";
+        _metadataLoaded = false;
+        _metadataObj = null;
     }
 
     public static Process Create(
@@ -53,7 +74,7 @@ public sealed class Process : BaseAggregateRoot
         string name,
         IDictionary<string, object?>? initialVariables = null,
         string? businessKey = null,
-         IDictionary<string, object?>? initialMetadata = null)
+        IDictionary<string, JsonNode?>? initialMetadata = null)
     {
         if (projectId == Guid.Empty) throw new ArgumentException("ProjectId cannot be empty.", nameof(projectId));
         if (deploymentId == Guid.Empty) throw new ArgumentException("DeploymentId cannot be empty.", nameof(deploymentId));
@@ -69,24 +90,30 @@ public sealed class Process : BaseAggregateRoot
             BusinessKey = string.IsNullOrWhiteSpace(businessKey) ? null : businessKey.Trim(),
         };
 
-        if (initialVariables is not null)
+        if (initialVariables is not null && initialVariables.Count > 0)
         {
-            var patch = ProcessVariablesPatch.From(initialVariables, Enumerable.Empty<string>());
-            foreach (var kv in patch.Upserts)
-                p._variables[kv.Key] = kv.Value;
+            var patch = ProcessVariablesPatch.From(initialVariables, removals: null);
+            p.ApplyVariablesPatch(patch);
         }
 
-        // ✅ Metadata (new) - store as string
-        if (initialMetadata is not null)
+        if (initialMetadata is not null && initialMetadata.Count > 0)
         {
-            var patch = ProcessMetadataPatch.From(initialMetadata, Enumerable.Empty<string>());
-            foreach (var kv in patch.Upserts)
-                p._metadata[kv.Key] = kv.Value;
+            var patch = ProcessMetadataPatch.From(initialMetadata, removals: null);
+            p.ApplyMetadataPatch(patch);
         }
 
         p.AddDomainEvent(new ProcessInstanceCreatedEvent(
-            p.Id, p.ProjectId, p.DeploymentId, p.ProcessBpmnId, p.BusinessKey,
-            new Dictionary<string, string>(p._variables), p.CreatedAtUtc));
+            p.Id,
+            p.ProjectId,
+            p.DeploymentId,
+            p.ProcessBpmnId,
+            p.BusinessKey,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["$"] = p._variablesJson,
+                ["$meta"] = p._metadataJson
+            },
+            p.CreatedAtUtc));
 
         return p;
     }
@@ -103,12 +130,6 @@ public sealed class Process : BaseAggregateRoot
     public void Complete()
     {
         EnsureState(ProcessState.Running);
-
-        // completion decision should be evaluated by a handler:
-        // - no active executable tokens
-        // - no pending workers
-        // so Process itself doesn't scan DB here.
-
         State = ProcessState.Completed;
         CompletedAtUtc = DateTime.UtcNow;
         AddDomainEvent(new ProcessCompletedEvent(Id, CompletedAtUtc.Value));
@@ -156,7 +177,91 @@ public sealed class Process : BaseAggregateRoot
 
     public void UnregisterNodeInstance(Guid nodeInstanceId) => _nodeInstanceIds.Remove(nodeInstanceId);
 
-    // ---- Variables ----
+    // =========================
+    // Variables API
+    // =========================
+    public bool HasVariable(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return false;
+        var k = NormalizeKey(key);
+        return Vars().ContainsKey(k);
+    }
+
+    public JsonNode? GetVariableNode(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return null;
+        var k = NormalizeKey(key);
+        var vars = Vars();
+        return vars.TryGetPropertyValue(k, out var node) ? node : null;
+    }
+
+    public bool TryGetVariable<T>(string key, out T? value)
+    {
+        value = default;
+        var node = GetVariableNode(key);
+        if (node is null) return false;
+
+        try
+        {
+            value = node.Deserialize<T>(JsonVariableCodec.Options);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public T? GetVariable<T>(string key, T? defaultValue = default)
+        => TryGetVariable<T>(key, out var v) ? v : defaultValue;
+
+    public void SetVariable(string key, object? value)
+    {
+        EnsureCanAcceptRuntimeMutations();
+
+        var k = EnsureKey(key);
+        var vars = Vars();
+
+        var node = JsonVariableCodec.ToNode(value);
+        var newJson = JsonVariableCodec.ToStableJson(node);
+
+        if (vars.TryGetPropertyValue(k, out var oldNode))
+        {
+            var oldJson = JsonVariableCodec.ToStableJson(oldNode);
+            if (string.Equals(oldJson, newJson, StringComparison.Ordinal))
+                return;
+        }
+
+        vars[k] = node;
+        FlushVars(vars);
+
+        AddDomainEvent(new ProcessVariablesChangedEvent(
+            Id,
+            new Dictionary<string, string>(StringComparer.Ordinal) { [k] = newJson },
+            Array.Empty<string>(),
+            DateTime.UtcNow));
+    }
+
+    public void RemoveVariable(string key)
+    {
+        EnsureCanAcceptRuntimeMutations();
+
+        if (string.IsNullOrWhiteSpace(key)) return;
+        var k = NormalizeKey(key);
+
+        var vars = Vars();
+        if (!vars.Remove(k))
+            return;
+
+        FlushVars(vars);
+
+        AddDomainEvent(new ProcessVariablesChangedEvent(
+            Id,
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new List<string> { k }.AsReadOnly(),
+            DateTime.UtcNow));
+    }
+
     public void ApplyVariablesPatch(ProcessVariablesPatch patch)
     {
         if (patch is null) throw new ArgumentNullException(nameof(patch));
@@ -164,17 +269,243 @@ public sealed class Process : BaseAggregateRoot
 
         EnsureCanAcceptRuntimeMutations();
 
-        foreach (var upsert in patch.Upserts)
-            _variables[upsert.Key] = upsert.Value;
+        var vars = Vars();
+        var upsertsActual = new Dictionary<string, string>(StringComparer.Ordinal);
+        var removalsActual = new List<string>();
 
-        foreach (var removal in patch.Removals)
-            _variables.Remove(removal);
+        foreach (var raw in patch.Removals ?? Array.Empty<string>())
+        {
+            var k = NormalizeKey(raw);
+            if (k.Length == 0) continue;
+
+            if (vars.Remove(k))
+                removalsActual.Add(k);
+        }
+
+        foreach (var kv in patch.Upserts ?? new Dictionary<string, JsonNode?>(StringComparer.Ordinal))
+        {
+            var k = NormalizeKey(kv.Key);
+            if (k.Length == 0) continue;
+
+            var node = kv.Value;
+            var newJson = JsonVariableCodec.ToStableJson(node);
+
+            if (vars.TryGetPropertyValue(k, out var oldNode))
+            {
+                var oldJson = JsonVariableCodec.ToStableJson(oldNode);
+                if (string.Equals(oldJson, newJson, StringComparison.Ordinal))
+                    continue;
+            }
+
+            vars[k] = node;
+            upsertsActual[k] = newJson;
+        }
+
+        if (upsertsActual.Count == 0 && removalsActual.Count == 0)
+            return;
+
+        FlushVars(vars);
 
         AddDomainEvent(new ProcessVariablesChangedEvent(
             Id,
-            new Dictionary<string, string>(patch.Upserts),
-            patch.Removals.ToList().AsReadOnly(),
+            upsertsActual,
+            removalsActual.AsReadOnly(),
             DateTime.UtcNow));
+    }
+
+    // =========================
+    // Metadata API
+    // =========================
+    public bool HasMetadata(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return false;
+        var k = NormalizeKey(key);
+        return Meta().ContainsKey(k);
+    }
+
+    public JsonNode? GetMetadataNode(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return null;
+        var k = NormalizeKey(key);
+        var meta = Meta();
+        return meta.TryGetPropertyValue(k, out var node) ? node : null;
+    }
+
+    public bool TryGetMetadata<T>(string key, out T? value)
+    {
+        value = default;
+        var node = GetMetadataNode(key);
+        if (node is null) return false;
+
+        try
+        {
+            value = node.Deserialize<T>(JsonVariableCodec.Options);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public T? GetMetadata<T>(string key, T? defaultValue = default)
+        => TryGetMetadata<T>(key, out var v) ? v : defaultValue;
+
+    public void SetMetadata(string key, object? value)
+    {
+        EnsureCanAcceptRuntimeMutations();
+
+        var k = EnsureKey(key);
+        var meta = Meta();
+
+        var node = JsonVariableCodec.ToNode(value);
+        var newJson = JsonVariableCodec.ToStableJson(node);
+
+        if (meta.TryGetPropertyValue(k, out var oldNode))
+        {
+            var oldJson = JsonVariableCodec.ToStableJson(oldNode);
+            if (string.Equals(oldJson, newJson, StringComparison.Ordinal))
+                return;
+        }
+
+        meta[k] = node;
+        FlushMeta(meta);
+
+        AddDomainEvent(new ProcessMetadataChangedEvent(
+            Id,
+            new Dictionary<string, string>(StringComparer.Ordinal) { [k] = newJson },
+            Array.Empty<string>(),
+            DateTime.UtcNow));
+    }
+
+    public void RemoveMetadata(string key)
+    {
+        EnsureCanAcceptRuntimeMutations();
+
+        if (string.IsNullOrWhiteSpace(key)) return;
+        var k = NormalizeKey(key);
+
+        var meta = Meta();
+        if (!meta.Remove(k))
+            return;
+
+        FlushMeta(meta);
+
+        AddDomainEvent(new ProcessMetadataChangedEvent(
+            Id,
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new List<string> { k }.AsReadOnly(),
+            DateTime.UtcNow));
+    }
+
+    public void ApplyMetadataPatch(ProcessMetadataPatch patch)
+    {
+        if (patch is null) throw new ArgumentNullException(nameof(patch));
+        if (!patch.HasChanges) return;
+
+        EnsureCanAcceptRuntimeMutations();
+
+        var meta = Meta();
+        var upsertsActual = new Dictionary<string, string>(StringComparer.Ordinal);
+        var removalsActual = new List<string>();
+
+        foreach (var raw in patch.Removals ?? Array.Empty<string>())
+        {
+            var k = NormalizeKey(raw);
+            if (k.Length == 0) continue;
+
+            if (meta.Remove(k))
+                removalsActual.Add(k);
+        }
+
+        foreach (var kv in patch.Upserts ?? new Dictionary<string, JsonNode?>(StringComparer.Ordinal))
+        {
+            var k = NormalizeKey(kv.Key);
+            if (k.Length == 0) continue;
+
+            var node = kv.Value;
+            var newJson = JsonVariableCodec.ToStableJson(node);
+
+            if (meta.TryGetPropertyValue(k, out var oldNode))
+            {
+                var oldJson = JsonVariableCodec.ToStableJson(oldNode);
+                if (string.Equals(oldJson, newJson, StringComparison.Ordinal))
+                    continue;
+            }
+
+            meta[k] = node;
+            upsertsActual[k] = newJson;
+        }
+
+        if (upsertsActual.Count == 0 && removalsActual.Count == 0)
+            return;
+
+        FlushMeta(meta);
+
+        AddDomainEvent(new ProcessMetadataChangedEvent(
+            Id,
+            upsertsActual,
+            removalsActual.AsReadOnly(),
+            DateTime.UtcNow));
+    }
+
+    // ---- internals (Vars) ----
+    private JsonObject Vars()
+    {
+        if (_variablesLoaded && _variablesObj is not null)
+            return _variablesObj;
+
+        _variablesObj = JsonVariableCodec.ParseObjectOrEmpty(_variablesJson);
+        _variablesLoaded = true;
+        return _variablesObj;
+    }
+
+    private void FlushVars(JsonObject vars)
+    {
+        _variablesObj = vars;
+        _variablesLoaded = true;
+        _variablesJson = vars.ToJsonString(JsonVariableCodec.Options);
+    }
+
+    private JsonObject GetVarsClone()
+    {
+        var vars = Vars();
+        var json = vars.ToJsonString(JsonVariableCodec.Options);
+        return JsonVariableCodec.ParseObjectOrEmpty(json);
+    }
+
+    // ---- internals (Meta) ----
+    private JsonObject Meta()
+    {
+        if (_metadataLoaded && _metadataObj is not null)
+            return _metadataObj;
+
+        _metadataObj = JsonVariableCodec.ParseObjectOrEmpty(_metadataJson);
+        _metadataLoaded = true;
+        return _metadataObj;
+    }
+
+    private void FlushMeta(JsonObject meta)
+    {
+        _metadataObj = meta;
+        _metadataLoaded = true;
+        _metadataJson = meta.ToJsonString(JsonVariableCodec.Options);
+    }
+
+    private JsonObject GetMetaClone()
+    {
+        var meta = Meta();
+        var json = meta.ToJsonString(JsonVariableCodec.Options);
+        return JsonVariableCodec.ParseObjectOrEmpty(json);
+    }
+
+    private static string NormalizeKey(string key) => (key ?? string.Empty).Trim();
+
+    private static string EnsureKey(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Key cannot be empty.", nameof(key));
+        return key.Trim();
     }
 
     private void EnsureState(ProcessState required)
@@ -188,193 +519,4 @@ public sealed class Process : BaseAggregateRoot
         if (State is ProcessState.Completed or ProcessState.Terminated or ProcessState.Failed)
             throw new InvalidOperationException($"Process in {State} is immutable.");
     }
-
-    // داخل کلاس Process
-
-    public void SetVariable(string key, string value)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Variable key cannot be empty.", nameof(key));
-
-        EnsureCanAcceptRuntimeMutations();
-
-        key = key.Trim();
-
-        // Convention: empty => remove
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            if (_variables.Remove(key))
-            {
-                AddDomainEvent(new ProcessVariablesChangedEvent(
-                    Id,
-                    new Dictionary<string, string>(StringComparer.Ordinal),
-                    new List<string> { key }.AsReadOnly(),
-                    DateTime.UtcNow));
-            }
-            return;
-        }
-
-        var newValue = value; // already string
-
-        // Idempotent upsert: if unchanged => no event
-        if (_variables.TryGetValue(key, out var oldValue) &&
-            string.Equals(oldValue, newValue, StringComparison.Ordinal))
-            return;
-
-        _variables[key] = newValue;
-
-        AddDomainEvent(new ProcessVariablesChangedEvent(
-            Id,
-            new Dictionary<string, string>(StringComparer.Ordinal) { [key] = newValue },
-            Array.Empty<string>(),
-            DateTime.UtcNow));
-    }
-
-    public bool HasVariable(string key)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            return false;
-
-        return _variables.ContainsKey(key.Trim());
-    }
-
-    public string? GetVariable(string key)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            return null;
-
-        key = key.Trim();
-        return _variables.TryGetValue(key, out var v) ? v : null;
-    }
-
-    // Optional but useful
-    public bool TryGetVariable(string key, out string value)
-    {
-        value = string.Empty;
-        if (string.IsNullOrWhiteSpace(key))
-            return false;
-
-        return _variables.TryGetValue(key.Trim(), out value!);
-    }
-
-    public void RemoveVariable(string key)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            return;
-
-        EnsureCanAcceptRuntimeMutations();
-
-        key = key.Trim();
-        if (!_variables.Remove(key))
-            return;
-
-        AddDomainEvent(new ProcessVariablesChangedEvent(
-            Id,
-            new Dictionary<string, string>(StringComparer.Ordinal),
-            new List<string> { key }.AsReadOnly(),
-            DateTime.UtcNow));
-    }
-
-    public void SetMetadata(string key, string value)
-{
-    if (string.IsNullOrWhiteSpace(key))
-        throw new ArgumentException("Metadata key cannot be empty.", nameof(key));
-
-    EnsureCanAcceptRuntimeMutations();
-
-    key = key.Trim();
-
-    // Convention: empty => remove
-    if (string.IsNullOrWhiteSpace(value))
-    {
-        if (_metadata.Remove(key))
-        {
-            AddDomainEvent(new ProcessMetadataChangedEvent(
-                Id,
-                new Dictionary<string, string>(StringComparer.Ordinal),
-                new List<string> { key }.AsReadOnly(),
-                DateTime.UtcNow));
-        }
-        return;
-    }
-
-    var newValue = value;
-
-    // Idempotent upsert
-    if (_metadata.TryGetValue(key, out var oldValue) &&
-        string.Equals(oldValue, newValue, StringComparison.Ordinal))
-        return;
-
-    _metadata[key] = newValue;
-
-    AddDomainEvent(new ProcessMetadataChangedEvent(
-        Id,
-        new Dictionary<string, string>(StringComparer.Ordinal) { [key] = newValue },
-        Array.Empty<string>(),
-        DateTime.UtcNow));
-}
-
-public bool HasMetadata(string key)
-{
-    if (string.IsNullOrWhiteSpace(key))
-        return false;
-
-    return _metadata.ContainsKey(key.Trim());
-}
-
-public string? GetMetadata(string key)
-{
-    if (string.IsNullOrWhiteSpace(key))
-        return null;
-
-    key = key.Trim();
-    return _metadata.TryGetValue(key, out var v) ? v : null;
-}
-
-public bool TryGetMetadata(string key, out string value)
-{
-    value = string.Empty;
-    if (string.IsNullOrWhiteSpace(key))
-        return false;
-
-    return _metadata.TryGetValue(key.Trim(), out value!);
-}
-
-public void RemoveMetadata(string key)
-{
-    if (string.IsNullOrWhiteSpace(key))
-        return;
-
-    EnsureCanAcceptRuntimeMutations();
-
-    key = key.Trim();
-    if (!_metadata.Remove(key))
-        return;
-
-    AddDomainEvent(new ProcessMetadataChangedEvent(
-        Id,
-        new Dictionary<string, string>(StringComparer.Ordinal),
-        new List<string> { key }.AsReadOnly(),
-        DateTime.UtcNow));
-}
-
-public void ApplyMetadataPatch(ProcessMetadataPatch patch)
-{
-    if (patch is null) throw new ArgumentNullException(nameof(patch));
-    if (!patch.HasChanges) return;
-
-    EnsureCanAcceptRuntimeMutations();
-
-    foreach (var upsert in patch.Upserts)
-        _metadata[upsert.Key] = upsert.Value;
-
-    foreach (var removal in patch.Removals)
-        _metadata.Remove(removal);
-
-    AddDomainEvent(new ProcessMetadataChangedEvent(
-        Id,
-        new Dictionary<string, string>(patch.Upserts),
-        patch.Removals.ToList().AsReadOnly(),
-        DateTime.UtcNow));
-}
 }

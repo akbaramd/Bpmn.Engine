@@ -1,4 +1,5 @@
 ﻿using Novin.Bpmn.Engine.Domain.Entities;
+using Novin.Bpmn.Engine.Domain.ValueObjects;
 
 namespace Novin.Bpmn.Engine.Application.Services;
 
@@ -17,9 +18,11 @@ public sealed class ScriptGlobals
     {
         if (process == null) throw new ArgumentNullException(nameof(process));
         if (token == null) throw new ArgumentNullException(nameof(token));
-        
-        // Initialize context with IDs and copy token variables
-        var initialVariables = token.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
+        var initialVariables = token.Variables.ToDictionary(
+            kv => kv.Key,
+            kv => (object?)JsonVariableCodec.CloneNode(kv.Value),
+            StringComparer.Ordinal);
+
         Context = new ScriptExecutionContext(process.Id, token.Id, initialVariables);
     }
 

@@ -9,6 +9,7 @@ using System.Linq;
 using Novin.Bpmn.Engine.Application.Queries;
 using Novin.Bpmn.Engine.Application.Services;
 using NodeState = Novin.Bpmn.Engine.Domain.Entities.NodeState;
+using System.Text.Json.Nodes;
 
 namespace Novin.Bpmn.Engine.Api.Controllers;
 
@@ -115,7 +116,6 @@ public sealed class ProcessExecutionController : ControllerBase
                 ProcessId: t.ProcessId,
                 CurrentElementId: t.CurrentElementId,
                 State: t.State.ToString(),
-                IsExecutable: t.IsExecutable,
                 ScopeId: t.ScopeId,
                 ArrivedViaFlowIds: t.ArrivedViaFlowIds.ToList(),
                 ActivityInstanceId: t.ActivityInstanceId,
@@ -123,7 +123,7 @@ public sealed class ProcessExecutionController : ControllerBase
                 CreatedAtUtc: t.CreatedAt,
                 ActivatedAtUtc: t.ActivatedAt,
                 CompletedAtUtc: t.CompletedAt,
-                Variables: t.Variables?.ToDictionary(k => k.Key, v => v.Value) ?? new Dictionary<string, string>()
+                Variables: t.Variables
             ))
             .ToList();
 
@@ -154,7 +154,7 @@ public sealed class ProcessExecutionController : ControllerBase
             ProcessBpmnId: process.ProcessBpmnId,
             StartedAtUtc: process.StartedAtUtc,
             CompletedAtUtc: process.CompletedAtUtc,
-            Variables: process.Variables?.ToDictionary(k => k.Key, v => v.Value) ?? new Dictionary<string, string>()
+            Variables: process.VariablesObject
         );
 
         return Ok(dto);
@@ -216,7 +216,6 @@ public sealed class ProcessExecutionController : ControllerBase
                 ProcessId: t.ProcessId,
                 CurrentElementId: t.CurrentElementId,
                 State: t.State.ToString(),
-                IsExecutable: t.IsExecutable,
                 ScopeId: t.ScopeId,
                 ArrivedViaFlowIds: t.ArrivedViaFlowIds.ToList(),
                 ActivityInstanceId: t.ActivityInstanceId,
@@ -224,7 +223,7 @@ public sealed class ProcessExecutionController : ControllerBase
                 CreatedAtUtc: t.CreatedAt,
                 ActivatedAtUtc: t.ActivatedAt,
                 CompletedAtUtc: t.CompletedAt,
-                Variables: t.Variables?.ToDictionary(k => k.Key, v => v.Value) ?? new Dictionary<string, string>()
+                Variables: t.Variables
             ))
             .ToList();
 
@@ -237,7 +236,7 @@ public sealed class ProcessExecutionController : ControllerBase
             ProcessBpmnId: process.ProcessBpmnId,
             StartedAtUtc: process.StartedAtUtc,
             CompletedAtUtc: process.CompletedAtUtc,
-            Variables: process.Variables?.ToDictionary(k => k.Key, v => v.Value) ?? new Dictionary<string, string>()
+            Variables: process.VariablesObject
         );
 
         var bundle = new ProcessDashboardBundleDto(
@@ -301,7 +300,6 @@ public sealed class ProcessExecutionController : ControllerBase
             TokenId: node.TokenId,
             ElementId: node.ElementId,
             State: node.State.ToString(),
-            IsExecutable: node.IsExecutable,
             ScopeId: node.ScopeId,
             ActivityInstanceId: node.ActivityInstanceId,
             ArrivedViaFlowIds: node.ArrivedViaFlowIds.ToList(),
@@ -311,13 +309,12 @@ public sealed class ProcessExecutionController : ControllerBase
             CreatedAtUtc: node.CreatedAtUtc,
             StartedAtUtc: node.StartedAtUtc,
             CompletedAtUtc: node.CompletedAtUtc,
-            Variables: node.Variables.ToDictionary(k => k.Key, v => v.Value),
+            Variables: node.VariablesObject,
             Token: token != null ? new TokenDetailDto(
                 TokenId: token.Id,
                 ProcessId: token.ProcessId,
                 CurrentElementId: token.CurrentElementId,
                 State: token.State.ToString(),
-                IsExecutable: token.IsExecutable,
                 ScopeId: token.ScopeId,
                 ArrivedViaFlowIds: token.ArrivedViaFlowIds.ToList(),
                 ActivityInstanceId: token.ActivityInstanceId,
@@ -341,7 +338,6 @@ public sealed class ProcessExecutionController : ControllerBase
         Guid ProcessId,
         string CurrentElementId,
         string State,
-        bool IsExecutable,
         Guid? ScopeId,
         IReadOnlyList<string> ArrivedViaFlowIds,
         Guid? ActivityInstanceId,
@@ -349,7 +345,7 @@ public sealed class ProcessExecutionController : ControllerBase
         DateTime CreatedAtUtc,
         DateTime? ActivatedAtUtc,
         DateTime? CompletedAtUtc,
-        IReadOnlyDictionary<string, string> Variables
+        IReadOnlyDictionary<string, JsonNode?> Variables
     );
 
     public sealed record ProcessDashboardDto(
@@ -361,7 +357,7 @@ public sealed class ProcessExecutionController : ControllerBase
         string? ProcessBpmnId,
         DateTime? StartedAtUtc,
         DateTime? CompletedAtUtc,
-        IReadOnlyDictionary<string, string> Variables
+        JsonObject Variables
     );
 
     public sealed record BpmnModelDto(
@@ -396,7 +392,6 @@ public sealed class ProcessExecutionController : ControllerBase
         Guid TokenId,
         string ElementId,
         string State,
-        bool IsExecutable,
         Guid? ScopeId,
         Guid? ActivityInstanceId,
         IReadOnlyList<string> ArrivedViaFlowIds,
@@ -406,7 +401,7 @@ public sealed class ProcessExecutionController : ControllerBase
         DateTime CreatedAtUtc,
         DateTime? StartedAtUtc,
         DateTime? CompletedAtUtc,
-        IReadOnlyDictionary<string, string> Variables,
+        JsonObject Variables,
         TokenDetailDto? Token
     );
 
@@ -415,7 +410,6 @@ public sealed class ProcessExecutionController : ControllerBase
         Guid ProcessId,
         string CurrentElementId,
         string State,
-        bool IsExecutable,
         Guid? ScopeId,
         IReadOnlyList<string> ArrivedViaFlowIds,
         Guid? ActivityInstanceId,
@@ -423,7 +417,7 @@ public sealed class ProcessExecutionController : ControllerBase
         DateTime CreatedAtUtc,
         DateTime? ActivatedAtUtc,
         DateTime? CompletedAtUtc,
-        IReadOnlyDictionary<string, string> Variables
+        IReadOnlyDictionary<string, JsonNode?> Variables
     );
     
     // ----------------------------------------------------------------------

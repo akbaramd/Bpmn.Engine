@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
@@ -39,7 +40,7 @@ public class GetProcessQueryHandler : IRequestHandler<GetProcessQuery, ProcessDt
             DeploymentId = process.DeploymentId,
             ProcessBpmnId = process.ProcessBpmnId,
             State = process.State,
-            Variables = new Dictionary<string, string>(process.Variables),
+            Variables = process.VariablesObject,
             CreatedAt = process.CreatedAtUtc,
             StartedAt = process.StartedAtUtc,
             CompletedAt = process.CompletedAtUtc

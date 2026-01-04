@@ -2,29 +2,34 @@ using Novin.Bpmn.Engine.Domain.Common;
 using Novin.Bpmn.Engine.Domain.Events;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 using System;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Novin.Bpmn.Engine.Domain.Entities
 {
     public sealed class Token : BaseAggregateRoot
     {
-    public Guid ProcessId { get; private set; }
-    public string CurrentElementId { get; private set; } = default!;
-    public TokenState State { get; private set; }
+        public Guid ProcessId { get; private set; }
+        public string CurrentElementId { get; private set; } = default!;
+        public TokenState State { get; private set; }
 
-    /// <summary>
-    /// ID of the worker this token is waiting for (if any)
-    /// </summary>
+        // -------------------- Scope (Zeebe-like) --------------------
 
-        /// <summary>
-        /// If false => bypass-only token, never executes activities (only moves)
-        /// </summary>
-        public bool IsExecutable { get; private set; } = true;
 
+        // ✅ nested scopes support
+        private readonly List<Guid> _scopeStack = new();
+        public IReadOnlyList<Guid> ScopeStack => _scopeStack.AsReadOnly();
+
+        // ✅ persisted current scope for EF + indexing
         public Guid? ScopeId { get; private set; }
-        
+
+        // helpful for debugging / guards
+        public Guid? ParentScopeId => _scopeStack.Count < 2 ? null : _scopeStack[^2];
+
+
         private readonly List<string> _arrivedViaFlowIds = new();
         public IReadOnlyList<string> ArrivedViaFlowIds => _arrivedViaFlowIds.AsReadOnly();
-        
+
         /// <summary>
         /// Activity Instance ID - برای cancel کردن activity instance در interrupting boundary events
         /// این با ScopeId متفاوت است: ScopeId برای fork/join correlation است،
@@ -38,8 +43,139 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         /// </summary>
         public Guid? ParentTokenId { get; private set; }
 
-        private readonly Dictionary<string, string> _variables = new();
-        public IReadOnlyDictionary<string, string> Variables => _variables;
+ // ✅ JSON-native local variables (Zeebe-like “document variables”)
+        private readonly Dictionary<string, JsonNode?> _variables = new(StringComparer.Ordinal);
+        public IReadOnlyDictionary<string, JsonNode?> Variables => _variables;
+
+        public void ApplyVariablesPatch(VariablesPatch patch)
+        {
+            EnsureNotTerminal();
+            if (patch is null || !patch.HasChanges) return;
+
+            // removals first
+            if (patch.Removals is not null)
+            {
+                foreach (var k in patch.Removals)
+                    RemoveVariable(k);
+            }
+
+            if (patch.Upserts is not null)
+            {
+                foreach (var kv in patch.Upserts)
+                    SetVariable(kv.Key, kv.Value);
+            }
+        }
+
+        public void SetVariable(string name, object? value)
+        {
+            EnsureNotTerminal();
+
+            var key = VariablesPatch.NormalizeKey(name);
+            if (string.IsNullOrWhiteSpace(key))
+                throw new ArgumentException("Variable name cannot be empty", nameof(name));
+
+            // null => remove
+            if (value is null)
+            {
+                RemoveVariable(key);
+                return;
+            }
+
+            var node = value is JsonNode jn ? jn : JsonVariableCodec.ToNode(value);
+            if (node is null)
+            {
+                RemoveVariable(key);
+                return;
+            }
+
+            // clone to detach from external references
+            var newNode = JsonVariableCodec.CloneNode(node);
+            var newJson = JsonVariableCodec.ToStableJson(newNode);
+
+            if (_variables.TryGetValue(key, out var oldNode))
+            {
+                var oldJson = JsonVariableCodec.ToStableJson(oldNode);
+                if (string.Equals(oldJson, newJson, StringComparison.Ordinal))
+                    return;
+            }
+
+            _variables[key] = newNode;
+
+            AddDomainEvent(new TokenLocalVariableSetEvent(
+                Id,
+                ProcessId,
+                key,
+                DateTime.UtcNow));
+        }
+
+        public bool RemoveVariable(string name)
+        {
+            EnsureNotTerminal();
+
+            var key = VariablesPatch.NormalizeKey(name);
+            if (string.IsNullOrWhiteSpace(key)) return false;
+
+            return _variables.Remove(key);
+        }
+
+        public bool HasVariable(string name)
+        {
+            var key = VariablesPatch.NormalizeKey(name);
+            return !string.IsNullOrWhiteSpace(key) && _variables.ContainsKey(key);
+        }
+
+        public JsonNode? GetVariableNode(string name)
+        {
+            var key = VariablesPatch.NormalizeKey(name);
+            if (string.IsNullOrWhiteSpace(key)) return null;
+            return _variables.TryGetValue(key, out var node) ? node : null;
+        }
+
+        public string? GetVariableJson(string name)
+        {
+            var node = GetVariableNode(name);
+            return node is null ? null : JsonVariableCodec.ToStableJson(node);
+        }
+
+        public bool TryGetVariable<T>(string name, out T? value)
+        {
+            value = default;
+
+            var node = GetVariableNode(name);
+            if (node is null) return false;
+
+            try
+            {
+                value = node.Deserialize<T>(JsonVariableCodec.Options);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public T? GetVariable<T>(string name)
+        {
+            var node = GetVariableNode(name);
+            if (node is null) return default;
+            return node.Deserialize<T>(JsonVariableCodec.Options);
+        }
+
+        public void ClearLocalVariables()
+        {
+            EnsureNotTerminal();
+            if (_variables.Count == 0) return;
+
+            var clearedCount = _variables.Count;
+            _variables.Clear();
+
+            AddDomainEvent(new TokenLocalVariablesClearedEvent(
+                Id,
+                ProcessId,
+                clearedCount,
+                DateTime.UtcNow));
+        }
 
         public DateTime CreatedAt { get; private set; }
         public DateTime? ActivatedAt { get; private set; }
@@ -85,12 +221,11 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 TokenId: Id,
                 ProcessId: ProcessId,
                 ElementId: CurrentElementId,
-                OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable));
+                OccurredAtUtc: DateTime.UtcNow));
 
         }
 
-        public void Wait(string? reason = null )
+        public void Wait(string? reason = null)
         {
             EnsureState(TokenState.Active);
 
@@ -102,7 +237,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ElementId: CurrentElementId,
                 Reason: reason,
                 OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
         }
         public void SetArrivedVia(string? flowId)
@@ -122,7 +256,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ElementId: CurrentElementId,
                 ArrivedViaFlowId: flowId,
                 OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
         }
 
@@ -151,7 +284,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ProcessId: ProcessId,
                 ElementId: CurrentElementId,
                 OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
 
         }
@@ -171,7 +303,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ProcessId: ProcessId,
                 ElementId: CurrentElementId,
                 OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
 
         }
@@ -188,7 +319,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ElementId: CurrentElementId,
                 Reason: reason,
                 OccurredAtUtc: CompletedAt.Value,
-                IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
         }
         public void Processed()
@@ -200,7 +330,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ProcessId: ProcessId,
                 ElementId: CurrentElementId,
                 OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
         }
 
@@ -235,7 +364,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ElementId: CurrentElementId,
                 Error: error,
                 OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable,
                 ScopeId: ScopeId,
                 IncidentId: incidentId,
                 ErrorType: errorType.ToString(),
@@ -255,14 +383,13 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ElementId: CurrentElementId,
                 Reason: reason,
                 OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable,
                 ScopeId: ScopeId));
         }
 
         /// <summary>
         /// Mark token as Forked when it creates child tokens at a split gateway
         /// </summary>
-        public void Fork( int childCount, string? reason = null)
+        public void Fork(int childCount, string? reason = null)
         {
             EnsureState(TokenState.Active);
 
@@ -275,8 +402,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ElementId: CurrentElementId,
                 ScopeId: ScopeId ?? Guid.Empty,
                 ChildCount: childCount,
-                OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable));
+                OccurredAtUtc: DateTime.UtcNow));
         }
 
         /// <summary>
@@ -298,8 +424,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ElementId: CurrentElementId,
                 ScopeId: ScopeId ?? Guid.Empty,
                 ParentTokenId: parentTokenId,
-                OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable));
+                OccurredAtUtc: DateTime.UtcNow));
         }
 
         /// <summary>
@@ -318,8 +443,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ElementId: CurrentElementId,
                 ScopeId: scopeId,
                 MergedChildCount: mergedChildCount,
-                OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable));
+                OccurredAtUtc: DateTime.UtcNow));
         }
 
         /// <summary>
@@ -356,23 +480,9 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 StackTrace: stackTrace,
                 OccurredAtUtc: DateTime.UtcNow));
         }
-        public void ClearLocalVariables()
-        {
-            EnsureNotTerminal();
-            if (_variables.Count == 0)
-                return;
-
-            var clearedCount = _variables.Count;
-            _variables.Clear();
-
-            AddDomainEvent(new TokenLocalVariablesClearedEvent(
-                Id,
-                ProcessId,
-                clearedCount,
-                DateTime.UtcNow));
-        }
+       
         // -------------------- Movement --------------------
-        public void MoveTo(string nextElementId,bool skipProcess = false, params string?[] viaFlowId)
+        public void MoveTo(string nextElementId, bool skipProcess = false, params string?[] viaFlowId)
         {
             EnsureState(TokenState.Active);
 
@@ -383,7 +493,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
             var activityInstanceId = ActivityInstanceId; // 🔴 snapshot قبل از تغییر
 
             CurrentElementId = nextElementId;
-            
+
             // Clear previous flow IDs and set only the current flow ID for this move
             _arrivedViaFlowIds.Clear();
             if (viaFlowId.Any())
@@ -398,7 +508,6 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 ToElementId: nextElementId,
                 ViaFlowIds: _arrivedViaFlowIds,
                 OccurredAtUtc: DateTime.UtcNow,
-                IsExecutable: IsExecutable,
                 ScopeId: ScopeId,
                 SkipProcess: skipProcess,
                 ActivityInstanceId: activityInstanceId
@@ -418,29 +527,18 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         {
             State = TokenState.Active;
         }
-    
 
-        // -------------------- Fork/Merge correlation --------------------
-        public void MarkNonExecutable(string? reason = null)
-        {
-            if (!IsExecutable) return;
 
-            IsExecutable = false;
+        // -------------------- Scope Stack API --------------------
 
-            AddDomainEvent(new TokenBecameNonExecutableEvent(
-                TokenId: Id,
-                ProcessId: ProcessId,
-                ElementId: CurrentElementId,
-                OccurredAtUtc: DateTime.UtcNow,
-                ScopeId: ScopeId));
-        }
-
-        public void SetScope(Guid scopeId)
+        // ✅ for split gateway: push a new scope
+        public void PushScope(Guid scopeId)
         {
             if (scopeId == Guid.Empty)
                 throw new ArgumentException("ScopeId cannot be empty", nameof(scopeId));
 
-            ScopeId = scopeId;
+            _scopeStack.Add(scopeId);
+            ScopeId = scopeId; // ✅ sync current scope
 
             AddDomainEvent(new TokenScopeAssignedEvent(
                 TokenId: Id,
@@ -449,10 +547,66 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 OccurredAtUtc: DateTime.UtcNow));
         }
 
-        public void ClearScope() => ScopeId = null;
+        // ✅ for join completion: return to parent scope
+        public Guid? PopScope()
+        {
+            if (_scopeStack.Count == 0)
+                return null;
+
+            _scopeStack.RemoveAt(_scopeStack.Count - 1);
+
+            ScopeId = _scopeStack.Count == 0 ? null : _scopeStack[^1]; // ✅ sync
+            return ScopeId;
+        }
+
+        public void ClearAllScopes()
+        {
+            _scopeStack.Clear();
+            ScopeId = null; // ✅ sync
+        }
+
+        // backward compatible alias
+        public void SetScope(Guid scopeId) => PushScope(scopeId);
+
+        // ⚠️ old name; now means clear all
+        public void ClearScope() => ClearAllScopes();
+
+        public void SetScopeStackSnapshot(IEnumerable<Guid> scopes)
+        {
+            if (scopes is null) throw new ArgumentNullException(nameof(scopes));
+
+            _scopeStack.Clear();
+            foreach (var s in scopes)
+            {
+                if (s != Guid.Empty)
+                    _scopeStack.Add(s);
+            }
+
+            ScopeId = _scopeStack.Count == 0 ? null : _scopeStack[^1]; // ✅ sync
+        }
+
+        /// <summary>
+        /// ✅ EF-friendly replace with guard + normalization
+        /// </summary>
+        public void ReplaceScopeStack(IReadOnlyList<Guid> scopeStackSnapshot)
+        {
+            if (scopeStackSnapshot is null)
+                throw new ArgumentNullException(nameof(scopeStackSnapshot));
+
+            _scopeStack.Clear();
+
+            for (int i = 0; i < scopeStackSnapshot.Count; i++)
+            {
+                var s = scopeStackSnapshot[i];
+                if (s != Guid.Empty)
+                    _scopeStack.Add(s);
+            }
+
+            ScopeId = _scopeStack.Count == 0 ? null : _scopeStack[^1]; // ✅ sync
+        }
 
         public void ClearArrivedVia() => _arrivedViaFlowIds.Clear();
-        
+
         /// <summary>
         /// Set Activity Instance ID - وقتی token وارد یک activity می‌شود که scope جدید ایجاد می‌کند
         /// (مثل UserTask, SubProcess, ...)
@@ -470,7 +624,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 activityInstanceId,
                 DateTime.UtcNow));
         }
-        
+
         /// <summary>
         /// Clear Activity Instance ID - وقتی token از activity خارج می‌شود
         /// </summary>
@@ -487,53 +641,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         }
 
         // -------------------- Variables --------------------
-        public void SetVariable(string name, object? value)
-        {
-            EnsureNotTerminal();
-
-            if (string.IsNullOrWhiteSpace(name))
-                throw new ArgumentException("Variable name cannot be empty", nameof(name));
-
-            _variables[name] = ConvertToString(value);
-
-            AddDomainEvent(new TokenLocalVariableSetEvent(
-                Id,
-                ProcessId,
-                name,
-                DateTime.UtcNow));
-        }
-
-        public bool TryGetVariable(string name, out string? value)
-        {
-            value = null;
-            if (string.IsNullOrWhiteSpace(name)) return false;
-            return _variables.TryGetValue(name, out value);
-        }
-
-        public string GetVariable(string name)
-        {
-            if (!_variables.TryGetValue(name, out var value))
-                throw new KeyNotFoundException($"Variable '{name}' not found.");
-
-            return value;
-        }
-
-        /// <summary>
-        /// Converts an object to string representation
-        /// </summary>
-        private static string ConvertToString(object? value)
-        {
-            if (value == null)
-                return string.Empty;
-
-            if (value is string str)
-                return str;
-
-            // Use JSON serialization for complex types
-            return Newtonsoft.Json.JsonConvert.SerializeObject(value);
-        }
-
-        public bool HasVariable(string name) => _variables.ContainsKey(name);
+       
 
         // -------------------- Guards --------------------
         private void EnsureState(TokenState required)
@@ -547,5 +655,8 @@ namespace Novin.Bpmn.Engine.Domain.Entities
             if (State is TokenState.Completed or TokenState.Terminated)
                 throw new InvalidOperationException($"Token is terminal: {State}");
         }
+
+
+
     }
 }

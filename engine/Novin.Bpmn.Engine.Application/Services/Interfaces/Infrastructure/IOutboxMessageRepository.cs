@@ -48,4 +48,8 @@ public interface IOutboxMessageRepository
     /// <param name="ct">Cancellation token</param>
     /// <returns>Collection of messages ready for retry</returns>
     Task<IReadOnlyList<OutboxMessage>> GetPendingForRetryAsync(DateTime currentTime, int batchSize, CancellationToken ct);
+    Task<OutboxMessage> GetByIdAsync(Guid outboxId, CancellationToken ct);
+    Task MarkProcessedAsync(Guid outboxId, DateTime utcNow, CancellationToken ct);
+    Task MarkFailedAsync(Guid outboxId, string message, CancellationToken ct);
+    Task MarkDispatchedAsync(List<Guid> ids, DateTime utcNow, CancellationToken ct);
 }

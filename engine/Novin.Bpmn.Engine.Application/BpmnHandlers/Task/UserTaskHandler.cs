@@ -67,8 +67,8 @@ public sealed class UserTaskHandler : BpmnElementHandlerBase
         }
 
         Logger.LogDebug(
-            "[USER-TASK] Process. P={ProcessId} T={TokenId} N={NodeId} E={ElementId} Exec={Exec} Resume={Resume} TokenState={TokenState} NodeState={NodeState}",
-            process.Id, token.Id, node.Id, elementId, token.IsExecutable, isResume, token.State, node.State);
+            "[USER-TASK] Process. P={ProcessId} T={TokenId} N={NodeId} E={ElementId} Resume={Resume} TokenState={TokenState} NodeState={NodeState}",
+            process.Id, token.Id, node.Id, elementId, isResume, token.State, node.State);
 
         // Terminal safety
         if (token.State is TokenState.Terminated or TokenState.Failed)
@@ -81,13 +81,6 @@ public sealed class UserTaskHandler : BpmnElementHandlerBase
             return ElementProcessResult.NoOp;
         }
 
-        // Trace/non-executable => pass-through (no task created)
-        if (!token.IsExecutable)
-        {
-            token.Processed();
-            node.Complete();
-            return ElementProcessResult.Completed;
-        }
 
         // Resume => task completed externally; allow navigation
         if (isResume)
@@ -103,7 +96,7 @@ public sealed class UserTaskHandler : BpmnElementHandlerBase
 
         // First run: inputs (only once)
         token.ClearLocalVariables();
-        _mapping.ApplyInputs(process, token, userTask, ctx);
+        _mapping.ApplyInputs(process, token,node, userTask, ctx);
 
         // Create/Get user-task (MUST be idempotent inside the service)
         // Recommended correlation key: (process.Id, token.Id, node.Id, elementId)

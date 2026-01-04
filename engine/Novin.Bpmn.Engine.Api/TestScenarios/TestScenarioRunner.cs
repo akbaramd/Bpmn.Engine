@@ -69,7 +69,7 @@ public sealed class TestScenarioRunner
                     var isFailed = process.State == ProcessState.Failed;
 
                     // Display execution path if available
-                    if (process.Variables.TryGetValue("executionPath", out var executionPath))
+                    if (process.TryGetVariable<string>("executionPath", out var executionPath))
                     {
                         _logger.LogInformation("   📍 Execution Path: {ExecutionPath}", executionPath);
                     }

@@ -46,7 +46,7 @@ public class GetProcessesQueryHandler : IRequestHandler<GetProcessesQuery, IEnum
                 p.CreatedAtUtc,
                 p.StartedAtUtc,
                 p.CompletedAtUtc,
-                p.Variables
+                p.VariablesObject
             ));
     }
 }
