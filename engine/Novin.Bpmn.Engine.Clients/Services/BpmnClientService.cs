@@ -94,59 +94,187 @@ public class BpmnClientService : IBpmnClientService
 
         return await Task.FromResult(status);
     }
-    public async Task CompleteUserTaskAsync(
-        Guid workerId,
-        CompleteTaskRequest request,
-        CancellationToken ct = default)
+
+public async Task StartProcessAsync(
+    string deploymentKey,
+    string processId,
+    string processTitle,
+    Dictionary<string, object?>? variables = null,
+    CancellationToken ct = default)
+{
+    if (string.IsNullOrWhiteSpace(deploymentKey))
+        throw new ArgumentException("Deployment key is required.", nameof(deploymentKey));
+
+    if (string.IsNullOrWhiteSpace(processId))
+        throw new ArgumentException("Process BPMN id is required.", nameof(processId));
+
+    if (string.IsNullOrWhiteSpace(processTitle))
+        throw new ArgumentException("Process title is required.", nameof(processTitle));
+
+    // Ensure the client is connected to the engine (consistent with RegisterWorkItemAsync)
+    if (!_connectionManager.IsConnected())
     {
-        using var client = CreateClient();
-
-        var response = await client.PostAsJsonAsync(
-            $"api/workers/{workerId}/complete-user",
-            request,
-            ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(ct);
-            _logger.LogError(
-                "Failed to complete user task {WorkerId}: {Status} {Body}",
-                workerId,
-                response.StatusCode,
-                body);
-
-            response.EnsureSuccessStatusCode();
-        }
-
-        _logger.LogInformation("UserTask {WorkerId} completed", workerId);
+        _logger.LogWarning("Client is not connected to BPMN engine. Attempting to connect...");
+        await _connectionManager.RegisterWithEngineAsync(ct);
     }
 
-    public async Task AssignUserTaskAsync(
-        Guid workerId,
-        AssignUserTaskRequest request,
-        CancellationToken ct = default)
+    // Copy variables so we don't mutate the caller's dictionary
+    var initialVars = variables is null
+        ? null
+        : new Dictionary<string, object?>(variables);
+
+    // Optional "reserved" values may be provided inside variables
+    // (handy since StartProcessAsync signature doesn't include them).
+    Guid projectId = Guid.Parse("6f7c9c6a-7b8b-4b84-8a7a-1c2a3b4c5d6e"); // <-- expected in your BpmnClientOptions
+    string? businessKey = null;
+    string? explicitStartElementId = null;
+
+    
+
+    if (projectId == Guid.Empty)
+        throw new InvalidOperationException(
+            "ProjectId is required to start a process. Set BpmnClientOptions.ProjectId or pass it in variables['projectId'].");
+
+    var command = new StartProcessCommandDto
     {
-        using var client = CreateClient();
+        ProjectId = projectId,
+        DeploymentKey = deploymentKey,
+        ProcessBpmnId = processId,
+        ProcessName = processTitle,
+        BusinessKey = businessKey,
+        ExplicitStartElementId = explicitStartElementId,
+        InitialVariables = initialVars
+    };
 
-        var response = await client.PostAsJsonAsync(
-            $"api/workers/{workerId}/assign",
-            request,
-            ct);
+    using var client = CreateClient();
 
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(ct);
-            _logger.LogError(
-                "Failed to assign user task {WorkerId}: {Status} {Body}",
-                workerId,
-                response.StatusCode,
-                body);
+    _logger.LogInformation(
+        "Starting process {ProcessBpmnId} from deployment {DeploymentKey} (ProjectId={ProjectId})",
+        command.ProcessBpmnId,
+        command.DeploymentKey,
+        command.ProjectId);
 
-            response.EnsureSuccessStatusCode();
-        }
+    var response = await client.PostAsJsonAsync("api/processes/start", command, ct);
 
-        _logger.LogInformation("UserTask {WorkerId} assigned", workerId);
+    if (!response.IsSuccessStatusCode)
+    {
+        var body = await response.Content.ReadAsStringAsync(ct);
+
+        _logger.LogError(
+            "Failed to start process {ProcessBpmnId} from deployment {DeploymentKey}: {Status} {Body}",
+            command.ProcessBpmnId,
+            command.DeploymentKey,
+            response.StatusCode,
+            body);
+
+        response.EnsureSuccessStatusCode();
     }
+
+    // Best-effort deserialize result (endpoint returns 201 with StartProcessResult)
+    StartProcessResultDto? result = null;
+    try
+    {
+        result = await response.Content.ReadFromJsonAsync<StartProcessResultDto>(cancellationToken: ct);
+    }
+    catch (Exception ex)
+    {
+        _logger.LogWarning(ex, "Process started but response body could not be deserialized.");
+    }
+
+    if (result?.ProcessId is { } startedId && startedId != Guid.Empty)
+    {
+        _logger.LogInformation("Process started successfully. ProcessId={ProcessId}", startedId);
+    }
+    else
+    {
+        _logger.LogInformation("Process started successfully. (No ProcessId parsed from response)");
+    }
+}
+
+   public async Task<UserTaskDto?> GetUserTaskAsync(Guid userTaskId, CancellationToken ct = default)
+{
+    using var client = CreateClient();
+
+    var response = await client.GetAsync($"api/user-tasks/{userTaskId}", ct);
+
+    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+    {
+        _logger.LogWarning("UserTask {UserTaskId} not found", userTaskId);
+        return null;
+    }
+
+    if (!response.IsSuccessStatusCode)
+    {
+        var body = await response.Content.ReadAsStringAsync(ct);
+        _logger.LogError(
+            "Failed to get user task {UserTaskId}: {Status} {Body}",
+            userTaskId,
+            response.StatusCode,
+            body);
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    return await response.Content.ReadFromJsonAsync<UserTaskDto>(cancellationToken: ct);
+}
+
+public async Task CompleteUserTaskAsync(
+    Guid userTaskId,
+    CompleteUserTaskRequest request,
+    CancellationToken ct = default)
+{
+    if (request is null) throw new ArgumentNullException(nameof(request));
+
+    using var client = CreateClient();
+
+    var response = await client.PostAsJsonAsync(
+        $"api/user-tasks/{userTaskId}/complete",
+        request,
+        ct);
+
+    if (!response.IsSuccessStatusCode)
+    {
+        var body = await response.Content.ReadAsStringAsync(ct);
+        _logger.LogError(
+            "Failed to complete user task {UserTaskId}: {Status} {Body}",
+            userTaskId,
+            response.StatusCode,
+            body);
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    _logger.LogInformation("UserTask {UserTaskId} completed", userTaskId);
+}
+
+public async Task AssignUserTaskAsync(
+    Guid userTaskId,
+    AssignUserTaskRequest request,
+    CancellationToken ct = default)
+{
+    if (request is null) throw new ArgumentNullException(nameof(request));
+
+    using var client = CreateClient();
+
+    var response = await client.PostAsJsonAsync(
+        $"api/user-tasks/{userTaskId}/assign",
+        request,
+        ct);
+
+    if (!response.IsSuccessStatusCode)
+    {
+        var body = await response.Content.ReadAsStringAsync(ct);
+        _logger.LogError(
+            "Failed to assign user task {UserTaskId}: {Status} {Body}",
+            userTaskId,
+            response.StatusCode,
+            body);
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    _logger.LogInformation("UserTask {UserTaskId} assigned", userTaskId);
+}
     public async Task CompleteServiceTaskAsync(
         Guid workerId,
         CompleteTaskRequest request,
@@ -208,6 +336,7 @@ public class BpmnClientService : IBpmnClientService
         };
     }
 
+   
 }
 
 

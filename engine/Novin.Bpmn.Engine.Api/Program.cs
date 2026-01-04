@@ -61,9 +61,6 @@ if (existingService != null)
     builder.Services.Remove(existingService);
 }
 
-// Register test scenario runner for API access
-builder.Services.AddScoped<Novin.Bpmn.Engine.Api.TestScenarios.TestScenarioRunner>();
-
 // Register client registry for SignalR client management
 builder.Services.AddSingleton<IClientRegistry, Novin.Bpmn.Engine.Api.Services.ClientRegistry>();
 

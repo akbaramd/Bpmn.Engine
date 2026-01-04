@@ -59,7 +59,7 @@ namespace Novin.Bpmn.Engine.Api.Controllers
             try
             {
                 _logger.LogInformation("Starting process: {ProcessBpmnId} from deployment {DeploymentId}",
-                    command.ProcessBpmnId, command.DeploymentId);
+                    command.ProcessBpmnId, command.DeploymentKey);
 
                 var result = await _mediator.Send(command);
 
@@ -70,7 +70,7 @@ namespace Novin.Bpmn.Engine.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error starting process: {ProcessBpmnId} from deployment {DeploymentId}",
-                    command.ProcessBpmnId, command.DeploymentId);
+                    command.ProcessBpmnId, command.DeploymentKey);
                 return StatusCode(500, new { error = ex.Message });
             }
         }

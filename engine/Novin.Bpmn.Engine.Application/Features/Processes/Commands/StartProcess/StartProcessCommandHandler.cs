@@ -34,43 +34,22 @@ public sealed class StartProcessCommandHandler : IRequestHandler<StartProcessCom
 
         try
         {
-            // ------------------------------------------------------------
-            // 1) Start an existing process instance (rare path)
-            // ------------------------------------------------------------
-            if (request.ProcessId.HasValue && request.ProcessId.Value != Guid.Empty)
-            {
-                var existing = await _unitOfWork.Processes.GetByIdAsync(request.ProcessId.Value, cancellationToken);
-                if (existing is null)
-                    throw new InvalidOperationException($"Process with ID '{request.ProcessId}' not found.");
-
-                existing.Start();
-
-                await _unitOfWork.CommitTransactionAsync(cancellationToken);
-
-                return new StartProcessResult
-                {
-                    ProcessId = existing.Id,
-                    ProcessName = existing.Name,
-                    CreatedAt = existing.CreatedAtUtc,
-                    StartedAt = existing.StartedAtUtc!.Value
-                };
-            }
-
+      
             // ------------------------------------------------------------
             // 2) Instantiate + start (domain service does BPMN checks + token creation)
             // ------------------------------------------------------------
             ValidateNewStart(request);
 
-            var initialVariables = request.InitialVariables?
-                .ToDictionary(kv => kv.Key, kv => (object?)kv.Value);
+            var deployment = await _unitOfWork.Deployments.GetLatestByDeploymentKeyAsync(request.DeploymentKey, cancellationToken);
+            if (deployment == null) throw new ArgumentNullException(nameof(deployment));
 
             var result = _instantiator.Instantiate(new ProcessInstantiationRequest(
                 ProjectId: request.ProjectId,                 // ✅ ensure StartProcessCommand has ProjectId
-                DeploymentId: request.DeploymentId,
+                DeploymentId: deployment.Id,
                 ProcessBpmnId: request.ProcessBpmnId!,
                 ProcessName: request.ProcessName!,
                 BusinessKey: request.BusinessKey,
-                InitialVariables: initialVariables,
+                InitialVariables: request.InitialVariables ,
                 ExplicitStartElementId: request.ExplicitStartElementId // optional
             ));
 
@@ -96,8 +75,8 @@ public sealed class StartProcessCommandHandler : IRequestHandler<StartProcessCom
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "Error starting process. ProcessBpmnId={ProcessBpmnId}, DeploymentId={DeploymentId}",
-                request.ProcessBpmnId, request.DeploymentId);
+                "Error starting process. ProcessBpmnId={ProcessBpmnId}",
+                request.ProcessBpmnId);
 
             await _unitOfWork.RollbackTransactionAsync(cancellationToken);
             throw;
@@ -109,7 +88,7 @@ public sealed class StartProcessCommandHandler : IRequestHandler<StartProcessCom
         if (request.ProjectId == Guid.Empty)
             throw new ArgumentException("ProjectId is required when creating a new process instance.", nameof(request));
 
-        if (request.DeploymentId == Guid.Empty)
+        if (string.IsNullOrWhiteSpace(request.DeploymentKey))
             throw new ArgumentException("DeploymentId is required when ProcessId is not provided.", nameof(request));
 
         if (string.IsNullOrWhiteSpace(request.ProcessBpmnId))

@@ -1,4 +1,5 @@
 using System.Reflection;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -32,6 +33,11 @@ public class BpmnEngineDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        
+        modelBuilder.AddInboxStateEntity();
+        modelBuilder.AddOutboxMessageEntity();
+        modelBuilder.AddOutboxStateEntity();
+        
         modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
         // Configure Deployment
     }

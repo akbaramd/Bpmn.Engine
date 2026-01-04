@@ -66,7 +66,7 @@ public sealed class TechnicalFailureOccurredEventHandler : INotificationHandler<
             // Fail the token with the incident
             token.Fail(
                 $"Technical failure: {@event.ErrorMessage}",
-                ErrorType.TechnicalFailure,
+                EngineErrorKind.Technical,
                 errorCode: null,
                 incidentId: incident.Id);
 

@@ -1,32 +1,32 @@
 version: "3.9"
 
 services:
-  redis:
-    image: redis
-    container_name: novin-redis
-    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    restart: unless-stopped
-
-  redisinsight:
-    image: redis/redisinsight
-    container_name: novin-redisinsight
-    ports:
-      - "5540:5540"
-    volumes:
-      - redisinsight-data:/data
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
+  #  redis:
+  #    image: redis
+  #    container_name: novin-redis
+  #    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+  #    ports:
+  #      - "6379:6379"
+  #    volumes:
+  #      - redis-data:/data
+  #    healthcheck:
+  #      test: ["CMD", "redis-cli", "ping"]
+  #      interval: 5s
+  #      timeout: 3s
+  #      retries: 20
+  #    restart: unless-stopped
+  #
+  #  redisinsight:
+  #    image: redis/redisinsight
+  #    container_name: novin-redisinsight
+  #    ports:
+  #      - "5540:5540"
+  #    volumes:
+  #      - redisinsight-data:/data
+  #    depends_on:
+  #      redis:
+  #        condition: service_healthy
+  #    restart: unless-stopped
 
   postgres:
     image: postgres:15-alpine3.23
@@ -82,8 +82,29 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  rabbitmq:
+    image: rabbitmq:4.2.0-management
+    container_name: novin-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      # اگر خواستی vhost جدا:
+      # RABBITMQ_DEFAULT_VHOST: /
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
 volumes:
   redis-data:
-  redisinsight-data:
+  #  redisinsight-data:
   postgres-data:
   elastic-data:
+  rabbitmq-data:

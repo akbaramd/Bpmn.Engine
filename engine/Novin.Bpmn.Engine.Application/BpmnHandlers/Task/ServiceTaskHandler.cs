@@ -12,19 +12,33 @@ using NodeState = Novin.Bpmn.Engine.Domain.Entities.NodeState;
 namespace Novin.Bpmn.Engine.Application.ElementHandlers;
 
 /// <summary>
-/// BPMN ServiceTask handler (job-inside, no mediator).
+/// Production-ready BPMN ServiceTask handler (job-backed, no mediator).
 ///
-/// قواعد استاندارد این پیاده‌سازی:
-/// - Trace/NonExecutable: هیچ Job نمی‌سازد، Node را Complete می‌کند، Token را Processed می‌کند.
-/// - First run (not resume):
-///     - Inputs را اعمال می‌کند
-///     - اگر Job موجود بود: بسته به Status تصمیم می‌گیرد (Waiting/Complete/Fail)
-///     - اگر نبود: Job می‌سازد و Token+Node را Waiting می‌کند
-/// - Resume:
-///     - حتماً Job را چک می‌کند (Succeeded => Outputs + Complete، Running/Pending => Waiting، Failed => Fail)
-/// - Idempotency:
-///     - کلید عملیاتی: (TokenId + ElementId) یا (NodeInstanceId) (ترجیحاً NodeInstanceId)
-///     - برای جلوگیری از Job دوباره، Repository باید Unique Constraint داشته باشد.
+/// Key semantics:
+/// - NonExecutable/Trace (node.IsExecutable == false):
+///     - DO NOT create Job
+///     - Complete node
+///     - Token.Processed() (best-effort normalize token state)
+///
+/// - First run (isResume == false):
+///     - Apply inputs once
+///     - Find existing Job (idempotency)
+///     - If none, create Job (DB uniqueness required)
+///     - Token+Node => Waiting (NO token.Processed)
+///
+/// - Resume (isResume == true):
+///     - MUST be job-driven
+///     - If job missing => Logical failure
+///     - Decide by job status
+///
+/// Error model:
+/// - Only node.Fail(message, EngineErrorKind) from this handler (NO token.Fail here)
+/// - token state is mirrored defensively into node for terminal states
+/// - BPMN error semantics (EngineErrorKind.BpmnError) is produced only if you can map something
+///   to BPMN ErrorCode (e.g., from job failure reason), otherwise Technical/Logical.
+///
+/// NOTE: token.Wait() requires TokenState.Active in your Token aggregate.
+///       EnsureWaiting() normalizes token state before calling token.Wait().
 /// </summary>
 public sealed class ServiceTaskHandler : BpmnElementHandlerBase
 {
@@ -42,8 +56,7 @@ public sealed class ServiceTaskHandler : BpmnElementHandlerBase
         _mapping = mapping ?? throw new ArgumentNullException(nameof(mapping));
     }
 
-    public override bool CanHandle(BpmnFlowElement element)
-        => element is BpmnServiceTask;
+    public override bool CanHandle(BpmnFlowElement element) => element is BpmnServiceTask;
 
     public override async Task<ElementProcessResult> NodeProcessAsync(
         Process process,
@@ -61,44 +74,107 @@ public sealed class ServiceTaskHandler : BpmnElementHandlerBase
         if (ctx is null) throw new ArgumentNullException(nameof(ctx));
 
         var task = (BpmnServiceTask)element;
-
         var elementId = task.id ?? node.ElementId;
+
+        Logger.LogDebug(
+            "[SERVICE-TASK] Start. P={P} T={T} N={N} E={E} Resume={Resume} TokenState={TokenState} NodeState={NodeState} Exec={IsExec}",
+            process.Id, token.Id, node.Id, elementId, isResume, token.State, node.State, node.IsExecutable);
+
+        // ------------------------------------------------------------
+        // 0) Trace / NonExecutable path
+        // ------------------------------------------------------------
+        if (!node.IsExecutable)
+        {
+            Logger.LogDebug("[SERVICE-TASK] NonExecutable/Trace => skip job creation. N={N}", node.Id);
+
+            BestEffortTokenProcessed(token);
+            node.Complete();
+            return ElementProcessResult.Completed;
+        }
+
+        // ------------------------------------------------------------
+        // 1) Validate element id (Logical)
+        // ------------------------------------------------------------
         if (string.IsNullOrWhiteSpace(elementId))
         {
-            node.Fail("ServiceTask id is missing.");
-            token.Fail("ServiceTask id is missing.");
+            node.Fail("ServiceTask elementId is missing.", EngineErrorKind.Logical);
             return ElementProcessResult.Failed;
         }
 
-        // Terminal guards
-        if (token.State is TokenState.Terminated or TokenState.Failed)
+        // ------------------------------------------------------------
+        // 2) Terminal safety (mirror token state => node)
+        // ------------------------------------------------------------
+        if (token.State is TokenState.Terminated)
         {
-            // Mirror into node if needed (defensive)
-            if (token.State == TokenState.Failed && node.State != NodeState.Failed)
-                node.Fail("Token already failed.");
-            if (token.State == TokenState.Terminated && node.State != NodeState.Completed)
-                node.Complete();
+            node.Complete();
+            return ElementProcessResult.Terminated;
+        }
+
+        if (token.State is TokenState.Failed)
+        {
+            if (node.State != NodeState.Failed)
+                node.Fail("Token is already Failed (terminal).", EngineErrorKind.Logical);
 
             return ElementProcessResult.NoOp;
         }
 
-
-        // Resume path MUST be job-driven (never blindly complete)
+        // ------------------------------------------------------------
+        // 3) Resume path MUST be job-driven
+        // ------------------------------------------------------------
         if (isResume)
-            return await ResumeAsync(process, token, node, task, elementId, ctx, ct);
+            return await ResumeAsync(process, token, node, task, elementId, ctx, ct).ConfigureAwait(false);
 
-        // First run:
-        // - Apply inputs once
-        // - Ensure a single Job exists
-        token.ClearLocalVariables();
-        _mapping.ApplyInputs(process, token,node, task, ctx);
+        // ------------------------------------------------------------
+        // 4) First run: apply inputs once (mapping errors are Technical)
+        // ------------------------------------------------------------
+        try
+        {
+            token.ClearLocalVariables();
+            _mapping.ApplyInputs(process, token, node, task, ctx);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex,
+                "[SERVICE-TASK] Input mapping failed. P={P} T={T} N={N} E={E}",
+                process.Id, token.Id, node.Id, elementId);
 
-        var existingJob = await FindJobAsync(token, node, elementId, ct);
+            node.Fail("ServiceTask input mapping failed.", EngineErrorKind.Technical);
+            return ElementProcessResult.Failed;
+        }
+
+        // ------------------------------------------------------------
+        // 5) Find existing job (idempotency)
+        // ------------------------------------------------------------
+        Job? existingJob;
+        try
+        {
+            existingJob = await FindJobAsync(token, node, elementId, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex,
+                "[SERVICE-TASK] Job lookup failed. P={P} T={T} N={N} E={E}",
+                process.Id, token.Id, node.Id, elementId);
+
+            node.Fail("Failed to lookup existing job for service task.", EngineErrorKind.Technical);
+            return ElementProcessResult.Failed;
+        }
 
         if (existingJob is not null)
-            return await DecideByJobStatusAsync(process, token, node, task, elementId, ctx, existingJob, ct);
+            return await DecideByJobStatusAsync(process, token, node, task, elementId, ctx, existingJob, ct)
+                .ConfigureAwait(false);
 
-        // Create job (idempotent creation relies on DB uniqueness)
+        // ------------------------------------------------------------
+        // 6) Create job (DB uniqueness must guarantee idempotency)
+        // ------------------------------------------------------------
         var job = Job.Create(
             processId: process.Id,
             tokenId: token.Id,
@@ -109,21 +185,46 @@ public sealed class ServiceTaskHandler : BpmnElementHandlerBase
 
         try
         {
-            await _workers.AddAsync(job, ct);
+            await _workers.AddAsync(job, ct).ConfigureAwait(false);
         }
-        catch
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Another concurrent execution may have created it. Re-read and decide.
-            var reread = await FindJobAsync(token, node, elementId, ct);
-            if (reread is not null)
-                return await DecideByJobStatusAsync(process, token, node, task, elementId, ctx, reread, ct);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Possibly duplicate insert due to concurrency => re-read and decide.
+            Logger.LogWarning(ex,
+                "[SERVICE-TASK] AddAsync failed; retrying lookup. P={P} T={T} N={N} E={E}",
+                process.Id, token.Id, node.Id, elementId);
 
-            // If still not found, treat as failure.
-            node.Fail("Failed to create job for service task.");
-            token.Fail("Failed to create job for service task.");
+            Job? reread = null;
+            try
+            {
+                reread = await FindJobAsync(token, node, elementId, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception lookupEx)
+            {
+                Logger.LogError(lookupEx,
+                    "[SERVICE-TASK] Re-lookup after AddAsync failure also failed. P={P} T={T} N={N} E={E}",
+                    process.Id, token.Id, node.Id, elementId);
+            }
+
+            if (reread is not null)
+                return await DecideByJobStatusAsync(process, token, node, task, elementId, ctx, reread, ct)
+                    .ConfigureAwait(false);
+
+            node.Fail("Failed to create job for service task.", EngineErrorKind.Technical);
             return ElementProcessResult.Failed;
         }
 
+        // ------------------------------------------------------------
+        // 7) Put into Waiting (NO token.Processed)
+        // ------------------------------------------------------------
         EnsureWaiting(token, node, job.Id, task);
         return ElementProcessResult.Waiting;
     }
@@ -139,17 +240,37 @@ public sealed class ServiceTaskHandler : BpmnElementHandlerBase
         BpmnRuntimeContext ctx,
         CancellationToken ct)
     {
-        var job = await FindJobAsync(token, node, elementId, ct);
+        Job? job;
+        try
+        {
+            job = await FindJobAsync(token, node, elementId, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex,
+                "[SERVICE-TASK] Resume job lookup failed. P={P} T={T} N={N} E={E}",
+                process.Id, token.Id, node.Id, elementId);
+
+            node.Fail("Resume requested but job lookup failed.", EngineErrorKind.Technical);
+            return ElementProcessResult.Failed;
+        }
 
         if (job is null)
         {
-            // If resume requested but no job exists, safest is to go back to Waiting (or fail).
-            EnsureWaiting(token, node, workerId: Guid.Empty, task);
-            return ElementProcessResult.Waiting;
+            // Resume requested but no job exists => Logical inconsistency
+            node.Fail("Resume requested but no job exists for this service task.", EngineErrorKind.Logical);
+            return ElementProcessResult.Failed;
         }
 
-        return await DecideByJobStatusAsync(process, token, node, task, elementId, ctx, job, ct);
+        return await DecideByJobStatusAsync(process, token, node, task, elementId, ctx, job, ct)
+            .ConfigureAwait(false);
     }
+
+    // ------------------------- Decide by Job -------------------------
 
     private async Task<ElementProcessResult> DecideByJobStatusAsync(
         Process process,
@@ -161,52 +282,81 @@ public sealed class ServiceTaskHandler : BpmnElementHandlerBase
         Job job,
         CancellationToken ct)
     {
+        // Defensive: if node is already terminal, don't re-run side-effects
+        if (node.State is NodeState.Completed or NodeState.Failed or NodeState.Skipped)
+            return ElementProcessResult.NoOp;
+
         switch (job.Status)
         {
             case JobStatus.Succeeded:
-                // Apply outputs once and complete
-                _mapping.ApplyOutputs(process, token,node, task, ctx);
+            {
+                try
+                {
+                    _mapping.ApplyOutputs(process, token, node, task, ctx);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex,
+                        "[SERVICE-TASK] Output mapping failed. P={P} T={T} N={N} JobId={JobId} E={E}",
+                        process.Id, token.Id, node.Id, job.Id, elementId);
+
+                    node.Fail("ServiceTask output mapping failed.", EngineErrorKind.Technical);
+                    return ElementProcessResult.Failed;
+                }
+
+                // Complete processing (success path)
                 token.Processed();
                 node.Complete();
                 return ElementProcessResult.Completed;
+            }
 
             case JobStatus.Pending:
             case JobStatus.Running:
                 EnsureWaiting(token, node, job.Id, task);
                 return ElementProcessResult.Waiting;
 
-            case JobStatus.Failed:
-            case JobStatus.Canceled:
             case JobStatus.TimedOut:
-                node.Fail($"Service task job ended with status '{job.Status}'. JobId={job.Id}");
-                token.Fail($"Service task job ended with status '{job.Status}'. JobId={job.Id}");
+                node.Fail($"ServiceTask job timed out. JobId={job.Id}", EngineErrorKind.Technical);
+                return ElementProcessResult.Failed;
+
+            case JobStatus.Failed:
+            {
+                // If your Job has BPMN error semantics (e.g. ErrorCode), map it here:
+                // - If catchable BPMN error => EngineErrorKind.BpmnError
+                // - Otherwise => Technical
+                var kind = TryMapToBpmnError(job) ? EngineErrorKind.BpmnError : EngineErrorKind.Technical;
+                node.Fail($"ServiceTask job failed. JobId={job.Id}", kind);
+                return ElementProcessResult.Failed;
+            }
+
+            case JobStatus.Canceled:
+                // Usually a "logical/operational" action (manual cancel)
+                node.Fail($"ServiceTask job was canceled. JobId={job.Id}", EngineErrorKind.Logical);
                 return ElementProcessResult.Failed;
 
             default:
-                // Unknown status => conservative: wait (do not create another job)
-                EnsureWaiting(token, node, job.Id, task);
-                return ElementProcessResult.Waiting;
+                node.Fail($"ServiceTask job has unknown status '{job.Status}'. JobId={job.Id}", EngineErrorKind.Technical);
+                return ElementProcessResult.Failed;
         }
     }
 
     // ------------------------- Job lookup -------------------------
 
-    /// <summary>
-    /// Prefer NodeInstanceId-based lookup if available; fallback to (TokenId + ElementId).
-    /// Adjust repository to guarantee uniqueness for the chosen key.
-    /// </summary>
     private async Task<Job?> FindJobAsync(Token token, NodeInstance node, string elementId, CancellationToken ct)
     {
-        // If Node already tracks WorkerId, that is the most accurate idempotency key.
-            // If your repository doesn't have GetByIdAsync, add it.
-            if (node.WorkerId != null)
-            {
-                var byId = await _workers.GetByIdAsync(node.WorkerId.Value, ct);
-                if (byId is not null) return byId;
-            }
+        // Prefer exact correlation via node.WorkerId (strong idempotency)
+        if (node.WorkerId is { } wid && wid != Guid.Empty)
+        {
+            var byId = await _workers.GetByIdAsync(wid, ct).ConfigureAwait(false);
+            if (byId is not null) return byId;
+        }
 
-        // Fallback: TokenId + ElementId (may be unsafe for loops; prefer ActivityInstanceId/NodeId in DB key)
-        return await _workers.GetByTokenAndElementAsync(token.Id, elementId, ct);
+        // Fallback: TokenId + ElementId
+        return await _workers.GetByTokenAndElementAsync(token.Id, elementId, ct).ConfigureAwait(false);
     }
 
     // ------------------------- Waiting -------------------------
@@ -216,11 +366,55 @@ public sealed class ServiceTaskHandler : BpmnElementHandlerBase
         var display = task.name ?? task.id ?? node.ElementId ?? "serviceTask";
         var reason = $"Waiting for service task: {display}";
 
-        // Token waiting state must be consistent with node waiting state
-        if (token.State != TokenState.Waiting)
-            token.Wait(reason);
+        // token.Wait requires Active => normalize
+        if (token.State == TokenState.Created)
+            token.Activate();
 
-        // WorkerId might be Guid.Empty in some defensive paths; still set waiting.
+        if (token.State == TokenState.Waiting)
+        {
+            // already waiting
+        }
+        else if (token.State == TokenState.Active)
+        {
+            token.Wait(reason);
+        }
+        else
+        {
+            // unexpected but non-terminal => normalize best-effort
+            token.ReActivate();
+            token.Wait(reason);
+        }
+
         node.WaitForWorker(workerId, reason);
+    }
+
+    // ------------------------- Helpers -------------------------
+
+    private static void BestEffortTokenProcessed(Token token)
+    {
+        if (token.State is TokenState.Terminated or TokenState.Failed)
+            return;
+
+        // token.Processed requires Active; normalize
+        if (token.State == TokenState.Waiting)
+            token.Resume();
+
+        if (token.State == TokenState.Created)
+            token.Activate();
+
+        if (token.State == TokenState.Active)
+            token.Processed();
+    }
+
+    /// <summary>
+    /// If your Job model supports BPMN error code (catchable), detect it here.
+    /// Right now this returns false because your provided Job API doesn't show ErrorCode.
+    /// Implement when you add something like job.ErrorType/job.ErrorCode.
+    /// </summary>
+    private static bool TryMapToBpmnError(Job job)
+    {
+        // مثال اگر اضافه کردی:
+        // return job.ErrorType == ErrorType.BpmnError && !string.IsNullOrWhiteSpace(job.ErrorCode);
+        return false;
     }
 }

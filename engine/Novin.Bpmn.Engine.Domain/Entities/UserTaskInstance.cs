@@ -1,8 +1,12 @@
-﻿using System;
+﻿// Domain/Entities/UserTaskInstance.cs  (final: Variables + Metadata as single JSON blobs)
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Novin.Bpmn.Engine.Domain.Common;
+using Novin.Bpmn.Engine.Domain.ValueObjects;
 
 namespace Novin.Bpmn.Engine.Domain.Entities;
 
@@ -46,6 +50,7 @@ public static class UserTaskMeta
     public const string Visibility   = "visibilityPolicy";    // optional
 }
 
+
 public sealed class UserTaskInstance : BaseAggregateRoot
 {
     // -------------------- Correlation --------------------
@@ -53,31 +58,76 @@ public sealed class UserTaskInstance : BaseAggregateRoot
     public Guid TokenId { get; private set; }
     public Guid? NodeInstanceId { get; private set; }
 
-    public string ElementId { get; private set; } = string.Empty; // BPMN element id
+    public string ElementId { get; private set; } = string.Empty;
     public string TaskName  { get; private set; } = string.Empty;
 
     // -------------------- State --------------------
     public UserTaskStatus Status { get; private set; } = UserTaskStatus.Ready;
 
-    public DateTime CreatedAtUtc   { get; private set; }
-    public DateTime? ClaimedAtUtc  { get; private set; }
-    public DateTime? StartedAtUtc  { get; private set; }
+    public DateTime CreatedAtUtc    { get; private set; }
+    public DateTime? ClaimedAtUtc   { get; private set; }
+    public DateTime? StartedAtUtc   { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
-    public DateTime? CanceledAtUtc { get; private set; }
+    public DateTime? CanceledAtUtc  { get; private set; }
 
-    public string? ClaimedByUserId  { get; private set; }
+    public string? ClaimedByUserId   { get; private set; }
     public string? CompletedByUserId { get; private set; }
 
     public string? CancelReason { get; private set; }
 
-    // -------------------- Metadata / Variables --------------------
-    // Metadata is contract for UI/inbox (routing/assignment/form/priority/due/...)
-    public Dictionary<string, string> Metadata { get; private set; } = new(StringComparer.Ordinal);
+    // =========================
+    // Variables (SINGLE JSON)
+    // =========================
+    private string _variablesJson = "{}";
+    private JsonObject? _variablesObj;
+    private bool _variablesLoaded;
 
-    // Input snapshot and output/result
-    public Dictionary<string, string> Variables { get; private set; } = new(StringComparer.Ordinal);
+    // EF-friendly property (maps to a single column)
+    public string VariablesJson
+    {
+        get => _variablesJson;
+        private set
+        {
+            _variablesJson = string.IsNullOrWhiteSpace(value) ? "{}" : value;
+            _variablesLoaded = false;
+            _variablesObj = null;
+        }
+    }
 
-    private UserTaskInstance() { } // EF
+    public JsonObject VariablesObject => GetVarsClone();
+
+    // =========================
+    // Metadata (SINGLE JSON)
+    // =========================
+    private string _metadataJson = "{}";
+    private JsonObject? _metadataObj;
+    private bool _metadataLoaded;
+
+    public string MetadataJson
+    {
+        get => _metadataJson;
+        private set
+        {
+            _metadataJson = string.IsNullOrWhiteSpace(value) ? "{}" : value;
+            _metadataLoaded = false;
+            _metadataObj = null;
+        }
+    }
+
+    public JsonObject MetadataObject => GetMetaClone();
+
+    private UserTaskInstance()
+    {
+        CreatedAtUtc = DateTime.UtcNow;
+
+        _variablesJson = "{}";
+        _variablesLoaded = false;
+        _variablesObj = null;
+
+        _metadataJson = "{}";
+        _metadataLoaded = false;
+        _metadataObj = null;
+    }
 
     // --------------------------------------------------------------------
     // Factory
@@ -89,7 +139,7 @@ public sealed class UserTaskInstance : BaseAggregateRoot
         string elementId,
         string taskName,
         UserTaskSpec spec,
-        IReadOnlyDictionary<string, string>? payloadVariables = null)
+        IReadOnlyDictionary<string, object>? payloadVariables = null)
     {
         EnsureRequired(processId, tokenId, elementId, taskName);
 
@@ -98,8 +148,8 @@ public sealed class UserTaskInstance : BaseAggregateRoot
             ProcessId = processId,
             TokenId = tokenId,
             NodeInstanceId = nodeInstanceId,
-            ElementId = elementId,
-            TaskName = taskName,
+            ElementId = elementId.Trim(),
+            TaskName = taskName.Trim(),
             Status = UserTaskStatus.Ready,
             CreatedAtUtc = DateTime.UtcNow
         };
@@ -118,19 +168,19 @@ public sealed class UserTaskInstance : BaseAggregateRoot
 
         // ---- Hints ----
         t.SetMeta(UserTaskMeta.Description, spec.Description);
-        t.SetMeta(UserTaskMeta.Priority, spec.Priority?.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        t.SetMeta(UserTaskMeta.DueDateUtc, spec.DueDateUtc?.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+        t.SetMeta(UserTaskMeta.Priority, spec.Priority?.ToString(CultureInfo.InvariantCulture));
+        t.SetMeta(UserTaskMeta.DueDateUtc, spec.DueDateUtc?.ToString("O", CultureInfo.InvariantCulture));
         t.SetMeta(UserTaskMeta.Visibility, spec.VisibilityPolicy);
 
         foreach (var kv in spec.CustomMetadata)
             t.SetMeta(kv.Key, kv.Value);
 
-        if (payloadVariables != null)
-            t.UpsertVariables(payloadVariables);
+        if (payloadVariables != null && payloadVariables.Count > 0)
+            t.UpsertVariables(payloadVariables.ToDictionary(k => k.Key, v => (object?)v.Value));
 
         t.AddDomainEvent(new UserTaskCreatedDomainEvent(
             t.Id, t.ProcessId, t.TokenId, t.NodeInstanceId, t.ElementId, t.TaskName,
-            new Dictionary<string, string>(t.Metadata, StringComparer.Ordinal),
+            t.GetMetadataSnapshot(), // 👈 still event expects string dictionary
             DateTime.UtcNow));
 
         return t;
@@ -139,7 +189,6 @@ public sealed class UserTaskInstance : BaseAggregateRoot
     // --------------------------------------------------------------------
     // Commands
     // --------------------------------------------------------------------
-
     public void Claim(string userId)
     {
         EnsureNotTerminal();
@@ -148,7 +197,7 @@ public sealed class UserTaskInstance : BaseAggregateRoot
         if (string.IsNullOrWhiteSpace(userId))
             throw new ArgumentException("userId cannot be empty.", nameof(userId));
 
-        EnsureUserCanSee(userId); // candidates/assignee policy
+        EnsureUserCanSee(userId);
 
         var claimMode = GetClaimMode();
         if (claimMode == UserTaskClaimMode.DirectAssign)
@@ -175,14 +224,11 @@ public sealed class UserTaskInstance : BaseAggregateRoot
         {
             EnsureUserCanSee(userId);
 
-            // Claim-mode requires claim first (unless we allow implicit claim on start)
             if (claimMode == UserTaskClaimMode.Claim)
                 throw new InvalidOperationException("Task must be claimed before starting.");
 
-            // DirectAssign: must be assignee (if set)
             EnsureAssigneeIfConfigured(userId);
 
-            // Start implicitly sets claimed-by as actor (optional)
             ClaimedByUserId ??= userId;
             ClaimedAtUtc ??= DateTime.UtcNow;
         }
@@ -203,7 +249,7 @@ public sealed class UserTaskInstance : BaseAggregateRoot
             Id, ProcessId, TokenId, NodeInstanceId, ElementId, userId, StartedAtUtc.Value));
     }
 
-    public void Complete(string userId, IReadOnlyDictionary<string, string>? result = null)
+    public void Complete(string userId, IReadOnlyDictionary<string, object?>? result = null)
     {
         EnsureNotTerminal();
         EnsureStatus(UserTaskStatus.InProgress);
@@ -211,15 +257,13 @@ public sealed class UserTaskInstance : BaseAggregateRoot
         if (string.IsNullOrWhiteSpace(userId))
             throw new ArgumentException("userId cannot be empty.", nameof(userId));
 
-        // For claimed tasks, enforce claimer
         if (!string.IsNullOrWhiteSpace(ClaimedByUserId) &&
             !string.Equals(ClaimedByUserId, userId, StringComparison.Ordinal))
             throw new InvalidOperationException("Only the task actor can complete this task.");
 
-        // DirectAssign: assignee must match (if configured)
         EnsureAssigneeIfConfigured(userId);
 
-        if (result != null)
+        if (result != null && result.Count > 0)
             UpsertVariables(result);
 
         CompletedByUserId = userId;
@@ -245,11 +289,24 @@ public sealed class UserTaskInstance : BaseAggregateRoot
     }
 
     // --------------------------------------------------------------------
-    // Metadata / Variables
+    // Metadata API (JSON blob)
     // --------------------------------------------------------------------
-
     public string? GetMeta(string key)
-        => Metadata.TryGetValue(key, out var v) ? v : null;
+    {
+        if (string.IsNullOrWhiteSpace(key)) return null;
+        var k = NormalizeKey(key);
+
+        var meta = Meta();
+        if (!meta.TryGetPropertyValue(k, out var node) || node is null)
+            return null;
+
+        // Metadata is *string contract*, store as JSON string value.
+        if (node is JsonValue v && v.TryGetValue<string>(out var s))
+            return s;
+
+        // fallback: stable JSON string
+        return JsonVariableCodec.ToStableJson(node);
+    }
 
     public void SetMeta(string key, object? value, bool required = false)
     {
@@ -258,34 +315,83 @@ public sealed class UserTaskInstance : BaseAggregateRoot
         if (string.IsNullOrWhiteSpace(key))
             throw new ArgumentException("Metadata key cannot be empty.", nameof(key));
 
+        var k = EnsureKey(key);
         var s = ConvertToString(value);
+
         if (required && string.IsNullOrWhiteSpace(s))
             throw new ArgumentException($"Metadata '{key}' is required.", nameof(value));
 
+        var meta = Meta();
+
         if (string.IsNullOrWhiteSpace(s))
         {
-            Metadata.Remove(key);
+            if (meta.Remove(k))
+            {
+                FlushMeta(meta);
+            }
             return;
         }
 
-        Metadata[key] = s;
+        // Compare old vs new (avoid no-op updates)
+        if (meta.TryGetPropertyValue(k, out var oldNode) &&
+            oldNode is JsonValue ov && ov.TryGetValue<string>(out var oldStr) &&
+            string.Equals(oldStr, s, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        meta[k] = JsonValue.Create(s);
+        FlushMeta(meta);
 
         AddDomainEvent(new UserTaskMetadataChangedDomainEvent(
-            Id, ProcessId, TokenId, NodeInstanceId, ElementId, key, s, DateTime.UtcNow));
+            Id, ProcessId, TokenId, NodeInstanceId, ElementId, k, s, DateTime.UtcNow));
     }
 
-    public void UpsertVariables(IReadOnlyDictionary<string, string> values)
+    public IReadOnlyDictionary<string, string> GetMetadataSnapshot()
     {
-        EnsureNotTerminal();
-        if (values == null || values.Count == 0) return;
+        var meta = Meta();
+        var dict = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        foreach (var kv in values)
-            Variables[kv.Key] = kv.Value ?? string.Empty;
+        foreach (var kv in meta)
+        {
+            if (kv.Value is null) continue;
 
-        AddDomainEvent(new UserTaskVariablesUpsertedDomainEvent(
-            Id, ProcessId, TokenId, NodeInstanceId, ElementId,
-            values.ToDictionary(k => k.Key, v => v.Value ?? string.Empty, StringComparer.Ordinal),
-            DateTime.UtcNow));
+            if (kv.Value is JsonValue v && v.TryGetValue<string>(out var s))
+                dict[kv.Key] = s;
+            else
+                dict[kv.Key] = JsonVariableCodec.ToStableJson(kv.Value);
+        }
+
+        return dict;
+    }
+
+    // --------------------------------------------------------------------
+    // Variables API (JSON blob)
+    // --------------------------------------------------------------------
+    public JsonNode? GetVariableNode(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return null;
+        var k = NormalizeKey(key);
+
+        var vars = Vars();
+        return vars.TryGetPropertyValue(k, out var node) ? node : null;
+    }
+
+    public bool TryGetVariable<T>(string key, out T? value)
+    {
+        value = default;
+        var node = GetVariableNode(key);
+        if (node is null) return false;
+
+        try
+        {
+            value = node.Deserialize<T>(JsonVariableCodec.Options);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public void SetVariable(string name, object? value)
@@ -295,21 +401,70 @@ public sealed class UserTaskInstance : BaseAggregateRoot
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Variable name cannot be empty.", nameof(name));
 
-        Variables[name] = ConvertToString(value);
+        var k = NormalizeKey(name);
+        var vars = Vars();
+
+        var node = JsonVariableCodec.ToNode(value ?? string.Empty);
+        var newJson = JsonVariableCodec.ToStableJson(node);
+
+        if (vars.TryGetPropertyValue(k, out var oldNode))
+        {
+            var oldJson = JsonVariableCodec.ToStableJson(oldNode);
+            if (string.Equals(oldJson, newJson, StringComparison.Ordinal))
+                return;
+        }
+
+        vars[k] = node;
+        FlushVars(vars);
 
         AddDomainEvent(new UserTaskVariablesUpsertedDomainEvent(
             Id, ProcessId, TokenId, NodeInstanceId, ElementId,
-            new Dictionary<string, string>(StringComparer.Ordinal) { [name] = Variables[name] },
+            new Dictionary<string, object?>(StringComparer.Ordinal) { [k] = value ?? string.Empty },
             DateTime.UtcNow));
     }
 
-    public string? GetVariable(string name)
-        => Variables.TryGetValue(name, out var v) ? v : null;
+    public void UpsertVariables(IReadOnlyDictionary<string, object?> values)
+    {
+        EnsureNotTerminal();
+        if (values == null || values.Count == 0) return;
+
+        var vars = Vars();
+        var upsertsActual = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        foreach (var kv in values)
+        {
+            var k = NormalizeKey(kv.Key);
+            if (k.Length == 0) continue;
+
+            var val = kv.Value ?? string.Empty;
+            var node = JsonVariableCodec.ToNode(val);
+            var newJson = JsonVariableCodec.ToStableJson(node);
+
+            if (vars.TryGetPropertyValue(k, out var oldNode))
+            {
+                var oldJson = JsonVariableCodec.ToStableJson(oldNode);
+                if (string.Equals(oldJson, newJson, StringComparison.Ordinal))
+                    continue;
+            }
+
+            vars[k] = node;
+            upsertsActual[k] = val;
+        }
+
+        if (upsertsActual.Count == 0)
+            return;
+
+        FlushVars(vars);
+
+        AddDomainEvent(new UserTaskVariablesUpsertedDomainEvent(
+            Id, ProcessId, TokenId, NodeInstanceId, ElementId,
+            upsertsActual,
+            DateTime.UtcNow));
+    }
 
     // --------------------------------------------------------------------
-    // Guards / Policies
+    // Guards / Policies (unchanged logic)
     // --------------------------------------------------------------------
-
     private void EnsureNotTerminal()
     {
         if (Status is UserTaskStatus.Completed or UserTaskStatus.Canceled)
@@ -327,7 +482,7 @@ public sealed class UserTaskInstance : BaseAggregateRoot
         var s = GetMeta(UserTaskMeta.ClaimMode);
         if (Enum.TryParse<UserTaskClaimMode>(s, ignoreCase: true, out var m))
             return m;
-        return UserTaskClaimMode.Claim; // default
+        return UserTaskClaimMode.Claim;
     }
 
     private void EnsureAssigneeIfConfigured(string userId)
@@ -340,7 +495,6 @@ public sealed class UserTaskInstance : BaseAggregateRoot
 
     private void EnsureUserCanSee(string userId)
     {
-        // If assignee set => only assignee can see/start/claim (policy)
         var assignee = GetMeta(UserTaskMeta.Assignee);
         if (!string.IsNullOrWhiteSpace(assignee))
         {
@@ -349,19 +503,69 @@ public sealed class UserTaskInstance : BaseAggregateRoot
             return;
         }
 
-        // CandidateUsers
         var cu = SplitCsv(GetMeta(UserTaskMeta.CandidateUsers));
-        if (cu?.Count > 0 && cu.Contains(userId, StringComparer.Ordinal))
+        if (cu.Count > 0 && cu.Contains(userId, StringComparer.Ordinal))
             return;
 
-        // CandidateGroups - domain does not know group membership; allow if only groups are set (policy outside)
         var cg = SplitCsv(GetMeta(UserTaskMeta.CandidateGroups));
-        if (cg?.Count > 0)
+        if (cg.Count > 0)
             return;
-
-        // If no assignee/candidates => visible to all (or policy outside). Keep permissive.
     }
 
+    // --------------------------------------------------------------------
+    // Internals (Vars/Meta caches)
+    // --------------------------------------------------------------------
+    private JsonObject Vars()
+    {
+        if (_variablesLoaded && _variablesObj is not null)
+            return _variablesObj;
+
+        _variablesObj = JsonVariableCodec.ParseObjectOrEmpty(_variablesJson);
+        _variablesLoaded = true;
+        return _variablesObj;
+    }
+
+    private void FlushVars(JsonObject vars)
+    {
+        _variablesObj = vars;
+        _variablesLoaded = true;
+        _variablesJson = vars.ToJsonString(JsonVariableCodec.Options);
+    }
+
+    private JsonObject GetVarsClone()
+    {
+        var vars = Vars();
+        var json = vars.ToJsonString(JsonVariableCodec.Options);
+        return JsonVariableCodec.ParseObjectOrEmpty(json);
+    }
+
+    private JsonObject Meta()
+    {
+        if (_metadataLoaded && _metadataObj is not null)
+            return _metadataObj;
+
+        _metadataObj = JsonVariableCodec.ParseObjectOrEmpty(_metadataJson);
+        _metadataLoaded = true;
+        return _metadataObj;
+    }
+
+    private void FlushMeta(JsonObject meta)
+    {
+        _metadataObj = meta;
+        _metadataLoaded = true;
+        _metadataJson = meta.ToJsonString(JsonVariableCodec.Options);
+    }
+
+    private JsonObject GetMetaClone()
+    {
+        var meta = Meta();
+        var json = meta.ToJsonString(JsonVariableCodec.Options);
+        return JsonVariableCodec.ParseObjectOrEmpty(json);
+    }
+
+    // --------------------------------------------------------------------
+    // Helpers
+    // --------------------------------------------------------------------
     private static void EnsureRequired(Guid processId, Guid tokenId, string elementId, string taskName)
     {
         if (processId == Guid.Empty) throw new ArgumentException("ProcessId cannot be empty", nameof(processId));
@@ -370,26 +574,40 @@ public sealed class UserTaskInstance : BaseAggregateRoot
         if (string.IsNullOrWhiteSpace(taskName)) throw new ArgumentException("TaskName cannot be empty", nameof(taskName));
     }
 
+    private static string NormalizeKey(string key) => (key ?? string.Empty).Trim();
+
+    private static string EnsureKey(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Key cannot be empty.", nameof(key));
+        return key.Trim();
+    }
+
     private static string ConvertToString(object? value)
     {
-        if (value == null) return string.Empty;
+        if (value is null) return string.Empty;
         if (value is string s) return s;
-        return JsonConvert.SerializeObject(value);
+        if (value is JsonNode n) return JsonVariableCodec.ToStableJson(n);
+        return JsonSerializer.Serialize(value, JsonVariableCodec.Options);
     }
 
     private static string? JoinCsv(IEnumerable<string>? values)
     {
         if (values == null) return null;
-        var list = values.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.Ordinal).ToList();
+        var list = values.Where(x => !string.IsNullOrWhiteSpace(x))
+                         .Select(x => x.Trim())
+                         .Distinct(StringComparer.Ordinal)
+                         .ToList();
         return list.Count == 0 ? null : string.Join(",", list);
     }
 
-    private static List<string>? SplitCsv(string? csv)
+    private static List<string> SplitCsv(string? csv)
     {
-        if (string.IsNullOrWhiteSpace(csv)) return null;
+        if (string.IsNullOrWhiteSpace(csv)) return new List<string>();
         return csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
     }
 }
+
 
 // --------------------------------------------------------------------
 // Spec (Value Object) - explicit contract for creating user tasks
@@ -458,7 +676,7 @@ public sealed record UserTaskCompletedDomainEvent(
     string ElementId,
     string CompletedByUserId,
     DateTime OccurredAtUtc,
-    IReadOnlyDictionary<string, string>? Result) : IDomainEvent;
+    IReadOnlyDictionary<string, object?>? Result) : IDomainEvent;
 
 public sealed record UserTaskCanceledDomainEvent(
     Guid UserTaskId,
@@ -485,5 +703,5 @@ public sealed record UserTaskVariablesUpsertedDomainEvent(
     Guid TokenId,
     Guid? NodeInstanceId,
     string ElementId,
-    IReadOnlyDictionary<string, string> Upserts,
+    IReadOnlyDictionary<string, object?> Upserts,
     DateTime OccurredAtUtc) : IDomainEvent;

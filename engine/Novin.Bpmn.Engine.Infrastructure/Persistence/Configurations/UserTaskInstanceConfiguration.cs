@@ -1,9 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Novin.Bpmn.Engine.Domain.Entities;
-using Novin.Bpmn.Engine.Infrastructure.Common;
-using Novin.Bpmn.Engine.Infrastructure.Persistence.Ef;
 
 namespace Novin.Bpmn.Engine.Infrastructure.Persistence.Configurations;
 
@@ -14,8 +11,11 @@ public sealed class UserTaskInstanceConfiguration : IEntityTypeConfiguration<Use
         entity.ToTable("UserTasks");
 
         entity.HasKey(x => x.Id);
+        entity.Property(x => x.Id).ValueGeneratedNever();
 
+        // --------------------
         // Correlation
+        // --------------------
         entity.Property(x => x.ProcessId).IsRequired();
         entity.Property(x => x.TokenId).IsRequired();
         entity.Property(x => x.NodeInstanceId);
@@ -28,7 +28,9 @@ public sealed class UserTaskInstanceConfiguration : IEntityTypeConfiguration<Use
             .IsRequired()
             .HasMaxLength(1000);
 
+        // --------------------
         // State
+        // --------------------
         entity.Property(x => x.Status)
             .IsRequired()
             .HasConversion<string>()
@@ -44,29 +46,37 @@ public sealed class UserTaskInstanceConfiguration : IEntityTypeConfiguration<Use
         entity.Property(x => x.CompletedByUserId).HasMaxLength(256);
         entity.Property(x => x.CancelReason).HasMaxLength(2000);
 
-        // JSON dictionaries
-        var dictComparer = new ValueComparer<Dictionary<string, string>>(
-            (a, b) => EfComparers.VarsEqual(a, b),
-            v => EfComparers.VarsHash(v),
-            v => EfComparers.VarsSnapshot(v));
-
-        entity.Property(x => x.Metadata)
-            .IsRequired()
+        // --------------------
+        // Variables (SINGLE JSON BLOB)
+        // Domain:
+        //   private string _variablesJson = "{}";
+        //   public string VariablesJson => _variablesJson;
+        //   public JsonObject VariablesObject => ...
+        // --------------------
+        // If you have VariablesObject / VariablesJson exposed publicly, ignore them for EF mapping.
+        // (Same approach as ProcessConfiguration)
+        entity.Ignore("VariablesObject"); // safe even if property exists; else remove this line
+        entity.Property<string>("_variablesJ")
+            .HasColumnName("VariablesJson")
             .HasColumnType("text")
-            .HasConversion(
-                v => JsonHelper.SerializeObject(v ?? new Dictionary<string, string>(StringComparer.Ordinal)),
-                v => JsonHelper.DeserializeObject<Dictionary<string, string>>(v) ?? new Dictionary<string, string>(StringComparer.Ordinal))
-            .Metadata.SetValueComparer(dictComparer);
+            .IsRequired();
 
-        entity.Property(x => x.Variables)
-            .IsRequired()
+        // --------------------
+        // Metadata (SINGLE JSON BLOB)
+        // Domain:
+        //   private string _metadataJson = "{}";
+        //   public string MetadataJson => _metadataJson;
+        //   public JsonObject MetadataObject => ...
+        // --------------------
+        entity.Ignore("MetadataObject"); // safe even if property exists; else remove this line
+        entity.Property<string>("_metadata")
+            .HasColumnName("MetadataJson")
             .HasColumnType("text")
-            .HasConversion(
-                v => JsonHelper.SerializeObject(v ?? new Dictionary<string, string>(StringComparer.Ordinal)),
-                v => JsonHelper.DeserializeObject<Dictionary<string, string>>(v) ?? new Dictionary<string, string>(StringComparer.Ordinal))
-            .Metadata.SetValueComparer(dictComparer);
+            .IsRequired();
 
+        // --------------------
         // Indexes
+        // --------------------
         entity.HasIndex(x => x.ProcessId);
         entity.HasIndex(x => x.TokenId);
         entity.HasIndex(x => x.NodeInstanceId);
@@ -78,6 +88,7 @@ public sealed class UserTaskInstanceConfiguration : IEntityTypeConfiguration<Use
         entity.HasIndex(x => x.ClaimedByUserId);
         entity.HasIndex(x => x.CompletedByUserId);
 
+        // Domain events
         entity.Ignore("DomainEvents");
     }
 }

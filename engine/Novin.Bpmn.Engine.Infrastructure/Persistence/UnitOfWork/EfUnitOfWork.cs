@@ -4,11 +4,12 @@ using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Application.Services.Interfaces.Infrastructure;
 using Novin.Bpmn.Engine.Domain.Common;
-using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.Repositories;
-using Novin.Bpmn.Engine.Infrastructure.Outbox.Elastices;
+using Novin.Bpmn.Engine.Infrastructure.Outbox.MassTransit; // IOutboxEventPublisher + OutboxEnvelopeFactory
 using System.Reflection;
-using System.Text.Json.Nodes;
+using System.Security.Cryptography;
+using System.Text;
+using Novin.Bpmn.Engine.Infrastructure.BackgroundServices;
 
 namespace Novin.Bpmn.Engine.Infrastructure.Persistence.UnitOfWork;
 
@@ -16,17 +17,17 @@ namespace Novin.Bpmn.Engine.Infrastructure.Persistence.UnitOfWork;
 /// EF UnitOfWork with:
 /// - DB transaction (execution strategy compatible)
 /// - DomainEvents collected from aggregates
-/// - Post-commit projection to Elasticsearch (BEST-EFFORT)
+/// - Post-commit publish to queue via IOutboxEventPublisher (BEST-EFFORT)
 ///
-/// IMPORTANT: This is NOT a durable outbox. If the process crashes after DB commit and before ES write,
-/// ES projection may miss events unless you have a rebuild/reindex strategy.
+/// IMPORTANT: This is NOT a durable outbox. If the process crashes after DB commit and before publish,
+/// events may be missed unless you have a rebuild strategy or durable outbox.
 /// </summary>
 public sealed class EfUnitOfWork : IUnitOfWork
 {
     private readonly BpmnEngineDbContext _context;
     private readonly ILogger<EfUnitOfWork> _logger;
     private readonly IJsonSerializer _jsonSerializer;
-    private readonly IElasticOutboxWriter _elasticWriter;
+    private readonly IOutboxEventPublisher _publisher;
 
     private IDbContextTransaction? _currentTransaction;
     private bool _disposed;
@@ -54,7 +55,7 @@ public sealed class EfUnitOfWork : IUnitOfWork
         IUserTaskInstanceRepository userTaskInstances,
         ILogger<EfUnitOfWork> logger,
         IJsonSerializer jsonSerializer,
-        IElasticOutboxWriter elasticWriter)
+        IOutboxEventPublisher publisher)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
 
@@ -69,18 +70,14 @@ public sealed class EfUnitOfWork : IUnitOfWork
 
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _jsonSerializer = jsonSerializer ?? throw new ArgumentNullException(nameof(jsonSerializer));
-        _elasticWriter = elasticWriter ?? throw new ArgumentNullException(nameof(elasticWriter));
+        _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
     }
 
-    /// <summary>
-    /// Executes user code inside a retryable execution strategy transaction (Npgsql retry strategy compatible).
-    /// Commits DB first, then does ES projection (best-effort, non-throwing).
-    /// </summary>
     public async Task ExecuteInTransactionAsync(Func<CancellationToken, Task> action, CancellationToken ct = default)
     {
         if (action is null) throw new ArgumentNullException(nameof(action));
 
-        // Nested tx: run only; outer transaction owner will Save/Commit/Project
+        // Nested tx: run only; outer transaction owner will Save/Commit/Publish
         if (_currentTransaction != null)
         {
             await action(ct);
@@ -98,7 +95,6 @@ public sealed class EfUnitOfWork : IUnitOfWork
             {
                 await action(ct);
 
-                // SaveChanges + collect domain events in same transaction boundary
                 committedEvents = await CollectDomainEventsAndSaveAsync(ct);
 
                 await _currentTransaction!.CommitAsync(ct);
@@ -118,8 +114,8 @@ public sealed class EfUnitOfWork : IUnitOfWork
                 _currentTransaction = null;
             }
 
-            // Post-commit projection (best-effort, do not throw)
-            await ProjectToElasticAsync(committedEvents, ct);
+            // Post-commit publish (best-effort, do not throw)
+            await PublishDomainEventsAsync(committedEvents, ct);
         });
     }
 
@@ -129,28 +125,24 @@ public sealed class EfUnitOfWork : IUnitOfWork
         _currentTransaction = await _context.Database.BeginTransactionAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// If you call this directly (outside ExecuteInTransactionAsync), it will SaveChanges once.
-    /// Then ES projection (best-effort).
-    /// </summary>
     public async Task CommitTransactionAsync(CancellationToken cancellationToken = default)
     {
-        // No explicit tx: SaveChanges + projection
+        // No explicit tx: SaveChanges + publish
         if (_currentTransaction == null)
         {
             var committedEvents = await CollectDomainEventsAndSaveAsync(cancellationToken);
-            await ProjectToElasticAsync(committedEvents, cancellationToken);
+            await PublishDomainEventsAsync(committedEvents, cancellationToken);
             return;
         }
 
-        // Explicit tx: SaveChanges + commit + projection
+        // Explicit tx: SaveChanges + commit + publish
         var events = await CollectDomainEventsAndSaveAsync(cancellationToken);
         await _currentTransaction.CommitAsync(cancellationToken);
 
         await _currentTransaction.DisposeAsync();
         _currentTransaction = null;
 
-        await ProjectToElasticAsync(events, cancellationToken);
+        await PublishDomainEventsAsync(events, cancellationToken);
     }
 
     public async Task RollbackTransactionAsync(CancellationToken cancellationToken = default)
@@ -169,10 +161,6 @@ public sealed class EfUnitOfWork : IUnitOfWork
         }
     }
 
-    /// <summary>
-    /// Collect domain events, clear them from aggregates, then SaveChanges.
-    /// This method is the single point that turns in-memory DomainEvents into committed facts.
-    /// </summary>
     private async Task<IReadOnlyList<IDomainEvent>> CollectDomainEventsAndSaveAsync(CancellationToken ct)
     {
         var aggregatesWithEvents = _context.ChangeTracker
@@ -198,106 +186,88 @@ public sealed class EfUnitOfWork : IUnitOfWork
     }
 
     /// <summary>
-    /// Post-commit: bulk index DomainEvents into Elasticsearch.
+    /// Post-commit: publish DomainEvents to partitioned queue.
     /// Best-effort: do not throw (DB is already committed).
     /// </summary>
-    private async Task ProjectToElasticAsync(IReadOnlyList<IDomainEvent> events, CancellationToken ct)
+    private async Task PublishDomainEventsAsync(IReadOnlyList<IDomainEvent> events, CancellationToken ct)
     {
         if (events == null || events.Count == 0) return;
 
         try
         {
-            // NOTE: This assumes your writer supports bulk.
-            // If your IElasticOutboxWriter currently only has WritePendingAsync, add a bulk method there.
-            var docs = new List<(string Id, OutboxDoc Doc)>(events.Count);
-
+            // برای حفظ order اگر لازم داری: این foreach را sequential نگه دار.
+            // برای throughput بیشتر: می‌تونی محدودیت concurrency بذاری (مثلاً 8).
             foreach (var e in events)
             {
-                var id = Guid.NewGuid().ToString();
-                var doc = ToElasticDoc(e);
-                docs.Add((id, doc));
+                ct.ThrowIfCancellationRequested();
+
+                var occurredAtUtc = ExtractOccurredAtUtcOrNow(e);
+                var correlationId = ExtractCorrelationId(e);
+                var partitionKey = correlationId?.ToString("N") ?? "global";
+
+                // ✅ خیلی مهم: OutboxId باید deterministic باشد تا retryها idempotent شوند.
+                var outboxId = GetDeterministicOutboxId(e, correlationId);
+
+                var env = OutboxEnvelopeFactory.FromDomainEvent(
+                    outboxId: outboxId,
+                    e: e,
+                    partitionKey: partitionKey,
+                    json: _jsonSerializer,
+                    occurredAtUtc: occurredAtUtc,
+                    attempts: 0
+                );
+
+                await _publisher.PublishAsync(env, ct).ConfigureAwait(false);
             }
 
-            await _elasticWriter.WritePendingBulkAsync(docs, ct);
-
-            _logger.LogDebug("[ES] Indexed {Count} domain events.", docs.Count);
+            _logger.LogDebug("[BUS] Published {Count} domain events.", events.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[ES] Projection indexing failed (no retry here). Count={Count}", events.Count);
+            // DB already committed: do NOT throw
+            _logger.LogWarning(ex, "[BUS] Publish failed (best-effort). Count={Count}", events.Count);
         }
     }
 
-    /// <summary>
-    /// Builds the ES document from DomainEvent (no DB outbox row required).
-    /// </summary>
-    private OutboxDoc ToElasticDoc(IDomainEvent e)
+    private static DateTime ExtractOccurredAtUtcOrNow(IDomainEvent e)
     {
-        var occurredAtUtc = DateTime.UtcNow; // If your events carry OccurredAtUtc, prefer that.
-        var payloadJson = _jsonSerializer.SerializeObject(e);
-
-        JsonNode? payloadNode;
-        try
+        // اگر DomainEvent شما OccurredAtUtc دارد استفاده کن
+        var p = e.GetType().GetProperty("OccurredAtUtc", BindingFlags.Instance | BindingFlags.Public);
+        if (p != null && p.PropertyType == typeof(DateTime))
         {
-            payloadNode = string.IsNullOrWhiteSpace(payloadJson) ? null : JsonNode.Parse(payloadJson);
+            var v = (DateTime)p.GetValue(e)!;
+            if (v != default) return v.Kind == DateTimeKind.Utc ? v : v.ToUniversalTime();
         }
-        catch
-        {
-            payloadNode = new JsonObject { ["raw"] = payloadJson };
-        }
-
-        var messageName = GetStableMessageName(e);
-        var correlationId = ExtractCorrelationId(e);
-        var aggregateId = ExtractAggregateId(e);
-
-        return new OutboxDoc
-        {
-            Status = "pending",
-            OccurredAtUtc = occurredAtUtc,
-
-            Attempts = 0,
-            NextAttemptOnUtc = null,
-            LockedUntilUtc = null,
-            LockId = null,
-
-            MessageName = messageName,
-            MessageType = e.GetType().AssemblyQualifiedName,
-            PartitionKey = correlationId?.ToString() ?? "global",
-
-            CorrelationId = correlationId,
-            AggregateId = aggregateId,
-
-            LastError = null,
-            Payload = payloadNode
-        };
+        return DateTime.UtcNow;
     }
 
     /// <summary>
-    /// ES-only projection needs idempotency. Best is DomainEvent.EventId (Guid).
-    /// Fallback is a stable-ish hash, but not perfect.
+    /// Deterministic OutboxId:
+    /// - Prefer EventId (Guid) if exists
+    /// - Else hash(type + correlation + aggregate) => Guid (stable)
     /// </summary>
-    private string GetDeterministicEventIdOrFallback(IDomainEvent e)
+    private static Guid GetDeterministicOutboxId(IDomainEvent e, Guid? correlationId)
     {
-        // Prefer explicit EventId if present
         var eventId = TryGetGuidProperty(e, "EventId")
-                   ?? TryGetGuidProperty(e, "Id"); // if your events use Id as EventId
+                   ?? TryGetGuidProperty(e, "Id"); // اگر EventId نداری ولی Id داری
 
         if (eventId.HasValue)
-            return eventId.Value.ToString("N");
+            return eventId.Value;
 
-        // Fallback: (type + correlation + aggregate + ticks) -> duplicates possible across retries.
-        // We log once per event type to make this visible.
-        var corr = ExtractCorrelationId(e);
         var agg = ExtractAggregateId(e);
 
-        var raw = $"{e.GetType().FullName}|{corr?.ToString("N")}|{agg?.ToString("N")}|{DateTime.UtcNow.Ticks}";
-        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(raw)));
+        // Stable key (same event will produce same id) — البته اگر event واقعاً unique نباشه، collision منطقی ممکنه.
+        var raw = $"{e.GetType().AssemblyQualifiedName}|corr:{correlationId?.ToString("N")}|agg:{agg?.ToString("N")}";
+        return DeterministicGuid(raw);
+    }
 
-        _logger.LogWarning(
-            "DomainEvent has no EventId. Using hash-based ES id (may duplicate). Type={Type}",
-            e.GetType().FullName);
-
-        return hash;
+    private static Guid DeterministicGuid(string input)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        // take first 16 bytes for Guid
+        Span<byte> g = stackalloc byte[16];
+        bytes.AsSpan(0, 16).CopyTo(g);
+        return new Guid(g);
     }
 
     private static Guid? TryGetGuidProperty(object obj, string name)
@@ -307,21 +277,9 @@ public sealed class EfUnitOfWork : IUnitOfWork
         return (Guid?)p.GetValue(obj);
     }
 
-    private static string GetStableMessageName(IDomainEvent domainEvent)
-    {
-        var typeName = domainEvent.GetType().Name;
-
-        if (typeName.EndsWith("Event", StringComparison.OrdinalIgnoreCase))
-            typeName = typeName[..^5];
-        else if (typeName.EndsWith("DomainEvent", StringComparison.OrdinalIgnoreCase))
-            typeName = typeName[..^11];
-
-        return typeName;
-    }
-
     private static Guid? ExtractCorrelationId(IDomainEvent domainEvent)
     {
-        var correlationProperties = new[] { "ProcessId", "CorrelationId", "Id" };
+        var correlationProperties = new[] { "ProcessId", "CorrelationId" };
 
         foreach (var propertyName in correlationProperties)
         {

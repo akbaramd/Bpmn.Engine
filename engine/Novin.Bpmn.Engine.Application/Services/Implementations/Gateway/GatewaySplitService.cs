@@ -15,12 +15,11 @@ namespace Novin.Bpmn.Engine.Application.Services;
 /// - XOR/OR with a single taken flow routes the SAME token (no child tokens).
 /// - AND forks all outgoing.
 /// - OR forks chosenMany (>1) else routes single/default.
-/// - EventBasedGateway is not handled here (subscription-based).
+/// - EventBasedGateway is NOT handled here (subscription-based).
 ///
 /// IMPORTANT (Zeebe-like):
-/// - When forking, we create a NEW scopeId and PUSH it on parent token.
-/// - Children MUST receive the SAME scope snapshot (parent.ScopeStack) and ParentTokenId=parent.Id.
-///   (This is responsibility of ITokenForkService / CreateTokenCommand.)
+/// - When forking, create a NEW scopeId and PUSH it on parent token.
+/// - Children MUST receive SAME scope snapshot and ParentTokenId=parent.Id (done by fork service).
 /// - ExpectedCount is stored in Process.Metadata keyed by scopeId.
 /// </summary>
 public sealed class GatewaySplitService : IGatewaySplitService
@@ -51,14 +50,34 @@ public sealed class GatewaySplitService : IGatewaySplitService
         if (gateway is null) throw new ArgumentNullException(nameof(gateway));
         if (ctx is null) throw new ArgumentNullException(nameof(ctx));
 
-        var gwId = gateway.id ?? throw new InvalidOperationException("Gateway must have id.");
+        // If token is not in a state that can route/split, treat as "handled" to avoid retry storms.
+        if (token.State is TokenState.Failed or TokenState.Terminated or TokenState.Completed or TokenState.Merged or TokenState.Forked)
+            return true;
+
+        var gwId = gateway.id;
+        if (string.IsNullOrWhiteSpace(gwId))
+        {
+            token.Fail("Gateway.id is null/empty.", EngineErrorKind.Logical);
+            return true;
+        }
 
         // Only split candidates when outgoing > 1
-        var outgoingRaw = ctx.Model.GetOutgoingSequenceFlows(ctx.BpmnProcessId, gwId);
+        List<BpmnSequenceFlow> outgoingRaw;
+        try
+        {
+            outgoingRaw = ctx.Model.GetOutgoingSequenceFlows(ctx.BpmnProcessId, gwId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SPLIT:FAIL] Failed to read outgoing flows. Gw={Gw} Token={Token}", gwId, token.Id);
+            token.Fail($"Failed to read outgoing flows for gateway '{gwId}'.", EngineErrorKind.Technical);
+            return true;
+        }
+
         if (outgoingRaw is null || outgoingRaw.Count <= 1)
             return false;
 
-        // Must be Active (if not, ignore but mark handled to avoid retry storms)
+        // Must be Active to proceed (else skip but mark handled)
         if (token.State != TokenState.Active)
         {
             _logger.LogDebug(
@@ -70,7 +89,7 @@ public sealed class GatewaySplitService : IGatewaySplitService
         // Event-based must be implemented with subscriptions
         if (gateway is BpmnEventBasedGateway)
         {
-            token.Fail($"EventBasedGateway '{gwId}' is not supported here (requires subscriptions).");
+            token.Fail($"EventBasedGateway '{gwId}' is not supported here (requires subscriptions).", EngineErrorKind.Logical);
             _logger.LogError("[SPLIT:FAIL] EventBasedGateway not supported. Gw={Gw} Token={Token}", gwId, token.Id);
             return true;
         }
@@ -84,14 +103,24 @@ public sealed class GatewaySplitService : IGatewaySplitService
             return false;
 
         // Choose flows according to gateway semantics
-        var flowsChosen = DetermineFlows(process, token, gateway, outgoingAll);
+        List<BpmnSequenceFlow> flowsChosen;
+        try
+        {
+            flowsChosen = DetermineFlows(process, token, gateway, outgoingAll);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SPLIT:FAIL] Flow selection crashed. Gw={Gw} Token={Token}", gwId, token.Id);
+            token.Fail($"Gateway '{gwId}' flow selection failed: {ex.Message}", EngineErrorKind.Technical);
+            return true;
+        }
 
         if (token.State == TokenState.Failed)
             return true;
 
         if (flowsChosen.Count == 0)
         {
-            token.Fail($"Gateway '{gwId}' produced 0 outgoing flows (no condition matched and no default).");
+            token.Fail($"Gateway '{gwId}' produced 0 outgoing flows (no condition matched and no default).", EngineErrorKind.Logical);
             _logger.LogError("[SPLIT:FAIL] 0 flows chosen. Gw={Gw} Token={Token}", gwId, token.Id);
             return true;
         }
@@ -102,7 +131,7 @@ public sealed class GatewaySplitService : IGatewaySplitService
             var f = flowsChosen[0];
             if (string.IsNullOrWhiteSpace(f.targetRef))
             {
-                token.Fail($"Gateway '{gwId}' has chosen flow with empty targetRef. Flow={FlowKey(f)}");
+                token.Fail($"Gateway '{gwId}' chose a flow with empty targetRef. Flow={FlowKey(f)}", EngineErrorKind.Logical);
                 _logger.LogError("[SPLIT:FAIL] Empty targetRef. Gw={Gw} Token={Token} Flow={Flow}", gwId, token.Id, FlowKey(f));
                 return true;
             }
@@ -122,28 +151,38 @@ public sealed class GatewaySplitService : IGatewaySplitService
             "[FORK] Gw={Gw} Type={Type} Token={Token} NewScope={Scope} OutgoingTotal={Total} ForkCount={ForkCount} PrevScope={PrevScope}",
             gwId, gateway.GetType().Name, token.Id, scopeId, outgoingAll.Count, flowsChosen.Count, token.ScopeId);
 
-        // Persist join expectations (scope-correlated)
-        PersistJoinExpectations(process, scopeId, gateway, flowsChosen);
+        try
+        {
+            PersistJoinExpectations(process, scopeId, gateway, flowsChosen);
 
-        // Park parent waiting for join:
-        // Zeebe-like: PUSH scope on parent
-        token.SetScope(scopeId); // alias for PushScope(scopeId)
-        token.Fork(flowsChosen.Count, $"Gateway '{gwId}' forked {flowsChosen.Count} branch token(s).");
+            // Park parent waiting for join:
+            token.SetScope(scopeId); // alias for PushScope(scopeId)
+            token.Fork(flowsChosen.Count, $"Gateway '{gwId}' forked {flowsChosen.Count} branch token(s).");
 
-        // Fork children:
-        // IMPORTANT: ForkChildrenAsync MUST create child tokens with:
-        // - ParentTokenId = token.Id
-        // - ScopeStackSnapshot = token.ScopeStack (includes scopeId on top)
-        // - ArrivedViaFlowId = each chosen flow key
-        await _fork.ForkChildrenAsync(
-            process: process,
-            parent: token,
-            outgoing: flowsChosen,
-            scopeId: scopeId,
-            ctx: ctx,
-            ct: ct);
+            // Fork children (must carry ParentTokenId + scope stack snapshot)
+            await _fork.ForkChildrenAsync(
+                process: process,
+                parent: token,
+                outgoing: flowsChosen,
+                scopeId: scopeId,
+                ctx: ctx,
+                ct: ct);
 
-        return true;
+            return true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "[FORK:FAIL] ForkChildrenAsync failed. Gw={Gw} Token={Token} Scope={Scope}",
+                gwId, token.Id, scopeId);
+
+            token.Fail($"Gateway '{gwId}' fork failed: {ex.Message}", EngineErrorKind.Technical);
+            return true;
+        }
     }
 
     // -------------------- Flow selection rules --------------------
@@ -208,7 +247,7 @@ public sealed class GatewaySplitService : IGatewaySplitService
             return list;
         }
 
-        token.Fail($"Unsupported gateway type '{gateway.GetType().Name}' at '{gateway.id}'.");
+        token.Fail($"Unsupported gateway type '{gateway.GetType().Name}' at '{gateway.id}'.", EngineErrorKind.Logical);
         _logger.LogError("[SPLIT:FAIL] Unsupported gateway. Token={Token} Gw={Gw} Type={Type}",
             token.Id, gateway.id, gateway.GetType().Name);
 
@@ -258,7 +297,9 @@ public sealed class GatewaySplitService : IGatewaySplitService
 
             if (string.IsNullOrWhiteSpace(f.targetRef))
             {
-                token.Fail($"Split gateway '{gateway.id}' has outgoing flow(s) with empty targetRef. FlowIndex={i}");
+                token.Fail(
+                    $"Split gateway '{gateway.id}' has outgoing flow(s) with empty targetRef. FlowIndex={i}",
+                    EngineErrorKind.Logical);
                 return new List<BpmnSequenceFlow>(0);
             }
 

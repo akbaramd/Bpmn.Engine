@@ -18,13 +18,13 @@ public sealed class AssignUserTaskCommandHandler
     public async Task<AssignUserTaskResult> Handle(AssignUserTaskCommand cmd, CancellationToken ct)
     {
         if (cmd is null) throw new ArgumentNullException(nameof(cmd));
-        if (cmd.WorkerId == Guid.Empty) return AssignUserTaskResult.NotFound;
+        if (cmd.UserTaskId == Guid.Empty) return AssignUserTaskResult.NotFound;
 
         AssignUserTaskResult result = AssignUserTaskResult.Ok;
 
         await _uow.ExecuteInTransactionAsync(async trxCt =>
         {
-            var task = await _tasks.GetByIdAsync(cmd.WorkerId, trxCt);
+            var task = await _tasks.GetByIdAsync(cmd.UserTaskId, trxCt);
             if (task is null)
             {
                 result = AssignUserTaskResult.NotFound;

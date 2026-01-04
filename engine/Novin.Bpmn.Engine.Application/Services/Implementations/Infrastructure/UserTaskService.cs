@@ -73,7 +73,7 @@ public sealed class UserTaskService : IUserTaskService
         // 2) Create new (domain-correct factory)
         var spec = BuildSpec(userTask);
 
-        IReadOnlyDictionary<string, string>? payloadVariables = null;
+        IReadOnlyDictionary<string, object?>? payloadVariables = null;
 
         var taskEntity = UserTaskInstance.Create(
             processId: process.Id,

@@ -11,17 +11,21 @@ using NodeState = Novin.Bpmn.Engine.Domain.Entities.NodeState;
 namespace Novin.Bpmn.Engine.Application.ElementHandlers;
 
 /// <summary>
-/// BPMN UserTask handler (standard engine semantics, no mediator).
+/// BPMN UserTask handler (production-ready).
 ///
-/// قواعد:
-/// - NonExecutable/Trace: هیچ UserTask نمی‌سازد، Node را Complete می‌کند، Token را Processed می‌کند.
+/// Responsibilities:
+/// - NonExecutable/Trace: DO NOT create user task; Complete node; Token.Processed()
 /// - First run:
-///     - Inputs اعمال می‌شود
-///     - CreateOrGet (idempotent) ایجاد می‌شود
-///     - Token+Node به Waiting می‌روند (بدون token.Processed)
+///     - Apply inputs once
+///     - CreateOrGetAsync idempotently
+///     - Put Token+Node into Waiting (NO Token.Processed)
 /// - Resume:
-///     - فرض: completion بیرون از انجین انجام شده و outputs همانجا اعمال شده
-///     - اینجا فقط Node را Complete و Token را Processed می‌کنیم تا Navigation انجام شود
+///     - Completion happened externally; here: Token.Processed + Node.Complete to allow navigation
+///
+/// Error model:
+/// - Only node.Fail(message, EngineErrorKind) for handler-detected issues
+/// - Token is authoritative for terminal states; node mirrors defensively
+/// - Never call token.Fail(...) here
 /// </summary>
 public sealed class UserTaskHandler : BpmnElementHandlerBase
 {
@@ -59,62 +63,154 @@ public sealed class UserTaskHandler : BpmnElementHandlerBase
         var userTask = (BpmnUserTask)element;
         var elementId = userTask.id ?? node.ElementId;
 
-        if (string.IsNullOrWhiteSpace(elementId))
-        {
-            node.Fail("UserTask elementId is missing.");
-            token.Fail("UserTask elementId is missing.");
-            return ElementProcessResult.Failed;
-        }
-
         Logger.LogDebug(
-            "[USER-TASK] Process. P={ProcessId} T={TokenId} N={NodeId} E={ElementId} Resume={Resume} TokenState={TokenState} NodeState={NodeState}",
-            process.Id, token.Id, node.Id, elementId, isResume, token.State, node.State);
+            "[USER-TASK] Start. P={ProcessId} T={TokenId} N={NodeId} E={ElementId} Resume={Resume} TokenState={TokenState} NodeState={NodeState} Exec={IsExec}",
+            process.Id, token.Id, node.Id, elementId, isResume, token.State, node.State, node.IsExecutable);
 
-        // Terminal safety
-        if (token.State is TokenState.Terminated or TokenState.Failed)
+        // ------------------------------------------------------------
+        // 0) Trace / NonExecutable path
+        // ------------------------------------------------------------
+        if (!node.IsExecutable)
         {
-            if (token.State == TokenState.Failed && node.State != NodeState.Failed)
-                node.Fail("Token already failed.");
-            if (token.State == TokenState.Terminated && node.State != NodeState.Completed)
-                node.Complete();
+            // No usertask creation; just move on
+            if (token.State is not (TokenState.Terminated or TokenState.Failed))
+            {
+                // ensure token is in Active to call Processed (your token enforces Active)
+                if (token.State == TokenState.Waiting)
+                    token.Resume();
 
-            return ElementProcessResult.NoOp;
-        }
+                if (token.State == TokenState.Created)
+                    token.Activate();
 
+                if (token.State == TokenState.Active)
+                    token.Processed();
+            }
 
-        // Resume => task completed externally; allow navigation
-        if (isResume)
-        {
-            token.Processed();
             node.Complete();
             return ElementProcessResult.Completed;
         }
 
-        // If already waiting for a user task and correlation exists => keep waiting (idempotent)
-        if (token.State == TokenState.Waiting && node.State == NodeState.Waiting && node.UserTaskId != Guid.Empty)
-            return ElementProcessResult.Waiting;
-
-        // First run: inputs (only once)
-        token.ClearLocalVariables();
-        _mapping.ApplyInputs(process, token,node, userTask, ctx);
-
-        // Create/Get user-task (MUST be idempotent inside the service)
-        // Recommended correlation key: (process.Id, token.Id, node.Id, elementId)
-        var userTaskId = await _userTaskService.CreateOrGetAsync(
-            process: process,
-            token: token,
-            node: node,
-            userTask: userTask,
-            ct: ct);
-
-        if (userTaskId == Guid.Empty)
+        // ------------------------------------------------------------
+        // 1) Validate element id (Logical)
+        // ------------------------------------------------------------
+        if (string.IsNullOrWhiteSpace(elementId))
         {
-            node.Fail("CreateOrGetAsync returned empty userTaskId.");
-            token.Fail("CreateOrGetAsync returned empty userTaskId.");
+            node.Fail("UserTask elementId is missing.", EngineErrorKind.Logical);
             return ElementProcessResult.Failed;
         }
 
+        // ------------------------------------------------------------
+        // 2) Terminal safety (mirror token state => node)
+        // ------------------------------------------------------------
+        if (token.State is TokenState.Terminated)
+        {
+            node.Complete();
+            return ElementProcessResult.Terminated;
+        }
+
+        if (token.State is TokenState.Failed)
+        {
+            if (node.State != NodeState.Failed)
+                node.Fail("Token is already Failed (terminal).", EngineErrorKind.Logical);
+
+            return ElementProcessResult.NoOp;
+        }
+
+        // ------------------------------------------------------------
+        // 3) Resume: external completion already happened
+        // ------------------------------------------------------------
+        if (isResume)
+        {
+            // If currently Waiting, bring it back to Active before Processed()
+            if (token.State == TokenState.Waiting)
+                token.Resume();
+
+            // If for some reason token wasn't active (Created), activate defensively
+            if (token.State == TokenState.Created)
+                token.Activate();
+
+            if (token.State == TokenState.Active)
+                token.Processed();
+
+            node.Complete();
+            return ElementProcessResult.Completed;
+        }
+
+        // ------------------------------------------------------------
+        // 4) Idempotent waiting guard
+        // ------------------------------------------------------------
+        if (token.State == TokenState.Waiting &&
+            node.State == NodeState.Waiting &&
+            node.UserTaskId is { } utid &&
+            utid != Guid.Empty)
+        {
+            return ElementProcessResult.Waiting;
+        }
+
+        // If node already completed/failed, do nothing
+        if (node.State is NodeState.Completed or NodeState.Failed or NodeState.Skipped)
+            return ElementProcessResult.NoOp;
+
+        // ------------------------------------------------------------
+        // 5) First run: apply inputs once (Technical failures possible)
+        // ------------------------------------------------------------
+        try
+        {
+            token.ClearLocalVariables();
+            _mapping.ApplyInputs(process, token, node, userTask, ctx);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex,
+                "[USER-TASK] Input mapping failed. P={P} T={T} N={N} E={E}",
+                process.Id, token.Id, node.Id, elementId);
+
+            node.Fail("UserTask input mapping failed.", EngineErrorKind.Technical);
+            return ElementProcessResult.Failed;
+        }
+
+        // ------------------------------------------------------------
+        // 6) Create/Get user task (idempotent in service)
+        // ------------------------------------------------------------
+        Guid userTaskId;
+        try
+        {
+            userTaskId = await _userTaskService.CreateOrGetAsync(
+                process: process,
+                token: token,
+                node: node,
+                userTask: userTask,
+                ct: ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex,
+                "[USER-TASK] CreateOrGetAsync failed. P={P} T={T} N={N} E={E}",
+                process.Id, token.Id, node.Id, elementId);
+
+            node.Fail("CreateOrGet user-task failed.", EngineErrorKind.Technical);
+            return ElementProcessResult.Failed;
+        }
+
+        if (userTaskId == Guid.Empty)
+        {
+            node.Fail("CreateOrGetAsync returned empty userTaskId.", EngineErrorKind.Technical);
+            return ElementProcessResult.Failed;
+        }
+
+        // ------------------------------------------------------------
+        // 7) Put BOTH in waiting (no token.Processed)
+        // ------------------------------------------------------------
         EnsureWaiting(token, node, userTaskId, userTask);
+
+        Logger.LogDebug(
+            "[USER-TASK] Waiting. P={P} T={T} N={N} UserTaskId={U}",
+            process.Id, token.Id, node.Id, userTaskId);
+
         return ElementProcessResult.Waiting;
     }
 
@@ -123,7 +219,7 @@ public sealed class UserTaskHandler : BpmnElementHandlerBase
         var display = task.name ?? task.id ?? node.ElementId ?? "userTask";
         var reason = $"Waiting for user task: {display}";
 
-        // Correlation: reuse userTaskId as workerId unless you have a separate worker/job id
+        // Correlation: reuse userTaskId as workerId unless you have separate worker/job id
         var workerId = userTaskId;
 
         // Idempotent guard
@@ -133,9 +229,25 @@ public sealed class UserTaskHandler : BpmnElementHandlerBase
             node.UserTaskId == userTaskId)
             return;
 
-        // Put BOTH in waiting (do NOT call token.Processed)
-        if (token.State != TokenState.Waiting)
+        // Token.Wait requires Active in your domain => ensure Active
+        if (token.State == TokenState.Created)
+            token.Activate();
+
+        if (token.State == TokenState.Waiting)
+        {
+            // already waiting => keep as-is
+        }
+        else if (token.State == TokenState.Active)
+        {
             token.Wait(reason);
+        }
+        else
+        {
+            // Any other unexpected state: be conservative and try to normalize
+            // (avoid throwing and breaking the worker loop)
+            token.ReActivate();
+            token.Wait(reason);
+        }
 
         node.WaitForUserTask(userTaskId: userTaskId, workerId: workerId, reason: reason);
     }

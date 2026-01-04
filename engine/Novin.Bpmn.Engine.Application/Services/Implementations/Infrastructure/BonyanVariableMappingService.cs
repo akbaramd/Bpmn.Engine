@@ -1,5 +1,9 @@
-﻿using System.Text.Json;
+﻿using System;
+using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
+using Novin.Bpmn.Engine.Application;
 using Novin.Bpmn.Engine.Application.Services;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
@@ -16,16 +20,6 @@ public enum NodeIoMappingKind
     Variable = 1,
     Feel = 2
 }
-
-public sealed record NodeIoMappingSnapshot(
-    NodeIoMappingPhase Phase,
-    string ElementId,
-    Guid ProcessId,
-    Guid TokenId,
-    DateTime OccurredAtUtc,
-    IReadOnlyList<NodeIoMappingEntry> Entries,
-    IReadOnlyDictionary<string, string>? TokenVarsAfterJson,
-    IReadOnlyDictionary<string, string>? ProcessVarsAfterJson);
 
 public sealed record NodeIoMappingEntry(
     string? Source,
@@ -68,6 +62,7 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
 
     public void ApplyInputs(Process process, Token token, NodeInstance node, BpmnFlowElement element, BpmnRuntimeContext ctx)
     {
+        // Do not map for terminal tokens
         if (token.State is TokenState.Completed or TokenState.Terminated) return;
 
         _logger.LogDebug(
@@ -86,6 +81,8 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
 
         foreach (var input in map.Input)
         {
+            if (token.State == TokenState.Failed) break;
+
             var srcRaw = input.Source?.Trim();
             var tgt = input.Target?.Trim();
 
@@ -106,14 +103,14 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
 
             if (!isFeel)
             {
-                var nodeVal = process.GetVariableNode(srcRaw);
-                if (nodeVal is null)
+                var procVal = process.GetVariableNode(srcRaw);
+                if (procVal is null)
                 {
                     ApplyMissingInput(map.OnMissingSource, token, tgt, $"missing process var '{srcRaw}'", entries, srcRaw);
                     continue;
                 }
 
-                valueObj = JsonVariableCodec.CloneNode(nodeVal);
+                valueObj = JsonVariableCodec.CloneNode(procVal);
             }
             else
             {
@@ -126,6 +123,9 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "[MAP:IN] FEEL eval failed. Expr={Expr} Element={ElementId}", expr, element.id);
+
+                    // Usually mapping/definition error => Logical
+                    // If you want "engine bug / infra crash" => Technical, switch kind below.
                     ApplyMissingInput(map.OnMissingSource, token, tgt, "feel eval failed", entries, srcRaw);
                     continue;
                 }
@@ -141,12 +141,17 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
                 kind: isFeel ? NodeIoMappingKind.Feel : NodeIoMappingKind.Variable));
         }
 
-        var tokenSnapshot = StableJsonVarsFromToken(token.Variables);
-
+        if (token.State == TokenState.Failed)
+        {
+            _logger.LogWarning(
+                "[MAP:IN] ❌ Input mapping failed and token is now Failed. ElementId={ElementId} TokenId={TokenId}",
+                element.id, token.Id);
+            return;
+        }
 
         _logger.LogInformation(
-            "[MAP:IN] ✅ Input mapping completed. ElementId={ElementId} MappedCount={MappedCount} TokenVarsCount={TokenVarsCount}",
-            element.id, mappedCount, tokenSnapshot.Count);
+            "[MAP:IN] ✅ Input mapping completed. ElementId={ElementId} MappedCount={MappedCount}",
+            element.id, mappedCount);
     }
 
     public void ApplyOutputs(Process process, Token token, NodeInstance node, BpmnFlowElement element, BpmnRuntimeContext ctx)
@@ -169,6 +174,8 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
 
         foreach (var output in map.Output)
         {
+            if (token.State == TokenState.Failed) break;
+
             var src = output.Source?.Trim();
             var tgt = output.Target?.Trim();
 
@@ -201,14 +208,20 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
                 kind: NodeIoMappingKind.Variable));
         }
 
-        var processSnapshot = StableJsonVarsFromProcess(process);
-
-       
+        if (token.State == TokenState.Failed)
+        {
+            _logger.LogWarning(
+                "[MAP:OUT] ❌ Output mapping failed and token is now Failed. ElementId={ElementId} TokenId={TokenId}",
+                element.id, token.Id);
+            return;
+        }
 
         _logger.LogInformation(
-            "[MAP:OUT] ✅ Output mapping completed. ElementId={ElementId} MappedCount={MappedCount} ProcessVarsCount={ProcessVarsCount}",
-            element.id, mappedCount, processSnapshot.Count);
+            "[MAP:OUT] ✅ Output mapping completed. ElementId={ElementId} MappedCount={MappedCount}",
+            element.id, mappedCount);
     }
+
+    // ========================= helpers =========================
 
     private BonyanIoMapping? GetIoMapping(BpmnFlowElement element)
         => _ioAccessor.TryGetIoMapping(element, out var mapping) ? mapping : null;
@@ -225,17 +238,22 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
         {
             case MissingBehavior.Skip:
                 entries.Add(NodeIoMappingEntry.Missing(source, target, reason, policy, appliedAsNull: false, failed: false));
-                break;
+                return;
 
             case MissingBehavior.Null:
                 token.SetVariable(target, JsonNull);
                 entries.Add(NodeIoMappingEntry.Missing(source, target, reason, policy, appliedAsNull: true, failed: false));
-                break;
+                return;
 
             case MissingBehavior.Throw:
-                token.Fail($"IO input missing for '{target}': {reason}");
+                FailTokenForIo(token, $"IO input missing for '{target}': {reason}");
                 entries.Add(NodeIoMappingEntry.Missing(source, target, reason, policy, appliedAsNull: false, failed: true));
-                break;
+                return;
+
+            default:
+                FailTokenForIo(token, $"IO input missing (unknown policy) for '{target}': {reason}");
+                entries.Add(NodeIoMappingEntry.Missing(source, target, reason, policy, appliedAsNull: false, failed: true));
+                return;
         }
     }
 
@@ -252,18 +270,30 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
         {
             case MissingBehavior.Skip:
                 entries.Add(NodeIoMappingEntry.Missing(source, target, reason, policy, appliedAsNull: false, failed: false));
-                break;
+                return;
 
             case MissingBehavior.Null:
                 process.SetVariable(target, JsonNull);
                 entries.Add(NodeIoMappingEntry.Missing(source, target, reason, policy, appliedAsNull: true, failed: false));
-                break;
+                return;
 
             case MissingBehavior.Throw:
-                token.Fail($"IO output missing for '{target}': {reason}");
+                FailTokenForIo(token, $"IO output missing for '{target}': {reason}");
                 entries.Add(NodeIoMappingEntry.Missing(source, target, reason, policy, appliedAsNull: false, failed: true));
-                break;
+                return;
+
+            default:
+                FailTokenForIo(token, $"IO output missing (unknown policy) for '{target}': {reason}");
+                entries.Add(NodeIoMappingEntry.Missing(source, target, reason, policy, appliedAsNull: false, failed: true));
+                return;
         }
+    }
+
+    private static void FailTokenForIo(Token token, string message)
+    {
+        // IO mapping failures are typically CONFIG / DATA precondition issues => Logical
+        // If you want "missing var is a BPMN error" => use EngineErrorKind.BpmnError (but then you should carry ErrorCode semantics).
+        token.Fail(message, EngineErrorKind.Logical);
     }
 
     private static IReadOnlyDictionary<string, object?> BuildFeelContext(Process process)
@@ -302,35 +332,4 @@ public sealed class BonyanVariableMappingService : IVariableMappingService
         if (value is JsonNode jn) return JsonVariableCodec.ToStableJson(jn);
         return JsonVariableCodec.ToStableJson(JsonVariableCodec.ToNode(value));
     }
-
-    private static IReadOnlyDictionary<string, string> StableJsonVarsFromToken(IReadOnlyDictionary<string, JsonNode?> vars)
-    {
-        var dict = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var kv in vars)
-        {
-            var k = (kv.Key ?? string.Empty).Trim();
-            if (k.Length == 0) continue;
-
-            dict[k] = JsonVariableCodec.ToStableJson(kv.Value);
-        }
-        return dict;
-    }
-
-    private static IReadOnlyDictionary<string, string> StableJsonVarsFromProcess(Process process)
-    {
-        var obj = process.VariablesObject;
-        var dict = new Dictionary<string, string>(StringComparer.Ordinal);
-
-        foreach (var kv in obj)
-        {
-            var k = (kv.Key ?? string.Empty).Trim();
-            if (k.Length == 0) continue;
-
-            dict[k] = JsonVariableCodec.ToStableJson(kv.Value);
-        }
-
-        return dict;
-    }
-
-
 }

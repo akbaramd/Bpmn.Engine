@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Novin.Bpmn.Engine.Application;
 using Novin.Bpmn.Engine.Domain.Common;
 using Novin.Bpmn.Engine.Domain.ValueObjects;
 
@@ -234,7 +235,7 @@ public sealed class NodeInstance : BaseAggregateRoot
         ));
     }
 
-    public void Fail(string errorMessage)
+    public void Fail(string errorMessage,EngineErrorKind errorCode)
     {
         if (!IsExecutable) return;
         if (string.IsNullOrWhiteSpace(errorMessage))
@@ -252,6 +253,7 @@ public sealed class NodeInstance : BaseAggregateRoot
             TokenId: TokenId,
             ElementId: ElementId,
             ErrorMessage: ErrorMessage,
+            ErrorCode:errorCode,
             OccurredAtUtc: CompletedAtUtc.Value
         ));
     }
@@ -516,6 +518,7 @@ public sealed record NodeFailedDomainEvent(
     Guid TokenId,
     string ElementId,
     string ErrorMessage,
+    EngineErrorKind ErrorCode,
     DateTime OccurredAtUtc
 ) : IDomainEvent;
 

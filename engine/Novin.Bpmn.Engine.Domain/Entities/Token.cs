@@ -4,6 +4,7 @@ using Novin.Bpmn.Engine.Domain.ValueObjects;
 using System;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Novin.Bpmn.Engine.Application;
 
 namespace Novin.Bpmn.Engine.Domain.Entities
 {
@@ -13,6 +14,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         public string CurrentElementId { get; private set; } = default!;
         public TokenState State { get; private set; }
 
+        public EngineErrorKind ErrorType { get;private set; }
         // -------------------- Scope (Zeebe-like) --------------------
 
 
@@ -336,9 +338,9 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         /// <summary>
         /// Fail token with a technical failure (default)
         /// </summary>
-        public void Fail(string error)
+        public void Fail(string error,EngineErrorKind kind)
         {
-            Fail(error, ErrorType.TechnicalFailure, errorCode: null, incidentId: null);
+            Fail(error,kind, errorCode: null, incidentId: null);
         }
 
         /// <summary>
@@ -346,7 +348,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
         /// </summary>
         public void Fail(
             string error,
-            ErrorType errorType,
+            EngineErrorKind errorType,
             string? errorCode = null,
             Guid? incidentId = null)
         {
@@ -357,7 +359,7 @@ namespace Novin.Bpmn.Engine.Domain.Entities
                 throw new InvalidOperationException($"Cannot fail token in {State} state.");
 
             State = TokenState.Failed;
-
+            ErrorType = errorType;
             AddDomainEvent(new TokenFailedEvent(
                 TokenId: Id,
                 ProcessId: ProcessId,

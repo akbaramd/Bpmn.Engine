@@ -127,7 +127,6 @@ public static class DependencyInjection
 
         services.AddSingleton<EmptyServiceTaskRegistry>();
         services.AddSingleton<IServiceTaskRegistry>(sp => sp.GetRequiredService<EmptyServiceTaskRegistry>());
-        services.AddScoped<IServiceTaskExecutor, NullServiceTaskExecutor>();
 
         services.AddScoped<IScriptTaskExecutor, MultiLanguageScriptTaskExecutor>();
 

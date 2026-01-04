@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -9,6 +10,7 @@ using Jint.Native;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
+using Microsoft.Extensions.Logging;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.Exceptions;
@@ -36,6 +38,7 @@ public sealed class MultiLanguageScriptTaskExecutor : IScriptTaskExecutor
         = new(StringComparer.Ordinal);
 
     private readonly ScriptOptions _csharpOptions;
+
     public MultiLanguageScriptTaskExecutor(
         ILogger<MultiLanguageScriptTaskExecutor> logger,
         MultiLanguageScriptTaskExecutorOptions options,
@@ -63,73 +66,71 @@ public sealed class MultiLanguageScriptTaskExecutor : IScriptTaskExecutor
         var taskId = task.id;
         if (string.IsNullOrWhiteSpace(taskId))
         {
-            token.Fail("ScriptTask.id is null/empty.");
-            return;
+            throw new ScriptTaskExecutionException(
+                process.Id, token.Id, taskId: "<null>",
+                message: "ScriptTask.id is null/empty.",
+                kind: EngineErrorKind.Logical);
         }
 
-        var format = GetScriptFormat(task)?.Trim();
-
+        var format = (GetScriptFormat(task) ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(format))
         {
             if (!_options.TreatNullFormatAsCSharp)
             {
-                token.Fail($"ScriptTask '{taskId}' has empty scriptFormat.");
-                return;
+                throw new ScriptTaskExecutionException(
+                    process.Id, token.Id, taskId!,
+                    $"ScriptTask '{taskId}' has empty scriptFormat.",
+                    EngineErrorKind.Logical);
             }
+
             format = "c#";
         }
 
-        var code = GetScriptCode(task)?.Trim();
+        var code = (GetScriptCode(task) ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(code))
         {
-            token.Fail($"ScriptTask '{taskId}' has empty script body.");
-            return;
+            throw new ScriptTaskExecutionException(
+                process.Id, token.Id, taskId!,
+                $"ScriptTask '{taskId}' has empty script body.",
+                EngineErrorKind.Logical);
         }
 
         if (IsCSharp(format))
         {
-            await ExecuteCSharpAsync(process, token, taskId!, code!, ct);
+            await ExecuteCSharpAsync(process, token, taskId!, code, ct);
             return;
         }
 
         if (IsJavaScript(format))
         {
-            ExecuteJavaScriptWithContext(process, token, taskId!, code!, ct);
+            ExecuteJavaScriptWithContext(process, token, taskId!, code, ct);
             return;
         }
 
-        token.Fail($"Unsupported ScriptTask scriptFormat='{format}' (TaskId={taskId}).");
+        throw new ScriptTaskExecutionException(
+            process.Id, token.Id, taskId!,
+            $"Unsupported ScriptTask scriptFormat='{format}' (TaskId={taskId}).",
+            EngineErrorKind.Logical);
     }
 
     // -----------------------------
-    // C# (Roslyn) - context is live (write-through)
+    // C# (Roslyn) - compiled + cached + execution timeout only
     // -----------------------------
- // -----------------------------
-    // C# (Roslyn) - compiled + cached + timeout only for execution
-    // -----------------------------
-    private async Task ExecuteCSharpAsync(Process process, Token token, string taskId, string code, CancellationToken ct)
+    private async Task ExecuteCSharpAsync(Process process, Token token, string taskId, string codes, CancellationToken ct)
     {
         _logger.LogInformation(
             "[SCRIPT-EXEC] Starting C# script execution. TaskId={TaskId} ProcessId={ProcessId} TokenId={TokenId}",
             taskId, process.Id, token.Id);
 
-        var tokenVarsBefore = token.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
-        _logger.LogDebug(
-            "[SCRIPT-EXEC] Token variables BEFORE execution. TaskId={TaskId} Count={Count} Variables={Variables}",
-            taskId,
-            tokenVarsBefore.Count,
-            string.Join(", ", tokenVarsBefore.Select(kv => $"{kv.Key}={kv.Value}")));
-
-        var cacheKey = $"{taskId}:{Sha256(code)}";
+        var cacheKey = $"{taskId}:{Sha256(codes)}";
 
         ScriptRunner<object> runner;
         try
         {
-            // ✅ Compile + CreateDelegate cached (NO timeout here)
             runner = _csharpCache.GetOrAdd(
                 cacheKey,
                 _ => new Lazy<ScriptRunner<object>>(
-                    () => CompileCSharp(code, _csharpOptions),
+                    () => CompileCSharp(codes, _csharpOptions),
                     LazyThreadSafetyMode.ExecutionAndPublication
                 )
             ).Value;
@@ -137,168 +138,155 @@ public sealed class MultiLanguageScriptTaskExecutor : IScriptTaskExecutor
         catch (CompilationErrorException cex)
         {
             var errors = string.Join(Environment.NewLine, cex.Diagnostics.Select(d => d.ToString()));
-            _logger.LogError("C# ScriptTask compilation failed. TaskId={TaskId}\n{Errors}", taskId, errors);
+            _logger.LogError("[SCRIPT-EXEC] C# compilation failed. TaskId={TaskId}\n{Errors}", taskId, errors);
 
-            throw new TokenExecutionException(
-                process.Id,
-                token.Id,
-                taskId,
+            throw new ScriptTaskExecutionException(
+                process.Id, token.Id, taskId,
                 $"C# ScriptTask '{taskId}' compilation failed.",
-                cex);
+                EngineErrorKind.Logical,
+                inner: cex);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SCRIPT-EXEC] Unexpected error while preparing C# runner. TaskId={TaskId}", taskId);
+
+            throw new ScriptTaskExecutionException(
+                process.Id, token.Id, taskId,
+                $"C# ScriptTask '{taskId}' preparation failed: {ex.Message}",
+                EngineErrorKind.Technical,
+                inner: ex);
         }
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeoutCts.CancelAfter(_options.CSharpTimeout);
+
+        var timeout = _options.CSharpTimeout <= TimeSpan.Zero ? TimeSpan.FromSeconds(2) : _options.CSharpTimeout;
+        timeoutCts.CancelAfter(timeout);
 
         try
         {
             var globals = new ScriptGlobals(process, token);
 
-            _logger.LogDebug(
-                "[SCRIPT-EXEC] Executing C# script. TaskId={TaskId} CodeLength={CodeLength}",
-                taskId, code.Length);
-
-            // ✅ Only runtime execution is time-boxed
             await runner(globals, timeoutCts.Token);
 
-            // ✅ Sync variables back to token
+            // ✅ Sync back to token locals
             globals.SyncToToken(token);
 
-            var tokenVarsAfter = token.Variables.ToDictionary(kv => kv.Key, kv => kv.Value);
-            _logger.LogInformation("[SCRIPT-EXEC] ✅ Script execution completed successfully. TaskId={TaskId}", taskId);
-            _logger.LogDebug(
-                "[SCRIPT-EXEC] Token variables AFTER execution. TaskId={TaskId} Count={Count} Variables={Variables}",
-                taskId,
-                tokenVarsAfter.Count,
-                string.Join(", ", tokenVarsAfter.Select(kv => $"{kv.Key}={kv.Value}")));
+            _logger.LogInformation("[SCRIPT-EXEC] ✅ C# script completed. TaskId={TaskId}", taskId);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // upstream cancellation
-            throw;
+            throw; // upstream cancellation
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
-            throw new TokenExecutionException(
-                process.Id,
-                token.Id,
-                taskId,
-                $"C# ScriptTask '{taskId}' timed out after {_options.CSharpTimeout.TotalSeconds:0.#}s.");
+            throw new ScriptTaskExecutionException(
+                process.Id, token.Id, taskId,
+                $"C# ScriptTask '{taskId}' timed out after {timeout.TotalSeconds:0.#}s.",
+                EngineErrorKind.Technical);
         }
-        catch (BpmnErrorException)
+        catch (BpmnErrorException bex)
         {
-            throw;
+            // ✅ explicit BPMN error semantics (catchable boundary error)
+            throw new ScriptTaskExecutionException(
+                process.Id, token.Id, taskId,
+                $"BPMN Error '{bex.Code}': {bex.Message}",
+                EngineErrorKind.BpmnError,
+                bpmnErrorCode: bex.Code,
+                inner: bex);
         }
         catch (Exception ex)
         {
-            if (ex.Message.StartsWith("BPMN Error ", StringComparison.OrdinalIgnoreCase))
+            // Optional compatibility: allow "BPMN Error CODE: msg" text-based throw
+            if (TryParseBpmnErrorFromMessage(ex.Message, out var code, out var msg))
             {
-                var parts = ex.Message.Substring("BPMN Error ".Length).Split(new[] { ':' }, 2);
-                var errorCode = parts.Length > 0 ? parts[0].Trim() : "UNKNOWN_ERROR";
-                var errorMessage = parts.Length > 1 ? parts[1].Trim() : ex.Message;
-
-                throw new BpmnErrorException(errorCode, errorMessage, ex);
+                throw new ScriptTaskExecutionException(
+                    process.Id, token.Id, taskId,
+                    $"BPMN Error '{codes}': {msg}",
+                    EngineErrorKind.BpmnError,
+                    bpmnErrorCode: code,
+                    inner: ex);
             }
 
-            _logger.LogError(
-                ex,
-                "[SCRIPT-EXEC] ❌ C# ScriptTask execution failed (technical error). TaskId={TaskId} Message={Message}",
+            _logger.LogError(ex,
+                "[SCRIPT-EXEC] ❌ C# ScriptTask runtime failed. TaskId={TaskId} Message={Message}",
                 taskId, ex.Message);
 
-            throw new TokenExecutionException(
-                process.Id,
-                token.Id,
-                taskId,
+            throw new ScriptTaskExecutionException(
+                process.Id, token.Id, taskId,
                 $"C# ScriptTask '{taskId}' failed: {ex.Message}",
-                ex);
+                EngineErrorKind.Technical,
+                inner: ex);
         }
     }
 
     private static ScriptRunner<object> CompileCSharp(string code, ScriptOptions options)
     {
-        // ✅ IMPORTANT: globalsType must be provided
         var script = CSharpScript.Create(
             code,
             options,
             globalsType: typeof(ScriptGlobals));
 
-        // ✅ Compile now (fail fast). No cancellation token here.
         var diags = script.Compile();
         var errors = diags.Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
         if (errors.Length > 0)
             throw new CompilationErrorException("C# script compilation failed.", errors.ToImmutableArray());
 
-        // ✅ Create delegate => executor built now (not during Run)
         return script.CreateDelegate();
     }
-private static ScriptOptions BuildScriptOptions(params Assembly[] extraAssemblies)
-{
-    var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-    // ✅ framework refs (System.Runtime, mscorlib, ...)
-    var tpa = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
-    if (!string.IsNullOrWhiteSpace(tpa))
+    private static ScriptOptions BuildScriptOptions(params Assembly[] extraAssemblies)
     {
-        foreach (var p in tpa.Split(Path.PathSeparator))
-            if (!string.IsNullOrWhiteSpace(p))
-                paths.Add(p);
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var tpa = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
+        if (!string.IsNullOrWhiteSpace(tpa))
+        {
+            foreach (var p in tpa.Split(Path.PathSeparator))
+                if (!string.IsNullOrWhiteSpace(p))
+                    paths.Add(p);
+        }
+
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies().Concat(extraAssemblies))
+        {
+            if (asm == null || asm.IsDynamic) continue;
+
+            string? loc = null;
+            try { loc = asm.Location; } catch { }
+
+            if (string.IsNullOrWhiteSpace(loc)) continue;
+            paths.Add(loc);
+        }
+
+        var refs = paths.Select(p => (MetadataReference)MetadataReference.CreateFromFile(p));
+
+        return ScriptOptions.Default
+            .WithReferences(refs)
+            .WithImports(
+                "System",
+                "System.Threading",
+                "System.Threading.Tasks",
+                "System.Linq",
+                "System.Collections",
+                "System.Collections.Generic",
+                "System.Text",
+                "System.Globalization",
+                "System.Text.RegularExpressions",
+                "Novin.Bpmn.Engine.Domain.Entities",
+                "Novin.Bpmn.Engine.Domain.Exceptions",
+                "Novin.Bpmn.Engine.Application.Services",
+                "Novin.Bpmn.Engine.Application.Common.Interfaces",
+                "Novin.Bpmn.Models.Models"
+            );
     }
-
-    // ✅ app refs (skip dynamic + empty location)
-    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies().Concat(extraAssemblies))
-    {
-        if (asm == null) continue;
-        if (asm.IsDynamic) continue;
-
-        string? loc = null;
-        try { loc = asm.Location; } catch { }
-
-        if (string.IsNullOrWhiteSpace(loc)) continue;
-        paths.Add(loc);
-    }
-
-    var refs = paths.Select(p => (MetadataReference)MetadataReference.CreateFromFile(p));
-
-    return ScriptOptions.Default
-        .WithReferences(refs)
-        .WithImports(
-            "System",
-            "System.Threading",
-            "System.Threading.Tasks",
-            "System.Linq",
-            "System.Collections",
-            "System.Collections.Generic",
-            "System.Text",
-            "System.Globalization",
-            "System.Text.RegularExpressions",
-
-            "Novin.Bpmn.Engine.Domain.Entities",
-            "Novin.Bpmn.Engine.Domain.Exceptions",
-            "Novin.Bpmn.Engine.Application.Services",
-            "Novin.Bpmn.Engine.Application.Common.Interfaces",
-            "Novin.Bpmn.Models.Models"
-        );
-}
-
 
     // -----------------------------
     // JavaScript (Jint)
-    // - Provide JS object: context = { Variables: {...} }
-    // - Variables points to token locals ONLY (mutable)
-    // - No direct access to process variables (all via mapping)
-    // - After execution, sync token variables back to domain
+    // - Token locals only (mutable)
+    // - After execution, sync back to token locals
     // -----------------------------
-    
     private sealed class JsContext
     {
-        /// <summary>
-        /// Token local variables (mutable) - only source of variables for scripts.
-        /// </summary>
         public IDictionary<string, object?> Variables { get; }
-
-        /// <summary>
-        /// Alias for Variables (backward compatibility).
-        /// </summary>
         public IDictionary<string, object?> TokenVariables => Variables;
 
         public JsContext(IDictionary<string, object?> tokenVariables)
@@ -307,33 +295,23 @@ private static ScriptOptions BuildScriptOptions(params Assembly[] extraAssemblie
         }
     }
 
-    private void ExecuteJavaScriptWithContext(Process process, Token token, string taskId, string code, CancellationToken ct)
+    private void ExecuteJavaScriptWithContext(Process process, Token token, string taskId, string codes, CancellationToken ct)
     {
         if (ct.IsCancellationRequested)
             throw new OperationCanceledException(ct);
 
-        // ---- safe defaults if options are misconfigured (0/negative) ----
-        var timeout = _options.JavaScriptTimeout <= TimeSpan.Zero
-            ? TimeSpan.FromSeconds(2)
-            : _options.JavaScriptTimeout;
-
-        var maxStatements = _options.JavaScriptMaxStatements <= 0
-            ? 10_000
-            : _options.JavaScriptMaxStatements;
-
-        var maxMemory = _options.JavaScriptMaxMemoryBytes <= 0
-            ? 4_000_000
-            : _options.JavaScriptMaxMemoryBytes;
+        var timeout = _options.JavaScriptTimeout <= TimeSpan.Zero ? TimeSpan.FromSeconds(2) : _options.JavaScriptTimeout;
+        var maxStatements = _options.JavaScriptMaxStatements <= 0 ? 10_000 : _options.JavaScriptMaxStatements;
+        var maxMemory = _options.JavaScriptMaxMemoryBytes <= 0 ? 4_000_000 : _options.JavaScriptMaxMemoryBytes;
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(timeout);
 
-        // ✅ فقط token locals - هیچ دسترسی به process variables وجود ندارد
+        // token locals only
         var tokVars = token.Variables.ToDictionary(kv => kv.Key, kv => (object?)kv.Value);
 
         try
         {
-            // IMPORTANT: use only CancellationToken for timeout (no TimeoutInterval)
             var engine = new Jint.Engine(o =>
             {
                 o.LimitMemory(maxMemory);
@@ -341,87 +319,57 @@ private static ScriptOptions BuildScriptOptions(params Assembly[] extraAssemblie
                 o.CancellationToken(timeoutCts.Token);
             });
 
-            // ✅ فقط token locals
             var ctxObj = new JsContext(tokVars);
 
             engine.SetValue("context", ctxObj);
-            engine.SetValue("variables", tokVars); // alias for token locals
-            engine.SetValue("tokenVariables", tokVars); // backward compatibility
+            engine.SetValue("variables", tokVars);
+            engine.SetValue("tokenVariables", tokVars);
             engine.SetValue("log", new Action<object?>(m => _logger.LogInformation("[JS] {Msg}", m)));
 
-            engine.Execute(code);
+            engine.Execute(codes);
 
-            // ✅ Sync back: only token variables (process sync happens via ApplyOutputs)
+            // sync back
             foreach (var (k, v) in tokVars)
-                token.SetVariable(k, NormalizeJs(v)!);
+                token.SetVariable(k, NormalizeJs(v));
         }
         catch (Jint.Runtime.ExecutionCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
-            // Throw TokenExecutionException instead of calling token.Fail() directly
-            // This allows the orchestrator to handle it properly (create incident, fail token in separate transaction)
-            throw new TokenExecutionException(
-                process.Id,
-                token.Id,
-                taskId,
-                $"JS ScriptTask '{taskId}' timed out after {timeout.TotalSeconds:0.#}s.");
+            throw new ScriptTaskExecutionException(
+                process.Id, token.Id, taskId,
+                $"JS ScriptTask '{taskId}' timed out after {timeout.TotalSeconds:0.#}s.",
+                EngineErrorKind.Technical);
         }
         catch (Jint.Runtime.ExecutionCanceledException) when (ct.IsCancellationRequested)
         {
-            // upstream cancellation - rethrow as-is
             throw new OperationCanceledException(ct);
         }
         catch (Exception ex)
         {
+            // Optional: allow throwing "BPMN Error CODE: msg" from JS
+            if (TryParseBpmnErrorFromMessage(ex.Message, out var code, out var msg))
+            {
+                throw new ScriptTaskExecutionException(
+                    process.Id, token.Id, taskId,
+                    $"BPMN Error '{code}': {msg}",
+                    EngineErrorKind.BpmnError,
+                    bpmnErrorCode: code,
+                    inner: ex);
+            }
+
             _logger.LogError(ex,
-                "JS ScriptTask failed. TaskId={TaskId}, Timeout={TimeoutMs}, MaxStatements={MaxStatements}, MaxMemory={MaxMemory}",
+                "[SCRIPT-EXEC] JS ScriptTask failed. TaskId={TaskId} TimeoutMs={TimeoutMs} MaxStatements={MaxStatements} MaxMemory={MaxMemory}",
                 taskId, timeout.TotalMilliseconds, maxStatements, maxMemory);
 
-            // Throw TokenExecutionException instead of calling token.Fail() directly
-            throw new TokenExecutionException(
-                process.Id,
-                token.Id,
-                taskId,
+            throw new ScriptTaskExecutionException(
+                process.Id, token.Id, taskId,
                 $"JS ScriptTask '{taskId}' failed: {ex.Message}",
-                ex);
+                EngineErrorKind.Technical,
+                inner: ex);
         }
 
         static object? NormalizeJs(object? value)
             => value is JsValue jsv ? jsv.ToObject() : value;
     }
-
-    private void ApplyJsonVariablesToProcess(Process process, string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return;
-
-        var dict = _jsonSerializer.DeserializeObject<Dictionary<string,string>>(json);
-        if (dict == null) return;
-
-        foreach (var (k, v) in dict)
-            process.SetVariable(k, v);
-    }
-
-    private void ApplyJsonVariablesToToken(Token token, string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return;
-
-        var dict = _jsonSerializer.DeserializeObject<Dictionary<string, JsonElement>>(json);
-        if (dict == null) return;
-
-        foreach (var (k, v) in dict)
-            token.SetVariable(k, ConvertJson(v)!);
-    }
-
-    private static object? ConvertJson(JsonElement e) =>
-        e.ValueKind switch
-        {
-            JsonValueKind.String => e.GetString(),
-            JsonValueKind.Number => e.TryGetInt64(out var l) ? l : e.TryGetDouble(out var d) ? d : e.ToString(),
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            JsonValueKind.Null => null,
-            // objects/arrays: keep as JsonElement (or map to Dictionary if you want)
-            _ => e
-        };
 
     // -----------------------------
     // Helpers
@@ -435,7 +383,31 @@ private static ScriptOptions BuildScriptOptions(params Assembly[] extraAssemblie
         return Convert.ToHexString(bytes);
     }
 
-    // Robust reflection getters (your model differs: Script.Value / script / ScriptFormat etc.)
+    private static bool TryParseBpmnErrorFromMessage(string? message, out string code, out string msg)
+    {
+        code = "";
+        msg = "";
+
+        if (string.IsNullOrWhiteSpace(message)) return false;
+
+        // Pattern: "BPMN Error CODE: message"
+        const string prefix = "BPMN Error ";
+        if (!message.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var rest = message.Substring(prefix.Length);
+        var parts = rest.Split(new[] { ':' }, 2);
+
+        var c = (parts.Length > 0 ? parts[0] : "").Trim();
+        if (string.IsNullOrWhiteSpace(c)) return false;
+
+        code = c;
+        msg = (parts.Length > 1 ? parts[1] : rest).Trim();
+        if (string.IsNullOrWhiteSpace(msg)) msg = message;
+
+        return true;
+    }
+
     private static string? GetScriptFormat(BpmnScriptTask task)
     {
         var t = task.GetType();

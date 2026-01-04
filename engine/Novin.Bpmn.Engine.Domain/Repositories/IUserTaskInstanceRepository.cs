@@ -20,4 +20,13 @@ public interface IUserTaskInstanceRepository : IRepository<UserTaskInstance>
 
     Task UpdateAsync(UserTaskInstance? userTask, CancellationToken cancellationToken = default);
     Task<UserTaskInstance?> GetByKeyAsync(Guid processId, Guid tokenId, Guid nodeInstanceId, string elementId, CancellationToken ct);
+    
+    // ✅ NEW: Inbox (paged)
+    Task<PagedQueryResult<UserTaskInstance>> GetInboxAsync(
+        Guid userId,
+        IReadOnlyCollection<string> roles,
+        UserTaskStatus? status,
+        int page,
+        int pageSize,
+        CancellationToken ct);
 }

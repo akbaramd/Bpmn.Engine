@@ -6,13 +6,13 @@ using MediatR;
 
 
 public sealed record AssignUserTaskCommand(
-    Guid WorkerId,
+    Guid UserTaskId,
     string? Assignee,
-    string? CandidateGroups,
-    string? CandidateUsers,
-    int? Priority,
-    DateTime? DueDateUtc,
-    string AssignedBy
+    string? CandidateGroups = "",
+    string? CandidateUsers = "",
+    int? Priority = 1,
+    DateTime? DueDateUtc = null,
+    string? AssignedBy = ""
 ) : IRequest<AssignUserTaskResult>;
 
 public enum AssignUserTaskResult { Ok, NotFound, InvalidState }
@@ -20,7 +20,7 @@ public enum AssignUserTaskResult { Ok, NotFound, InvalidState }
 public sealed record CompleteUserTaskCommand(
     Guid WorkerId,
     string CompletedBy,
-    Dictionary<string, string> Result,
+    Dictionary<string, object?> Result,
     string? Comment
 ) : IRequest<CompleteUserTaskResult>;
 

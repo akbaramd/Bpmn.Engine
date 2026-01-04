@@ -1,6 +1,7 @@
 ﻿// File: Novin.Bpmn.Engine.Infrastructure/Persistence/Repositories/UserTaskInstanceRepository.cs
 using Microsoft.EntityFrameworkCore;
 using Novin.Bpmn.Engine.Application.Common.Interfaces;
+using Novin.Bpmn.Engine.Domain;
 using Novin.Bpmn.Engine.Domain.Entities;
 using Novin.Bpmn.Engine.Domain.Repositories;
 
@@ -121,6 +122,108 @@ public sealed class UserTaskInstanceRepository : IUserTaskInstanceRepository
                 ct);
     }
 
+      public async Task<PagedQueryResult<UserTaskInstance>> GetInboxAsync(
+        Guid userId,
+        IReadOnlyCollection<string> roles,
+        UserTaskStatus? status,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
+        var userKey = userId.ToString();
+        var roleSet = (roles ?? Array.Empty<string>())
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(r => r.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        IQueryable<UserTaskInstance> q = _db.UserTaskInstances.AsNoTracking();
+
+        // Status filter:
+        // - if status provided -> exactly that
+        // - else -> show "inbox" statuses (exclude terminal)
+        if (status.HasValue)
+        {
+            q = q.Where(t => t.Status == status.Value);
+        }
+        else
+        {
+            q = q.Where(t => t.Status != UserTaskStatus.Completed && t.Status != UserTaskStatus.Canceled);
+        }
+
+        // NOTE:
+        // Because Metadata is a Dictionary, most providers store it as JSON.
+        // Filtering JSON dictionary keys in SQL is DB-specific.
+        // So we do in-memory visibility filtering after fetching.
+        // For high scale: denormalize Assignee/CandidateUsers/CandidateGroups to columns.
+        var candidates = await q
+            .OrderByDescending(t => t.CreatedAtUtc)
+            .ToListAsync(ct);
+
+        var visible = candidates
+            .Where(t => IsVisibleToUser(t, userKey, roleSet))
+            .ToList();
+
+        var total = visible.Count;
+
+        var skip = (page - 1) * pageSize;
+        var items = visible
+            .Skip(skip)
+            .Take(pageSize)
+            .ToList();
+
+        return new PagedQueryResult<UserTaskInstance>
+        {
+            Items = items,
+            TotalCount = total
+        };
+    }
+
+    private static bool IsVisibleToUser(UserTaskInstance t, string userKey, string[] roleSet)
+    {
+        // If claimed by someone else -> not visible
+        if (!string.IsNullOrWhiteSpace(t.ClaimedByUserId) &&
+            !string.Equals(t.ClaimedByUserId, userKey, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // If assigned to someone else -> not visible
+        var assignee = t.GetMeta(UserTaskMeta.Assignee);
+        if (!string.IsNullOrWhiteSpace(assignee) &&
+            !string.Equals(assignee, userKey, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Assigned to me
+        if (!string.IsNullOrWhiteSpace(assignee) &&
+            string.Equals(assignee, userKey, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Candidate users
+        var candidateUsers = SplitCsv(t.GetMeta(UserTaskMeta.CandidateUsers));
+        if (candidateUsers.Count > 0 &&
+            candidateUsers.Contains(userKey, StringComparer.OrdinalIgnoreCase))
+            return true;
+
+        // Candidate groups
+        var candidateGroups = SplitCsv(t.GetMeta(UserTaskMeta.CandidateGroups));
+        if (candidateGroups.Count > 0 && roleSet.Length > 0 &&
+            candidateGroups.Any(g => roleSet.Contains(g, StringComparer.OrdinalIgnoreCase)))
+            return true;
+
+        // Open for all (no assignee, no candidate users, no candidate groups)
+        if (string.IsNullOrWhiteSpace(assignee) &&
+            candidateUsers.Count == 0 &&
+            candidateGroups.Count == 0)
+            return true;
+
+        return false;
+    }
+    private static List<string> SplitCsv(string? csv)
+    {
+        if (string.IsNullOrWhiteSpace(csv)) return new List<string>();
+        return csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         if (id == Guid.Empty) throw new ArgumentException("Id cannot be empty.", nameof(id));

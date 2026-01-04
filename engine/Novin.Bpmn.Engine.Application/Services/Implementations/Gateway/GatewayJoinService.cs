@@ -103,7 +103,7 @@ public sealed class GatewayJoinService : IGatewayJoinService
         var parent = await _tokenRepository.GetByIdAsync(parentTokenId, ct);
         if (parent is null)
         {
-            token.Fail($"Join gateway '{gwId}': parent token not found. ParentTokenId={parentTokenId}");
+            token.Fail($"Join gateway '{gwId}': parent token not found. ParentTokenId={parentTokenId}",EngineErrorKind.Technical);
             await _uow.Tokens.UpdateAsync(token, ct);
             return Fail("ParentNotFound", process, token, gwId, gateway, scopeId, parentTokenId);
         }
@@ -112,7 +112,7 @@ public sealed class GatewayJoinService : IGatewayJoinService
         // parent must still have this scope as its CURRENT scope (top of stack).
         if (parent.ScopeId != scopeId)
         {
-            token.Fail($"Join gateway '{gwId}': parent scope mismatch. ChildScope={scopeId:N} ParentScope={parent.ScopeId?.ToString("N") ?? "(null)"}");
+            token.Fail($"Join gateway '{gwId}': parent scope mismatch. ChildScope={scopeId:N} ParentScope={parent.ScopeId?.ToString("N") ?? "(null)"}", EngineErrorKind.Technical);
             await _uow.Tokens.UpdateAsync(token, ct);
 
             _logger.LogError(

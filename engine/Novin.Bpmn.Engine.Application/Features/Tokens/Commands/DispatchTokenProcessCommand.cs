@@ -12,7 +12,19 @@ namespace Novin.Bpmn.Engine.Application.Commands.NodeDispatch;
 
 public sealed record DispatchTokenProcessCommand(Guid TokenId) : IRequest<TokenProcessResult>;
 
-public sealed class DispatchTokenProcessCommandHandler : IRequestHandler<DispatchTokenProcessCommand,TokenProcessResult>
+/// <summary>
+/// Production-ready token processing dispatcher:
+/// - One transaction for normal flow
+/// - Strong terminal guards (NoOp for terminal states)
+/// - Correct resume detection (Waiting => Resume)
+/// - Classified failures:
+///   - Logical => EngineErrorKind.Logical
+///   - Technical => EngineErrorKind.Technical
+///   - (Optional) BPMN Error => EngineErrorKind.BpmnError + errorCode
+/// - Best-effort Token.Fail in a separate transaction (rollback-safe)
+/// </summary>
+public sealed class DispatchTokenProcessCommandHandler
+    : IRequestHandler<DispatchTokenProcessCommand, TokenProcessResult>
 {
     private readonly IUnitOfWork _uow;
     private readonly IBpmnRuntimeContextFactory _ctxFactory;
@@ -36,103 +48,181 @@ public sealed class DispatchTokenProcessCommandHandler : IRequestHandler<Dispatc
         if (request.TokenId == Guid.Empty)
             throw new ArgumentException("TokenId cannot be empty.", nameof(request.TokenId));
 
-        await _uow.BeginTransactionAsync(ct);
         try
         {
-            var token = await _uow.Tokens.GetByIdAsync(request.TokenId, ct)
-                       ?? throw new InvalidOperationException($"Token '{request.TokenId}' not found.");
+            TokenProcessResult result = TokenProcessResult.Failed;
 
-            var process = await _uow.Processes.GetByIdAsync(token.ProcessId, ct)
-                          ?? throw new InvalidOperationException($"Process '{token.ProcessId}' not found.");
+            // ✅ Happy-path in ONE transaction
+            await _uow.ExecuteInTransactionAsync(async trxCt =>
+            {
+                var token = await _uow.Tokens.GetByIdAsync(request.TokenId, trxCt);
+                if (token is null)
+                    throw new EngineLogicalException($"Token '{request.TokenId}' not found.");
 
-            // ✅ Deployment is loaded by BpmnRuntimeContextFactory via catalog (memory-first)
-            var ctx = await _ctxFactory.CreateAsync(process, ct);
+                // Terminal/NoOp guards
+                if (token.State is TokenState.Completed or TokenState.Terminated)
+                {
+                    _logger.LogDebug("[TOKEN:PROC] NoOp: token is terminal. TokenId={TokenId} State={State}",
+                        token.Id, token.State);
 
-            var element = ctx.Model.GetElementById(process.ProcessBpmnId, token.CurrentElementId);
-            if (element is null)
-                throw new InvalidOperationException(
-                    $"BPMN element '{token.CurrentElementId}' not found in process '{process.ProcessBpmnId}'.");
+                    result = TokenProcessResult.NoOp;
+                    return;
+                }
 
-            // پیشنهاد: resume وقتی true شود که token قبلاً Waiting بوده و الان trigger شده
-            var isResume = token.State == TokenState.Waiting;
+                if (token.State is TokenState.Failed)
+                {
+                    _logger.LogDebug("[TOKEN:PROC] NoOp: token already failed. TokenId={TokenId}", token.Id);
+                    result = TokenProcessResult.NoOp;
+                    return;
+                }
 
-            _logger.LogInformation(
-                "[TOKEN:PROC] Dispatching. ProcessId={ProcessId} TokenId={TokenId} ElementId={ElementId} State={State} IsResume={IsResume}",
-                process.Id, token.Id, token.CurrentElementId, token.State, isResume);
+                var process = await _uow.Processes.GetByIdAsync(token.ProcessId, trxCt);
+                if (process is null)
+                    throw new EngineLogicalException($"Process '{token.ProcessId}' not found for token '{token.Id}'.");
 
-            // ✅ این باید TokenProcessResult برگرداند (نه bool)
-            var tokenResult = await _dispatcher.DispatchTokenProcessAsync(
-                process: process,
-                token: token,
-                element: element,
-                ctx: ctx,
-                isResume: isResume,
-                ct: ct);
+                // Runtime context (deployment/catalog/model parse, etc.)
+                var ctx = await _ctxFactory.CreateAsync(process, trxCt);
 
-            _logger.LogInformation(
-                "[TOKEN:PROC] Result={Result}. ProcessId={ProcessId} TokenId={TokenId} State={State}",
-                tokenResult, process.Id, token.Id, token.State);
+                var element = ctx.Model.GetElementById(process.ProcessBpmnId, token.CurrentElementId);
+                if (element is null)
+                    throw new EngineLogicalException(
+                        $"BPMN element '{token.CurrentElementId}' not found in process '{process.ProcessBpmnId}'.");
 
-            // اگر تغییرات داخل handler/dispatcher روی توکن/پروسس انجام شده
-            await _uow.Tokens.UpdateAsync(token, ct);
-            await _uow.Processes.UpdateAsync(process, ct);
+                var isResume = token.State == TokenState.Waiting;
 
-            await _uow.CommitTransactionAsync(ct);
-            return tokenResult;
-            
+                _logger.LogInformation(
+                    "[TOKEN:PROC] Dispatching. P={ProcessId} T={TokenId} ElementId={ElementId} State={State} Resume={Resume}",
+                    process.Id, token.Id, token.CurrentElementId, token.State, isResume);
+
+                // ✅ dispatcher returns TokenProcessResult
+                result = await _dispatcher.DispatchTokenProcessAsync(
+                    process: process,
+                    token: token,
+                    element: element,
+                    ctx: ctx,
+                    isResume: isResume,
+                    ct: trxCt);
+
+                _logger.LogInformation(
+                    "[TOKEN:PROC] Result={Result}. P={ProcessId} T={TokenId} NewState={State}",
+                    result, process.Id, token.Id, token.State);
+
+                // Persist explicitly
+                await _uow.Tokens.UpdateAsync(token, trxCt);
+                await _uow.Processes.UpdateAsync(process, trxCt);
+            }, ct);
+
+            return result;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // cancellation => rollback & rethrow
-            await SafeRollbackAsync(ct);
+            _logger.LogWarning("[TOKEN:PROC] Canceled. TokenId={TokenId}", request.TokenId);
             throw;
         }
-        catch (Exception ex)
+        catch (EngineLogicalException lex)
         {
-            await SafeRollbackAsync(ct);
+            _logger.LogWarning(lex, "[TOKEN:PROC] Logical failure. TokenId={TokenId}", request.TokenId);
 
-            _logger.LogError(ex, "[TOKEN:PROC] Failed. TokenId={TokenId}", request.TokenId);
+            await FailTokenBestEffortAsync(
+                tokenId: request.TokenId,
+                message: lex.Message,
+                kind: EngineErrorKind.Logical,
+                errorCode: null,
+                incidentId: null,
+                ct: ct);
 
-            // ✅ best-effort fail token در تراکنش جدا
-            await MarkTokenFailedBestEffortAsync(request.TokenId, ex, ct);
-            
             return TokenProcessResult.Failed;
         }
+        // OPTIONAL: if you have a BPMN error exception type in your engine, map it here.
+        // catch (BpmnErrorException bex)
+        // {
+        //     _logger.LogInformation(bex, "[TOKEN:PROC] BPMN error. TokenId={TokenId} Code={Code}", request.TokenId, bex.ErrorCode);
+        //
+        //     await FailTokenBestEffortAsync(
+        //         tokenId: request.TokenId,
+        //         message: bex.Message,
+        //         kind: EngineErrorKind.BpmnError,
+        //         errorCode: bex.ErrorCode,
+        //         incidentId: null,
+        //         ct: ct);
+        //
+        //     return TokenProcessResult.Failed;
+        // }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[TOKEN:PROC] Technical failure. TokenId={TokenId}", request.TokenId);
 
-       
+            await FailTokenBestEffortAsync(
+                tokenId: request.TokenId,
+                message: ex.Message,
+                kind: EngineErrorKind.Technical,
+                errorCode: null,
+                incidentId: null,
+                ct: ct);
+
+            return TokenProcessResult.Failed;
+        }
     }
 
-    private async Task SafeRollbackAsync(CancellationToken ct)
+    /// <summary>
+    /// Fail token in a separate transaction so original rollback doesn't lose it.
+    /// Never throws (best-effort).
+    /// </summary>
+    private async Task FailTokenBestEffortAsync(
+        Guid tokenId,
+        string message,
+        EngineErrorKind kind,
+        string? errorCode,
+        Guid? incidentId,
+        CancellationToken ct)
     {
         try
         {
-            await _uow.RollbackTransactionAsync(ct);
-        }
-        catch (Exception rbEx)
-        {
-            _logger.LogError(rbEx, "[TOKEN:PROC] Rollback failed.");
-        }
-    }
-
-    private async Task MarkTokenFailedBestEffortAsync(Guid tokenId, Exception ex, CancellationToken ct)
-    {
-        try
-        {
-            await _uow.ExecuteInTransactionAsync(async ict =>
+            await _uow.ExecuteInTransactionAsync(async trxCt =>
             {
-                var token = await _uow.Tokens.GetByIdAsync(tokenId, ict);
-                if (token is null) return;
-
-                if (token.State is not TokenState.Completed and not TokenState.Terminated and not TokenState.Failed)
+                var token = await _uow.Tokens.GetByIdAsync(tokenId, trxCt);
+                if (token is null)
                 {
-                    token.Fail(ex.Message);
-                    await _uow.Tokens.UpdateAsync(token, ict);
+                    _logger.LogWarning("[TOKEN:PROC] BestEffortFail: token not found. TokenId={TokenId}", tokenId);
+                    return;
                 }
+
+                // Guard terminals (avoid crash loops)
+                if (token.State is TokenState.Completed or TokenState.Terminated or TokenState.Failed)
+                {
+                    _logger.LogDebug("[TOKEN:PROC] BestEffortFail: skip (terminal). TokenId={TokenId} State={State}",
+                        token.Id, token.State);
+                    return;
+                }
+
+                var msg = string.IsNullOrWhiteSpace(message) ? "Unhandled engine error." : message;
+
+                token.Fail(
+                    error: msg,
+                    errorType: kind,
+                    errorCode: errorCode,
+                    incidentId: incidentId);
+
+                await _uow.Tokens.UpdateAsync(token, trxCt);
+
+                _logger.LogInformation(
+                    "[TOKEN:PROC] Token failed (best-effort). TokenId={TokenId} Kind={Kind} ErrorCode={ErrorCode}",
+                    token.Id, kind, errorCode);
             }, ct);
         }
         catch (Exception failEx)
         {
-            _logger.LogError(failEx, "[TOKEN:PROC] Failed to mark Token as Failed (best-effort). TokenId={TokenId}", tokenId);
+            _logger.LogError(failEx,
+                "[TOKEN:PROC] BestEffortFail failed. TokenId={TokenId} Kind={Kind}",
+                tokenId, kind);
         }
+    }
+
+    /// <summary>
+    /// Expected/validation/precondition failures => Logical.
+    /// </summary>
+    private sealed class EngineLogicalException : Exception
+    {
+        public EngineLogicalException(string message) : base(message) { }
     }
 }

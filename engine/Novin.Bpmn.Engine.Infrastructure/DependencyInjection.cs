@@ -10,7 +10,6 @@ using Novin.Bpmn.Engine.Domain.DomainServices;
 using Novin.Bpmn.Engine.Domain.Repositories;
 using Novin.Bpmn.Engine.Infrastructure.Common;
 using Novin.Bpmn.Engine.Infrastructure.EventBus;
-using Novin.Bpmn.Engine.Infrastructure.Outbox.Elastices;
 using Novin.Bpmn.Engine.Infrastructure.Outbox.Redis;
 using Novin.Bpmn.Engine.Infrastructure.Persistence;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.Interceptors;
@@ -18,7 +17,6 @@ using Novin.Bpmn.Engine.Infrastructure.Persistence.Outbox;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.Repositories;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.Startup;
 using Novin.Bpmn.Engine.Infrastructure.Persistence.UnitOfWork;
-using Novin.Bpmn.Engine.Infrastructure.Signals;
 using IDeploymentRepository = Novin.Bpmn.Engine.Application.Common.Interfaces.IDeploymentRepository;
 
 namespace Novin.Bpmn.Engine.Infrastructure;
@@ -52,25 +50,7 @@ public static class DependencyInjection
             JavaScriptMaxMemoryBytes = 4_000_000
         });
 
-        services.Configure<ElasticOptions>(configuration.GetSection("Elastic"));
-
-        services.AddSingleton(sp =>
-        {
-            var opt = sp.GetRequiredService<IOptions<ElasticOptions>>().Value;
-
-            var settings = new ElasticsearchClientSettings(new Uri(opt.Url))
-                .DefaultIndex(opt.Index);
-
-            return new ElasticsearchClient(settings);
-        });
-
-        services.AddSingleton<IElasticOutboxWriter, ElasticOutboxWriter>();
-        services.AddSingleton<ElasticOutboxClaimer>();
-        services.AddHostedService<ElasticIndexBootstrapperHostedService>(); // optional: create index/template
-        services.AddScoped<IOutboxBatchClaimer, ElasticOutboxClaimer>(); // SQLite for development
-        services.AddScoped<IOutboxStateStore, ElasticOutboxStateStore>(); // SQLite for development
-                                                                         // Recommended: projector reading from Redis Stream (separate consumer group)
-        services.AddHostedService<ElasticIndexBootstrapperHostedService>();
+       
 
 
         // Domain Event Dispatcher
@@ -90,13 +70,12 @@ public static class DependencyInjection
         services.AddScoped<IWorkerRepository, EfWorkerRepository>();
         services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<IExecutionFlowRepository, ExecutionFlowRepository>();
-        services.AddSingleton<IOutboxWorkSignal, InMemoryOutboxWorkSignal>();
         // Outbox Services
         services.AddScoped<IOutboxMessageRepository, EfOutboxMessageRepository>();
 
         services.AddScoped<IDbSeeder, CoreBootstrapSeeder>();
         // Background Services
-        services.AddRedisOutbox(configuration);
+        services.AddMessageBrockers(configuration);
 
         // Services
         services.AddScoped<IIncidentService, IncidentService>();

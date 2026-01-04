@@ -21,64 +21,7 @@ public sealed class WorkersController : ControllerBase
         _uow = uow ?? throw new ArgumentNullException(nameof(uow));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
-
-
-    // ------------------------------------------------------------
-    // USER TASK: ASSIGN
-    // ------------------------------------------------------------
-    [HttpPost("{workerId:guid}/assign")]
-    [ProducesResponseType(204)]
-    [ProducesResponseType(404)]
-    [ProducesResponseType(409)]
-    public async Task<IActionResult> AssignUserTask(Guid workerId, [FromBody] AssignUserTaskRequest body, CancellationToken ct = default)
-    {
-        var cmd = new AssignUserTaskCommand(
-            WorkerId: workerId,
-            Assignee: body.Assignee,
-            CandidateGroups: body.CandidateGroups,
-            CandidateUsers: body.CandidateUsers,
-            Priority: body.Priority,
-            DueDateUtc: body.DueDateUtc,
-            AssignedBy: GetActor()
-        );
-
-        var result = await _mediator.Send(cmd, ct);
-
-        return result switch
-        {
-            AssignUserTaskResult.NotFound => NotFound(new { error = $"Job {workerId} not found" }),
-            AssignUserTaskResult.InvalidState => Conflict(new { error = "Job is not assignable in its current status" }),
-            _ => NoContent()
-        };
-    }
-
-    // ------------------------------------------------------------
-    // USER TASK: COMPLETE (submit form)
-    // ------------------------------------------------------------
-    [HttpPost("{workerId:guid}/complete")]
-    [ProducesResponseType(204)]
-    [ProducesResponseType(404)]
-    [ProducesResponseType(409)]
-    public async Task<IActionResult> CompleteUserTask(Guid workerId, [FromBody] CompleteUserTaskRequest body, CancellationToken ct = default)
-    {
-        var cmd = new CompleteUserTaskCommand(
-            WorkerId: workerId,
-            CompletedBy: GetActor(),
-            Result: body.Result ?? new Dictionary<string, string>(),
-            Comment: body.Comment
-        );
-
-        var result = await _mediator.Send(cmd, ct);
-
-        return result switch
-        {
-            CompleteUserTaskResult.NotFound => NotFound(new { error = $"Job {workerId} not found" }),
-            CompleteUserTaskResult.InvalidState => Conflict(new { error = "Job is not completable in its current status" }),
-            CompleteUserTaskResult.TokenNotWaiting => Conflict(new { error = "Token is not waiting for this worker" }),
-            _ => NoContent()
-        };
-    }
-
+    
     // ------------------------------------------------------------
     // SERVICE TASK: COMPLETE
     // ------------------------------------------------------------

@@ -50,7 +50,7 @@ public sealed class EndEventHandler : BpmnElementHandlerBase
 
         if (token.State != TokenState.Active)
         {
-            token.Fail($"EndEvent '{endEvent.id}' reached with invalid token state '{token.State}'.");
+            token.Fail($"EndEvent '{endEvent.id}' reached with invalid token state '{token.State}'.",EngineErrorKind.Technical);
             return Task.FromResult(TokenProcessResult.Continue);
         }
 
