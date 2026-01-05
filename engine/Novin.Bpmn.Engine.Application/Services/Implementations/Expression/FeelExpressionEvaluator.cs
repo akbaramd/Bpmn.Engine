@@ -28,6 +28,10 @@ public sealed class FeelExpressionEvaluator : IFeelExpressionEvaluator
         if (string.IsNullOrWhiteSpace(expression))
             return null;
 
+        if(!expression.StartsWith("="))  {
+            return expression;
+        }
+
         var normalized = Normalize(expression);
 
         var lexer = new FeelLexer(normalized);

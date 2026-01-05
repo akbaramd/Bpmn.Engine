@@ -46,6 +46,7 @@ public sealed class GetUserTasksInboxQueryHandler
 
         var result = await _repo.GetInboxAsync(
             request.UserId,
+            request.ProcessId,
             request.Roles ?? Array.Empty<string>(),
             statusFilter,
             page,

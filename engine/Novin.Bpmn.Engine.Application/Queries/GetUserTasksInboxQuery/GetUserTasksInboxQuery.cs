@@ -3,7 +3,8 @@
 namespace Novin.Bpmn.Engine.Application.Queries.GetUserTasksInboxQuery;
 
 public sealed record GetUserTasksInboxQuery(
-    Guid UserId,
+    Guid? UserId,
+    Guid? ProcessId,
     IReadOnlyCollection<string> Roles,
     string? Status,
     int Page,

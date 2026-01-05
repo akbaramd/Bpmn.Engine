@@ -23,7 +23,8 @@ public interface IUserTaskInstanceRepository : IRepository<UserTaskInstance>
     
     // ✅ NEW: Inbox (paged)
     Task<PagedQueryResult<UserTaskInstance>> GetInboxAsync(
-        Guid userId,
+        Guid? userId,
+        Guid? processId,
         IReadOnlyCollection<string> roles,
         UserTaskStatus? status,
         int page,

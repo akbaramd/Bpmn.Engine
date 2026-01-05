@@ -123,61 +123,69 @@ public sealed class UserTaskInstanceRepository : IUserTaskInstanceRepository
     }
 
       public async Task<PagedQueryResult<UserTaskInstance>> GetInboxAsync(
-        Guid userId,
-        IReadOnlyCollection<string> roles,
-        UserTaskStatus? status,
-        int page,
-        int pageSize,
-        CancellationToken ct)
+    Guid? userId,
+    Guid? processId,
+    IReadOnlyCollection<string> roles,
+    UserTaskStatus? status,
+    int page,
+    int pageSize,
+    CancellationToken ct)
+{
+    if (page <= 0) page = 1;
+    if (pageSize <= 0) pageSize = 20;
+
+    // userKey must be stable and not "empty-guid"
+    var userKey = userId.HasValue && userId.Value != Guid.Empty
+        ? userId.Value.ToString("D")
+        : null;
+
+    var roleSet = (roles ?? Array.Empty<string>())
+        .Where(r => !string.IsNullOrWhiteSpace(r))
+        .Select(r => r.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    IQueryable<UserTaskInstance> q = _db.UserTaskInstances.AsNoTracking();
+
+    // ✅ ProcessId filter
+    if (processId.HasValue && processId.Value != Guid.Empty)
+        q = q.Where(t => t.ProcessId == processId.Value);
+
+    // // Status filter:
+    // // - if status provided -> exactly that
+    // // - else -> show "inbox" statuses (exclude terminal)
+    // if (status.HasValue)
+    // {
+    //     q = q.Where(t => t.Status == status.Value);
+    // }
+    // else
+    // {
+    //     q = q.Where(t => t.Status != UserTaskStatus.Completed && t.Status != UserTaskStatus.Canceled);
+    // }
+
+    // Fetch candidates (DB filters applied), then in-memory visibility filtering
+    var candidates = await q
+        .OrderByDescending(t => t.CreatedAtUtc)
+        .ToListAsync(ct);
+
+    var visible = candidates
+        .Where(t => IsVisibleToUser(t, userKey, roleSet))
+        .ToList();
+
+    var total = visible.Count;
+
+    var skip = (page - 1) * pageSize;
+    var items = visible
+        .Skip(skip)
+        .Take(pageSize)
+        .ToList();
+
+    return new PagedQueryResult<UserTaskInstance>
     {
-        var userKey = userId.ToString();
-        var roleSet = (roles ?? Array.Empty<string>())
-            .Where(r => !string.IsNullOrWhiteSpace(r))
-            .Select(r => r.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        IQueryable<UserTaskInstance> q = _db.UserTaskInstances.AsNoTracking();
-
-        // Status filter:
-        // - if status provided -> exactly that
-        // - else -> show "inbox" statuses (exclude terminal)
-        if (status.HasValue)
-        {
-            q = q.Where(t => t.Status == status.Value);
-        }
-        else
-        {
-            q = q.Where(t => t.Status != UserTaskStatus.Completed && t.Status != UserTaskStatus.Canceled);
-        }
-
-        // NOTE:
-        // Because Metadata is a Dictionary, most providers store it as JSON.
-        // Filtering JSON dictionary keys in SQL is DB-specific.
-        // So we do in-memory visibility filtering after fetching.
-        // For high scale: denormalize Assignee/CandidateUsers/CandidateGroups to columns.
-        var candidates = await q
-            .OrderByDescending(t => t.CreatedAtUtc)
-            .ToListAsync(ct);
-
-        var visible = candidates
-            .Where(t => IsVisibleToUser(t, userKey, roleSet))
-            .ToList();
-
-        var total = visible.Count;
-
-        var skip = (page - 1) * pageSize;
-        var items = visible
-            .Skip(skip)
-            .Take(pageSize)
-            .ToList();
-
-        return new PagedQueryResult<UserTaskInstance>
-        {
-            Items = items,
-            TotalCount = total
-        };
-    }
+        Items = items,
+        TotalCount = total
+    };
+}
 
     private static bool IsVisibleToUser(UserTaskInstance t, string userKey, string[] roleSet)
     {

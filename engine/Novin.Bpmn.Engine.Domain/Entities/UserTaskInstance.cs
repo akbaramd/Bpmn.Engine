@@ -1,4 +1,4 @@
-﻿// Domain/Entities/UserTaskInstance.cs  (final: Variables + Metadata as single JSON blobs)
+﻿// Domain/Entities/UserTaskInstance.cs
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -10,23 +10,19 @@ using Novin.Bpmn.Engine.Domain.ValueObjects;
 
 namespace Novin.Bpmn.Engine.Domain.Entities;
 
-// =======================
-// User Task (Human Task)
-// =======================
-
 public enum UserTaskStatus
 {
-    Ready,       // created & visible in inbox
-    Claimed,     // claimed by a user (optional)
-    InProgress,  // started by assignee/claimer
-    Completed,   // submitted
-    Canceled     // canceled by engine (token moved, boundary interrupt, terminate, etc.)
+    Ready,
+    Claimed,
+    InProgress,
+    Completed,
+    Canceled
 }
 
 public enum UserTaskClaimMode
 {
-    Claim,       // must claim before start (optional)
-    DirectAssign // direct assign -> assignee can start/complete
+    Claim,
+    DirectAssign
 }
 
 public static class UserTaskMeta
@@ -41,6 +37,7 @@ public static class UserTaskMeta
     public const string Assignee        = "assignee";
     public const string CandidateUsers  = "candidateUsers";   // CSV
     public const string CandidateGroups = "candidateGroups";  // CSV
+    public const string CandidateRoles  = "candidateRoles";   // CSV ✅
 
     // Business hints
     public const string Description  = "description";
@@ -49,7 +46,6 @@ public static class UserTaskMeta
     public const string ClaimMode    = "claimMode";           // Claim/DirectAssign
     public const string Visibility   = "visibilityPolicy";    // optional
 }
-
 
 public sealed class UserTaskInstance : BaseAggregateRoot
 {
@@ -82,7 +78,6 @@ public sealed class UserTaskInstance : BaseAggregateRoot
     private JsonObject? _variablesObj;
     private bool _variablesLoaded;
 
-    // EF-friendly property (maps to a single column)
     public string VariablesJson
     {
         get => _variablesJson;
@@ -142,6 +137,9 @@ public sealed class UserTaskInstance : BaseAggregateRoot
         IReadOnlyDictionary<string, object>? payloadVariables = null)
     {
         EnsureRequired(processId, tokenId, elementId, taskName);
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        if (string.IsNullOrWhiteSpace(spec.FormKey))
+            throw new ArgumentException("FormKey is required.", nameof(spec));
 
         var t = new UserTaskInstance
         {
@@ -165,6 +163,7 @@ public sealed class UserTaskInstance : BaseAggregateRoot
         t.SetMeta(UserTaskMeta.Assignee, spec.Assignee);
         t.SetMeta(UserTaskMeta.CandidateUsers, JoinCsv(spec.CandidateUsers));
         t.SetMeta(UserTaskMeta.CandidateGroups, JoinCsv(spec.CandidateGroups));
+        t.SetMeta(UserTaskMeta.CandidateRoles, JoinCsv(spec.CandidateRoles)); // ✅
 
         // ---- Hints ----
         t.SetMeta(UserTaskMeta.Description, spec.Description);
@@ -176,65 +175,62 @@ public sealed class UserTaskInstance : BaseAggregateRoot
             t.SetMeta(kv.Key, kv.Value);
 
         if (payloadVariables != null && payloadVariables.Count > 0)
-            t.UpsertVariables(payloadVariables.ToDictionary(k => k.Key, v => (object?)v.Value));
+            t.UpsertVariables(payloadVariables.ToDictionary(k => k.Key, v => (object?)v.Value, StringComparer.Ordinal));
 
         t.AddDomainEvent(new UserTaskCreatedDomainEvent(
             t.Id, t.ProcessId, t.TokenId, t.NodeInstanceId, t.ElementId, t.TaskName,
-            t.GetMetadataSnapshot(), // 👈 still event expects string dictionary
+            t.GetMetadataSnapshot(),
             DateTime.UtcNow));
 
         return t;
     }
 
     // --------------------------------------------------------------------
-    // Commands
+    // Commands (actor-aware)
     // --------------------------------------------------------------------
-    public void Claim(string userId)
+    public void Claim(UserTaskActor actor)
     {
         EnsureNotTerminal();
         EnsureStatus(UserTaskStatus.Ready);
 
-        if (string.IsNullOrWhiteSpace(userId))
-            throw new ArgumentException("userId cannot be empty.", nameof(userId));
+        if (actor is null) throw new ArgumentNullException(nameof(actor));
 
-        EnsureUserCanSee(userId);
+        EnsureActorCanSee(actor);
 
         var claimMode = GetClaimMode();
         if (claimMode == UserTaskClaimMode.DirectAssign)
             throw new InvalidOperationException("DirectAssign tasks do not support claim.");
 
-        ClaimedByUserId = userId;
+        ClaimedByUserId = actor.UserId;
         ClaimedAtUtc = DateTime.UtcNow;
         Status = UserTaskStatus.Claimed;
 
         AddDomainEvent(new UserTaskClaimedDomainEvent(
-            Id, ProcessId, TokenId, NodeInstanceId, ElementId, userId, ClaimedAtUtc.Value));
+            Id, ProcessId, TokenId, NodeInstanceId, ElementId, actor.UserId, ClaimedAtUtc.Value));
     }
 
-    public void Start(string userId)
+    public void Start(UserTaskActor actor)
     {
         EnsureNotTerminal();
-
-        if (string.IsNullOrWhiteSpace(userId))
-            throw new ArgumentException("userId cannot be empty.", nameof(userId));
+        if (actor is null) throw new ArgumentNullException(nameof(actor));
 
         var claimMode = GetClaimMode();
 
         if (Status == UserTaskStatus.Ready)
         {
-            EnsureUserCanSee(userId);
+            EnsureActorCanSee(actor);
 
             if (claimMode == UserTaskClaimMode.Claim)
                 throw new InvalidOperationException("Task must be claimed before starting.");
 
-            EnsureAssigneeIfConfigured(userId);
+            EnsureAssigneeIfConfigured(actor.UserId);
 
-            ClaimedByUserId ??= userId;
+            ClaimedByUserId ??= actor.UserId;
             ClaimedAtUtc ??= DateTime.UtcNow;
         }
         else if (Status == UserTaskStatus.Claimed)
         {
-            if (!string.Equals(ClaimedByUserId, userId, StringComparison.Ordinal))
+            if (!string.Equals(ClaimedByUserId, actor.UserId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Only claimer can start this task.");
         }
         else
@@ -246,34 +242,39 @@ public sealed class UserTaskInstance : BaseAggregateRoot
         StartedAtUtc = DateTime.UtcNow;
 
         AddDomainEvent(new UserTaskStartedDomainEvent(
-            Id, ProcessId, TokenId, NodeInstanceId, ElementId, userId, StartedAtUtc.Value));
+            Id, ProcessId, TokenId, NodeInstanceId, ElementId, actor.UserId, StartedAtUtc.Value));
     }
 
-    public void Complete(string userId, IReadOnlyDictionary<string, object?>? result = null)
+    public void Complete(UserTaskActor actor, IReadOnlyDictionary<string, object?>? result = null)
     {
         EnsureNotTerminal();
         EnsureStatus(UserTaskStatus.InProgress);
 
-        if (string.IsNullOrWhiteSpace(userId))
-            throw new ArgumentException("userId cannot be empty.", nameof(userId));
+        if (actor is null) throw new ArgumentNullException(nameof(actor));
 
         if (!string.IsNullOrWhiteSpace(ClaimedByUserId) &&
-            !string.Equals(ClaimedByUserId, userId, StringComparison.Ordinal))
+            !string.Equals(ClaimedByUserId, actor.UserId, StringComparison.Ordinal))
             throw new InvalidOperationException("Only the task actor can complete this task.");
 
-        EnsureAssigneeIfConfigured(userId);
+        EnsureAssigneeIfConfigured(actor.UserId);
 
         if (result != null && result.Count > 0)
             UpsertVariables(result);
 
-        CompletedByUserId = userId;
+        CompletedByUserId = actor.UserId;
         CompletedAtUtc = DateTime.UtcNow;
         Status = UserTaskStatus.Completed;
 
         AddDomainEvent(new UserTaskCompletedDomainEvent(
-            Id, ProcessId, TokenId, NodeInstanceId, ElementId, userId, CompletedAtUtc.Value,
+            Id, ProcessId, TokenId, NodeInstanceId, ElementId, actor.UserId, CompletedAtUtc.Value,
             result?.ToDictionary(k => k.Key, v => v.Value, StringComparer.Ordinal)));
     }
+
+    // Backward compatible overloads (NO groups/roles). Prefer actor-aware APIs.
+    public void Claim(string userId) => Claim(new UserTaskActor(userId));
+    public void Start(string userId) => Start(new UserTaskActor(userId));
+    public void Complete(string userId, IReadOnlyDictionary<string, object?>? result = null)
+        => Complete(new UserTaskActor(userId), result);
 
     public void Cancel(string reason)
     {
@@ -300,11 +301,9 @@ public sealed class UserTaskInstance : BaseAggregateRoot
         if (!meta.TryGetPropertyValue(k, out var node) || node is null)
             return null;
 
-        // Metadata is *string contract*, store as JSON string value.
         if (node is JsonValue v && v.TryGetValue<string>(out var s))
             return s;
 
-        // fallback: stable JSON string
         return JsonVariableCodec.ToStableJson(node);
     }
 
@@ -326,13 +325,10 @@ public sealed class UserTaskInstance : BaseAggregateRoot
         if (string.IsNullOrWhiteSpace(s))
         {
             if (meta.Remove(k))
-            {
                 FlushMeta(meta);
-            }
             return;
         }
 
-        // Compare old vs new (avoid no-op updates)
         if (meta.TryGetPropertyValue(k, out var oldNode) &&
             oldNode is JsonValue ov && ov.TryGetValue<string>(out var oldStr) &&
             string.Equals(oldStr, s, StringComparison.Ordinal))
@@ -463,7 +459,7 @@ public sealed class UserTaskInstance : BaseAggregateRoot
     }
 
     // --------------------------------------------------------------------
-    // Guards / Policies (unchanged logic)
+    // Guards / Policies
     // --------------------------------------------------------------------
     private void EnsureNotTerminal()
     {
@@ -493,23 +489,49 @@ public sealed class UserTaskInstance : BaseAggregateRoot
             throw new InvalidOperationException("Task is assigned to another user.");
     }
 
-    private void EnsureUserCanSee(string userId)
+    private void EnsureActorCanSee(UserTaskActor actor)
     {
+        // 1) Assignee overrides everything
         var assignee = GetMeta(UserTaskMeta.Assignee);
         if (!string.IsNullOrWhiteSpace(assignee))
         {
-            if (!string.Equals(assignee, userId, StringComparison.Ordinal))
+            if (!string.Equals(assignee, actor.UserId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Task is assigned to another user.");
             return;
         }
 
+        // 2) Candidate users
         var cu = SplitCsv(GetMeta(UserTaskMeta.CandidateUsers));
-        if (cu.Count > 0 && cu.Contains(userId, StringComparer.Ordinal))
+        if (cu.Count > 0)
+        {
+            if (cu.Contains(actor.UserId, StringComparer.Ordinal))
+                return;
+
+            // if CandidateUsers is configured, user must match (unless groups/roles also configured)
+            // continue to groups/roles checks
+        }
+
+        // 3) Candidate groups
+        var cg = SplitCsv(GetMeta(UserTaskMeta.CandidateGroups));
+        if (cg.Count > 0 && actor.Groups.Count > 0)
+        {
+            if (cg.Intersect(actor.Groups, StringComparer.Ordinal).Any())
+                return;
+        }
+
+        // 4) Candidate roles
+        var cr = SplitCsv(GetMeta(UserTaskMeta.CandidateRoles));
+        if (cr.Count > 0 && actor.Roles.Count > 0)
+        {
+            if (cr.Intersect(actor.Roles, StringComparer.Ordinal).Any())
+                return;
+        }
+
+        // 5) No assignment configured => visible to all (explicit assumption)
+        if (cu.Count == 0 && cg.Count == 0 && cr.Count == 0)
             return;
 
-        var cg = SplitCsv(GetMeta(UserTaskMeta.CandidateGroups));
-        if (cg.Count > 0)
-            return;
+        throw new InvalidOperationException("User is not a candidate for this task.");
     }
 
     // --------------------------------------------------------------------
@@ -608,11 +630,9 @@ public sealed class UserTaskInstance : BaseAggregateRoot
     }
 }
 
-
 // --------------------------------------------------------------------
-// Spec (Value Object) - explicit contract for creating user tasks
+// Spec (Value Object)
 // --------------------------------------------------------------------
-
 public sealed record UserTaskSpec(
     string FormKey,
     string? FormVersion = null,
@@ -628,6 +648,7 @@ public sealed record UserTaskSpec(
     string? Assignee = null,
     IReadOnlyList<string>? CandidateUsers = null,
     IReadOnlyList<string>? CandidateGroups = null,
+    IReadOnlyList<string>? CandidateRoles = null, // ✅
 
     string? VisibilityPolicy = null,
     IReadOnlyDictionary<string, string>? CustomMetadata = null)
@@ -639,7 +660,6 @@ public sealed record UserTaskSpec(
 // --------------------------------------------------------------------
 // Domain Events
 // --------------------------------------------------------------------
-
 public sealed record UserTaskCreatedDomainEvent(
     Guid UserTaskId,
     Guid ProcessId,

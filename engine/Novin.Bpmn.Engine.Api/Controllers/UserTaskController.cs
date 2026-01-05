@@ -24,13 +24,7 @@ public sealed class UserTasksController : ControllerBase
     [ProducesResponseType(typeof(PagedResult<UserTaskListItemDto>), 200)]
     public async Task<IActionResult> GetInbox([FromQuery] GetUserTasksInboxRequest request, CancellationToken ct = default)
     {
-        var userId =
-            request.UserId
-            ?? TryGetUserIdFromClaims()
-            ?? Guid.Empty;
-
-        if (userId == Guid.Empty)
-            return BadRequest(new { error = "UserId is required (query param or authenticated user claim)." });
+       
 
         var rolesFromClaims = GetRolesFromClaims();
         var roles = (request.Roles?.Where(r => !string.IsNullOrWhiteSpace(r)) ?? Array.Empty<string>())
@@ -43,7 +37,8 @@ public sealed class UserTasksController : ControllerBase
         var pageSize = request.PageSize is < 1 or > 200 ? 20 : request.PageSize;
 
         var query = new GetUserTasksInboxQuery(
-            UserId: userId,
+            UserId: request.UserId,
+            ProcessId:request.ProcessId,
             Roles: roles,
             Status: request.Status,
             Page: page,
@@ -193,6 +188,7 @@ public sealed record AssignUserTaskRequest(
 // ------------------------------------------------------------
 public sealed record GetUserTasksInboxRequest(
     Guid? UserId,
+    Guid? ProcessId,
     string[]? Roles,
     string? Status,
     int Page = 1,
